@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "reporook": {
+      "type": "local",
+      "command": "npx",
+      "args": ["--yes", "@reporook/mcp-server"],
+      "tools": ["*"]
+    }
+  }
+}

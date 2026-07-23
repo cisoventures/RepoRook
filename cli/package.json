@@ -1,0 +1,37 @@
+{
+  "name": "reporook",
+  "version": "0.1.0",
+  "description": "Free, deterministic, agent-agnostic security scanner for repositories.",
+  "license": "MIT",
+  "homepage": "https://github.com/cisoventures/RepoRook#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cisoventures/RepoRook.git",
+    "directory": "cli"
+  },
+  "bugs": {
+    "url": "https://github.com/cisoventures/RepoRook/issues"
+  },
+  "type": "module",
+  "bin": {
+    "reporook": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./schema": "./dist/types.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node -e \"require('fs').chmodSync('dist/index.js',0o755)\"",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

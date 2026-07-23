@@ -1,0 +1,13 @@
+{
+  "name": "reporook",
+  "version": "0.1.0",
+  "description": "Deterministic code security scanning with plain-English agent triage and fix verification.",
+  "mcpServers": {
+    "reporook": {
+      "command": "npx",
+      "args": ["--yes", "@reporook/mcp-server"],
+      "cwd": "${workspacePath}"
+    }
+  },
+  "contextFileName": "GEMINI.md"
+}

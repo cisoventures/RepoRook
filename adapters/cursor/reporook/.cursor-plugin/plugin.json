@@ -1,0 +1,8 @@
+{
+  "name": "reporook",
+  "description": "Free deterministic code security scanning through MCP, skills, rules, and verification hooks.",
+  "version": "0.1.0",
+  "author": { "name": "RepoRook contributors" },
+  "license": "MIT",
+  "keywords": ["security", "sast", "secrets", "dependencies", "sarif"]
+}

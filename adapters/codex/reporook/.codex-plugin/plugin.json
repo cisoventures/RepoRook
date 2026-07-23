@@ -1,0 +1,25 @@
+{
+  "name": "reporook",
+  "version": "0.1.0",
+  "description": "Deterministic repository security scans with plain-English triage and verified remediation workflows.",
+  "author": {
+    "name": "RepoRook contributors"
+  },
+  "license": "MIT",
+  "keywords": ["security", "sast", "secrets", "dependencies", "sarif"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "RepoRook",
+    "shortDescription": "Scan, understand, fix, and verify code risks.",
+    "longDescription": "RepoRook combines deterministic local scanning with Codex reasoning while preserving evidence, approval, and verification boundaries.",
+    "developerName": "RepoRook contributors",
+    "category": "Security",
+    "capabilities": ["Interactive", "Read"],
+    "defaultPrompt": [
+      "Scan this repository and explain what must be fixed before release.",
+      "Review my current changes for security regressions.",
+      "Help me fix and verify this RepoRook finding."
+    ]
+  },
+  "mcpServers": "./.mcp.json"
+}

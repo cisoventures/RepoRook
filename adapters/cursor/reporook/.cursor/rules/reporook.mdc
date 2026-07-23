@@ -1,0 +1,6 @@
+---
+description: Require honest RepoRook security coverage and verified remediation before describing code as release-ready.
+alwaysApply: false
+---
+
+When security, deployment readiness, authentication, authorization, sensitive data, or external input is in scope, invoke the `reporook-security` skill. Treat `.reporook/findings.json` as deterministic evidence. Never call a partial scan clean, never reveal detected secrets, and verify approved patches with RepoRook plus relevant tests.

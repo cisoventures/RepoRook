@@ -1,0 +1,10 @@
+{
+  "name": "reporook",
+  "description": "Agent-agnostic deterministic security scans, plain-English triage, and verified remediation.",
+  "version": "0.1.0",
+  "author": { "name": "RepoRook contributors" },
+  "repository": "https://github.com/reporook/reporook",
+  "license": "MIT",
+  "keywords": ["security", "sast", "secrets", "dependencies", "sarif"],
+  "mcpServers": "./.mcp.json"
+}

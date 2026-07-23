@@ -1,0 +1,108 @@
+name: RepoRook Security Scan
+description: Deterministic SAST, secrets, and dependency checks with SARIF and a single PR summary.
+author: RepoRook contributors
+branding:
+  icon: shield
+  color: green
+
+inputs:
+  path:
+    description: Repository-relative directory to scan.
+    default: .
+  fail-on:
+    description: Lowest severity that fails the check.
+    default: high
+  config:
+    description: Optional RepoRook configuration file.
+    default: ""
+  mode:
+    description: full or diff.
+    default: diff
+  base:
+    description: Base revision for diff mode. Defaults to the pull request base SHA.
+    default: ""
+  github-token:
+    description: Token used to update the pull request comment and upload results.
+    default: ${{ github.token }}
+  require-scanners:
+    description: Fail with a tool error when an applicable scanner cannot run.
+    default: "true"
+
+outputs:
+  exit-code:
+    description: RepoRook exit code (0 clean, 1 findings, 2 tool error).
+    value: ${{ steps.scan.outputs.exit_code }}
+  findings-file:
+    description: Absolute path to findings JSON.
+    value: ${{ steps.scan.outputs.findings_file }}
+  sarif-file:
+    description: Absolute path to SARIF.
+    value: ${{ steps.scan.outputs.sarif_file }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      with:
+        node-version: "22"
+        cache: npm
+        cache-dependency-path: ${{ github.action_path }}/package-lock.json
+    - name: Build the pinned RepoRook CLI
+      shell: bash
+      run: |
+        npm ci --ignore-scripts --prefix "$GITHUB_ACTION_PATH"
+        npm run build --prefix "$GITHUB_ACTION_PATH" --workspace reporook
+    - name: Install deterministic scanners
+      shell: bash
+      run: "$GITHUB_ACTION_PATH/action/install-scanners.sh"
+    - name: Run RepoRook
+      id: scan
+      shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_CONFIG: ${{ inputs.config }}
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_BASE: ${{ inputs.base }}
+        INPUT_REQUIRE_SCANNERS: ${{ inputs.require-scanners }}
+        PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        HEAD_SHA: ${{ github.sha }}
+      run: "$GITHUB_ACTION_PATH/action/run-scan.sh"
+    - name: Upload SARIF
+      if: always() && hashFiles('.reporook/results.sarif') != ''
+      uses: github/codeql-action/upload-sarif@4187e74d05793876e9989daffde9c3e66b4acd07 # v3
+      with:
+        sarif_file: .reporook/results.sarif
+        category: reporook
+    - name: Update pull request summary
+      if: always() && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        REPORT_PATH: ${{ steps.scan.outputs.findings_file }}
+        ISSUE_NUMBER: ${{ github.event.pull_request.number }}
+      run: node "$GITHUB_ACTION_PATH/action/comment.mjs"
+    - name: Preserve scan evidence
+      if: always()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: reporook-${{ github.run_id }}
+        path: .reporook/
+        if-no-files-found: warn
+        retention-days: 14
+    - name: Enforce RepoRook result
+      if: always()
+      shell: bash
+      env:
+        EXIT_CODE: ${{ steps.scan.outputs.exit_code }}
+      run: |
+        code="${EXIT_CODE:-2}"
+        if [ "$code" -eq 1 ]; then
+          echo "RepoRook found vulnerabilities at or above the configured threshold."
+          exit 1
+        fi
+        if [ "$code" -eq 2 ]; then
+          echo "RepoRook could not complete the required security coverage."
+          exit 2
+        fi

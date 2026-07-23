@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.reporook/
+coverage/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+test-fixtures/vulnerable-app/node_modules/
+work/
+outputs/

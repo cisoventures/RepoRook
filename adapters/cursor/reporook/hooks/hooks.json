@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "hooks": {
+    "stop": [
+      {
+        "command": "npx --yes reporook verify . --quiet --fail-on critical"
+      }
+    ]
+  }
+}

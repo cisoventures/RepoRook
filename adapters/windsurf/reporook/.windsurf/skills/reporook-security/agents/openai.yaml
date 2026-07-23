@@ -1,0 +1,4 @@
+interface:
+  display_name: "RepoRook Security"
+  short_description: "Scan, explain, fix, and verify code risks"
+  default_prompt: "Use $reporook-security to scan this repository and explain what must be fixed before release."

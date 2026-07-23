@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reporook.dev/schemas/agent-review-1.0.json",
+  "title": "RepoRook Agent Review Sidecar",
+  "type": "object",
+  "required": ["schema_version", "host", "generated_at", "source_scan", "reviews"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "host": { "type": "string" },
+    "model": { "type": ["string", "null"] },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "source_scan": {
+      "type": "object",
+      "required": ["commit", "config_hash"],
+      "properties": { "commit": { "type": ["string", "null"] }, "config_hash": { "type": "string" } },
+      "additionalProperties": false
+    },
+    "reviews": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "status", "explanation", "evidence", "confidence"],
+        "properties": {
+          "finding_id": { "type": "string" },
+          "status": { "enum": ["validated", "rejected", "needs-review", "fixed", "verification-failed"] },
+          "explanation": { "type": "string" },
+          "evidence": { "type": "array", "items": { "type": "string" } },
+          "confidence": { "enum": ["high", "medium", "low"] }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

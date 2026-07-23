@@ -1,0 +1,17 @@
+failOn: high
+outputDir: .reporook
+semgrepConfig: p/default
+paths:
+  - .
+ignore:
+  - node_modules/**
+  - dist/**
+  - build/**
+  - .git/**
+  - .reporook/**
+requiredScanners: []
+scanners:
+  semgrep: true
+  gitleaks: true
+  npm-audit: true
+  pip-audit: true

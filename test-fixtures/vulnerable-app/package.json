@@ -1,0 +1,10 @@
+{
+  "name": "reporook-vulnerable-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Intentionally vulnerable test fixture. Never deploy.",
+  "dependencies": {
+    "express": "4.17.1",
+    "lodash": "4.17.15"
+  }
+}

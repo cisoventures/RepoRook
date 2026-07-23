@@ -1,0 +1,37 @@
+{
+  "name": "reporook-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agent-agnostic security scanning for code before it ships.",
+  "license": "MIT",
+  "homepage": "https://github.com/cisoventures/RepoRook#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cisoventures/RepoRook.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cisoventures/RepoRook/issues"
+  },
+  "type": "module",
+  "workspaces": [
+    "cli",
+    "mcp-server"
+  ],
+  "scripts": {
+    "sync:adapters": "node scripts/sync-adapters.mjs",
+    "validate:adapters": "node scripts/validate-adapters.mjs",
+    "build": "npm run build --workspaces --if-present",
+    "clean": "npm run clean --workspaces --if-present",
+    "test": "npm run build && npm run test --workspaces --if-present",
+    "lint": "npm run typecheck --workspaces --if-present",
+    "check": "npm run validate:adapters && npm run lint && npm test",
+    "reporook": "node cli/dist/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}
