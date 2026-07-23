@@ -111,7 +111,10 @@ test("OSV-Scanner groups aliases into one actionable dependency finding", () => 
   assert.deepEqual(findings[0].metadata.cve, ["CVE-2022-0001"]);
   assert.deepEqual(findings[0].metadata.cwe, ["CWE-1333"]);
   assert.match(findings[0].plain_summary, /regex package/);
-  assert.ok(findings[0].references.includes("https://example.test/advisory"));
+  assert.deepEqual(findings[0].references, [
+    "https://osv.dev/vulnerability/GHSA-test-0000-0000",
+    "https://example.test/advisory",
+  ]);
 });
 
 test("OSV-Scanner discovers complementary root and nested manifests without generated dependency trees", async () => {
