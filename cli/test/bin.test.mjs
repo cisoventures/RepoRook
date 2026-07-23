@@ -17,7 +17,7 @@ test("CLI executes its entry point through the platform's package launch form", 
     const { stdout } = process.platform === "win32"
       ? await execute(process.execPath, [entry, "--version"])
       : await execute(binary, ["--version"]);
-    assert.equal(stdout.trim(), "0.1.1");
+    assert.equal(stdout.trim(), "0.2.0");
     const help = process.platform === "win32"
       ? await execute(process.execPath, [entry, "--help"])
       : await execute(binary, ["--help"]);
