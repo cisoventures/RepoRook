@@ -10,6 +10,7 @@ import { renderTerminal } from "../dist/render.js";
 import { toSarif } from "../dist/sarif.js";
 import { gitChangedFiles } from "../dist/git.js";
 import { plainSummary } from "../dist/knowledge.js";
+import { matchesAny } from "../dist/path-utils.js";
 
 test("simple YAML parser supports lists and scanner flags", () => {
   const parsed = parseSimpleYaml("failOn: medium\nignore:\n  - vendor/**\nscanners:\n  semgrep: false\n");
@@ -62,6 +63,15 @@ test("plain explanations do not confuse hardcoded regex advice with a leaked sec
   const summary = plainSummary({ scanner: "semgrep", rule: "javascript.lang.security.audit.detect-non-literal-regexp", description: "Prefer hardcoded regexes." });
   assert.match(summary, /regular expression|CPU time/);
   assert.doesNotMatch(summary, /API key|token|password/);
+});
+
+test("glob matching is bounded and preserves recursive wildcard behavior", () => {
+  assert.equal(matchesAny("src/nested/app.ts", ["src/**"]), true);
+  assert.equal(matchesAny("src/nested/app.ts", ["**/*.ts"]), true);
+  assert.equal(matchesAny("src/nested/app.js", ["**/*.ts"]), false);
+  assert.equal(matchesAny("src/[id].ts", ["src/[id].ts"]), true);
+  assert.equal(matchesAny("src/xid.ts", ["src/[id].ts"]), false);
+  assert.equal(matchesAny("a".repeat(2_048), [`${"*".repeat(2_048)}b`]), false);
 });
 
 test("failed coverage exits 2 unless the user explicitly allows no coverage", () => {
