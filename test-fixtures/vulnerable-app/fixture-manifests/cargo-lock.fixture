@@ -1,0 +1,7 @@
+# This file is generated for RepoRook's intentionally vulnerable test fixture.
+version = 3
+
+[[package]]
+name = "regex"
+version = "1.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"

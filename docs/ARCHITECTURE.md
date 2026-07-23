@@ -11,6 +11,8 @@ GitHub Action ──────────────────────
 
 The CLI detects applicable scanners, invokes them without a shell, parses untrusted JSON, removes secret material, normalizes findings, deduplicates stable fingerprints, calculates coverage, and writes JSON/SARIF/receipt artifacts. Semgrep metrics are disabled. Its default public rule alias can be replaced with a pinned local rules file through `semgrepConfig`; that local-file mode is the reproducible and offline option.
 
+Dependency ownership is explicit. Root `package-lock.json` belongs to `npm audit`; root requirements files, `poetry.lock`, and `uv.lock` belong to `pip-audit`. OSV-Scanner receives other supported manifests and supported nested-project files. This expands ecosystem and monorepo coverage without duplicate results from overlapping scanners. Generated dependency and build directories are not traversed during OSV applicability discovery.
+
 The MCP server shells out to the CLI and exposes read-only evidence and verification tools. The Action builds and invokes the same CLI. Neither owns scanner parsing or severity policy.
 
 ## Coverage

@@ -13,7 +13,7 @@ export const defaultConfig: RepoRookConfig = {
   scanners: {},
 };
 
-export const scannerNames = ["semgrep", "gitleaks", "npm-audit", "pip-audit"] as const;
+export const scannerNames = ["semgrep", "gitleaks", "npm-audit", "pip-audit", "osv-scanner"] as const;
 const scannerNameSet = new Set<string>(scannerNames);
 const topLevelKeys = new Set([
   "failOn", "fail-on", "outputDir", "output-dir", "semgrepConfig", "semgrep-config",

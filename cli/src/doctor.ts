@@ -1,6 +1,7 @@
 import { access, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { commandVersion } from "./process.js";
+import { discoverOsvLockfiles } from "./scanners/osv-scanner.js";
 
 async function exists(path: string): Promise<boolean> { try { await access(path); return true; } catch { return false; } }
 
@@ -12,11 +13,13 @@ export async function diagnose(targetInput: string): Promise<DoctorCheck[]> {
   const codeNeeded = names.some((name) => /\.(js|jsx|ts|tsx|py|go|java|rb|php|cs|rs|kt|swift)$/i.test(name)) || names.some((name) => ["src", "app", "lib"].includes(name));
   const npmNeeded = await exists(join(target, "package-lock.json"));
   const pipNeeded = names.some((name) => /^requirements.*\.txt$/i.test(name)) || await exists(join(target, "poetry.lock")) || await exists(join(target, "uv.lock"));
+  const osvNeeded = (await discoverOsvLockfiles(target)).length > 0;
   const specs = [
     { name: "semgrep", needed: codeNeeded, reason: "source-code vulnerability checks" },
     { name: "gitleaks", needed: true, reason: "secret and credential checks" },
     { name: "npm", needed: npmNeeded, reason: "Node dependency checks" },
     { name: "pip-audit", needed: pipNeeded, reason: "Python dependency checks" },
+    { name: "osv-scanner", needed: osvNeeded, reason: "additional ecosystem dependency checks" },
   ];
   return await Promise.all(specs.map(async (spec) => {
     const version = await commandVersion(spec.name);

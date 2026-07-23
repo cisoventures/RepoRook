@@ -26,6 +26,7 @@ test("configuration rejects values that can silently weaken coverage", () => {
   assert.throws(() => normalizeConfig({ requiredScanners: ["semgrpe"] }), /Unknown required scanner/);
   assert.throws(() => normalizeConfig({ requiredScanners: ["semgrep"], scanners: { semgrep: false } }), /required and disabled/);
   assert.throws(() => normalizeConfig({ scanners: { gitleaks: "no" } }), /must be true or false/);
+  assert.equal(normalizeConfig({ scanners: { "osv-scanner": true } }).scanners["osv-scanner"], true);
   assert.throws(() => normalizeConfig({ requireScanners: ["gitleaks"] }), /Unknown RepoRook configuration key/);
   assert.throws(() => normalizeConfig(parseSimpleYaml("paths: [false]\n")), /list of non-empty strings/);
   assert.throws(() => parseSimpleYaml("failOn: high\nfailOn: low\n"), /Duplicate configuration key/);

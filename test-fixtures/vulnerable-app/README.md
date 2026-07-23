@@ -9,4 +9,4 @@ npm run fixture:prepare
 node cli/dist/index.js scan test-fixtures/vulnerable-app --require-scanners
 ```
 
-Never commit the generated `package.json`, `package-lock.json`, or `requirements.txt` files.
+Never commit the generated `package.json`, `package-lock.json`, `requirements.txt`, or `Cargo.lock` files.

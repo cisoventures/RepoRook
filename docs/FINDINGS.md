@@ -9,3 +9,5 @@
 SARIF is a projection for code-scanning interfaces. Keep the JSON report and receipt when auditability matters because SARIF cannot express every RepoRook coverage detail as a first-class field.
 
 Dependency advisories remain one finding per advisory in JSON and SARIF. Human-facing terminal and pull-request reports group those findings by package so repeated advisories do not bury code-level risks.
+
+OSV alias groups become one RepoRook finding even when the same flaw has CVE, GHSA, and ecosystem-specific identifiers. The complete aliases, fixed versions, ecosystem tag, and source manifest remain in the normalized evidence.

@@ -26,7 +26,7 @@ const compact = (value, limit = 240) => {
 };
 const markdown = (value, limit) => compact(value, limit).replaceAll("|", "\\|").replaceAll("`", "'").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 const rank = { critical: 4, high: 3, medium: 2, low: 1 };
-const dependencyScanners = new Set(["npm-audit", "pip-audit"]);
+const dependencyScanners = new Set(["npm-audit", "pip-audit", "osv-scanner"]);
 const dependencyGroups = new Map();
 const items = [];
 for (const finding of report.findings) {

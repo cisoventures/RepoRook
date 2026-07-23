@@ -6,6 +6,7 @@ import { matchesAny } from "./path-utils.js";
 import { meetsThreshold, sortBySeverity } from "./severity.js";
 import { GitleaksScanner } from "./scanners/gitleaks.js";
 import { NpmAuditScanner } from "./scanners/npm-audit.js";
+import { OsvScanner } from "./scanners/osv-scanner.js";
 import { PipAuditScanner } from "./scanners/pip-audit.js";
 import { SemgrepScanner } from "./scanners/semgrep.js";
 import { status } from "./scanners/shared.js";
@@ -18,6 +19,7 @@ export const defaultScanners = (): ScannerAdapter[] => [
   new GitleaksScanner(),
   new NpmAuditScanner(),
   new PipAuditScanner(),
+  new OsvScanner(),
 ];
 
 function summary(findings: Finding[]): Record<Severity | "total", number> {

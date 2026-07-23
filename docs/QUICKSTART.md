@@ -24,7 +24,7 @@ If anything is missing, print platform-specific installation commands:
 npx --yes reporook@latest setup
 ```
 
-`setup` does not install anything. Review and run only the commands for scanners that `doctor` marked as needed, then rerun `doctor`.
+`setup` does not install anything. Review and run only the commands for scanners that `doctor` marked as needed, then rerun `doctor`. Projects with OSV-supported dependency files may need OSV-Scanner in addition to the source, secret, Node, or Python scanners.
 
 ### 2. Run the gate
 

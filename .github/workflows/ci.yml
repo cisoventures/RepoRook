@@ -45,6 +45,6 @@ jobs:
           code=$?
           set -e
           test "$code" -eq 1
-          node -e "const r=require('./test-fixtures/vulnerable-app/.reporook/findings.json'); if(r.coverage_status!=='complete'||r.summary.total<3) process.exit(1)"
+          node -e "const r=require('./test-fixtures/vulnerable-app/.reporook/findings.json'); const osv=r.scanners.find(s=>s.name==='osv-scanner'); if(r.coverage_status!=='complete'||r.summary.total<4||osv?.status!=='ok'||!r.findings.some(f=>f.scanner==='osv-scanner')) process.exit(1)"
       - name: Confirm verification preserves the baseline
         run: npm run fixture:verify

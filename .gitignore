@@ -11,5 +11,6 @@ test-fixtures/vulnerable-app/node_modules/
 test-fixtures/vulnerable-app/package.json
 test-fixtures/vulnerable-app/package-lock.json
 test-fixtures/vulnerable-app/requirements.txt
+test-fixtures/vulnerable-app/Cargo.lock
 work/
 outputs/

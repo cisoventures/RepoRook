@@ -8,6 +8,7 @@ const manifests = [
   ["npm-package.fixture", "package.json"],
   ["npm-lock.fixture", "package-lock.json"],
   ["python-requirements.fixture", "requirements.txt"],
+  ["cargo-lock.fixture", "Cargo.lock"],
 ];
 
 for (const [source, destination] of manifests) {

@@ -30,3 +30,27 @@ curl --fail --silent --show-error --location \
 )
 chmod +x "$gitleaks_dir/gitleaks"
 echo "$gitleaks_dir" >> "$GITHUB_PATH"
+
+OSV_SCANNER_VERSION="2.3.8"
+case "$(uname -m)" in
+  x86_64)
+    osv_arch="amd64"
+    osv_sha256="bc98e15319ed0d515e3f9235287ba53cdc5535d576d24fd573978ecfe9ab92dc"
+    ;;
+  aarch64|arm64)
+    osv_arch="arm64"
+    osv_sha256="8158b18edd2d03b1a30d905ca91b032bc62262167be8f206c27114f08823e27c"
+    ;;
+  *) echo "Unsupported runner architecture: $(uname -m)" >&2; exit 2 ;;
+esac
+
+osv_dir="${RUNNER_TEMP:-/tmp}/reporook-osv-scanner"
+mkdir -p "$osv_dir"
+osv_binary="$osv_dir/osv-scanner"
+curl --fail --silent --show-error --location \
+  "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_${osv_arch}" \
+  --output "$osv_binary"
+actual="$(sha256sum "$osv_binary" | awk '{print $1}')"
+test "$osv_sha256" = "$actual"
+chmod +x "$osv_binary"
+echo "$osv_dir" >> "$GITHUB_PATH"

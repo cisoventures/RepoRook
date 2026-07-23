@@ -14,7 +14,7 @@ RepoRook supplies deterministic evidence with a plain-English explanation for ev
 
 ## Five-minute quick start
 
-Requirements: Node.js 20 or later. RepoRook orchestrates Semgrep, Gitleaks, `npm audit`, and `pip-audit` when applicable.
+Requirements: Node.js 20 or later. RepoRook orchestrates Semgrep, Gitleaks, `npm audit`, `pip-audit`, and OSV-Scanner when applicable.
 
 By default Semgrep downloads the public `p/default` rule bundle and runs it with metrics disabled. Set `semgrepConfig` to a pinned local rules file when you need fully offline or byte-for-byte reproducible source scans.
 
@@ -61,6 +61,18 @@ jobs:
 
 The Action installs pinned scanners, updates one PR comment, uploads SARIF, preserves the full scan receipt, and enforces the configured threshold after reporting.
 
+## Detection coverage
+
+| Risk | Scanner | Coverage |
+|---|---|---|
+| Risky source patterns | Semgrep | Multi-language SAST through the selected Semgrep rules |
+| Exposed credentials | Gitleaks | Repository files with secret values redacted before normalization |
+| Node dependencies | `npm audit` | Root `package-lock.json` |
+| Python dependencies | `pip-audit` | Root requirements files, `poetry.lock`, or `uv.lock` |
+| Additional dependencies | [OSV-Scanner](https://google.github.io/osv-scanner/supported-languages-and-lockfiles/) | Go, Rust, Java, Ruby, PHP, .NET, Dart, Elixir, R, Haskell, C/C++, Yarn, pnpm, Bun, and additional Python manifests |
+
+RepoRook gives each dependency file one primary scanner: OSV-Scanner handles supported manifests that the root `npm audit` and `pip-audit` adapters do not already own, including supported manifests in nested projects. That expands monorepo and ecosystem coverage without showing the same advisory twice merely because two scanners queried it.
+
 ## Configuration
 
 Create `reporook.yml`:
@@ -79,6 +91,7 @@ requiredScanners:
   - gitleaks
 scanners:
   pip-audit: true
+  osv-scanner: true
 ```
 
 Configuration is validated strictly: unknown scanner names, invalid value types, unknown keys, and a scanner that is both required and disabled are errors rather than silent fallbacks.

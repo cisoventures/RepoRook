@@ -1,12 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SemgrepScanner, parseSemgrep, semgrepErrors } from "../dist/scanners/semgrep.js";
 import { parseGitleaks } from "../dist/scanners/gitleaks.js";
 import { parseNpmAudit } from "../dist/scanners/npm-audit.js";
 import { parsePipAudit } from "../dist/scanners/pip-audit.js";
+import { discoverOsvLockfiles, OsvScanner, parseOsvScanner } from "../dist/scanners/osv-scanner.js";
 import { findingFingerprint } from "../dist/fingerprint.js";
 import { defaultConfig } from "../dist/config.js";
 
@@ -86,4 +87,72 @@ test("pip-audit output records fixed versions", () => {
   assert.deepEqual(findings[0].metadata.fixed_versions, ["1.25.9"]);
   assert.deepEqual(findings[0].metadata.cve, ["CVE-2020-0001"]);
   assert.match(findings[0].plain_summary, /urllib3 package/);
+});
+
+test("OSV-Scanner groups aliases into one actionable dependency finding", () => {
+  const findings = parseOsvScanner({ results: [{
+    source: { path: "/repo/Cargo.lock", type: "lockfile" },
+    packages: [{
+      package: { name: "regex", version: "1.5.1", ecosystem: "crates.io" },
+      groups: [{ ids: ["GHSA-test-0000-0000", "RUSTSEC-2022-0001"], aliases: ["CVE-2022-0001", "GHSA-test-0000-0000"], max_severity: "9.8" }],
+      vulnerabilities: [{
+        id: "GHSA-test-0000-0000", aliases: ["CVE-2022-0001"], summary: "Regex denial of service",
+        database_specific: { severity: "HIGH", cwe_ids: ["CWE-1333"] },
+        affected: [{ package: { name: "regex" }, ranges: [{ events: [{ introduced: "0" }, { fixed: "1.5.5" }] }] }],
+        references: [{ url: "https://example.test/advisory" }],
+      }, { id: "RUSTSEC-2022-0001", aliases: ["GHSA-test-0000-0000", "CVE-2022-0001"] }],
+    }],
+  }] }, "/repo");
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].severity, "critical");
+  assert.equal(findings[0].file, "Cargo.lock");
+  assert.equal(findings[0].metadata.package, "regex");
+  assert.deepEqual(findings[0].metadata.fixed_versions, ["1.5.5"]);
+  assert.deepEqual(findings[0].metadata.cve, ["CVE-2022-0001"]);
+  assert.deepEqual(findings[0].metadata.cwe, ["CWE-1333"]);
+  assert.match(findings[0].plain_summary, /regex package/);
+  assert.ok(findings[0].references.includes("https://example.test/advisory"));
+});
+
+test("OSV-Scanner discovers complementary root and nested manifests without generated dependency trees", async () => {
+  const target = await mkdtemp(join(tmpdir(), "reporook-osv-discovery-test-"));
+  try {
+    await mkdir(join(target, "services", "api"), { recursive: true });
+    await mkdir(join(target, "node_modules", "ignored"), { recursive: true });
+    await writeFile(join(target, "package-lock.json"), "{}");
+    await writeFile(join(target, "requirements.txt"), "urllib3==1.0\n");
+    await writeFile(join(target, "Cargo.lock"), "version = 3\n");
+    await writeFile(join(target, "services", "api", "package-lock.json"), "{}");
+    await writeFile(join(target, "node_modules", "ignored", "Cargo.lock"), "version = 3\n");
+    const lockfiles = (await discoverOsvLockfiles(target)).map((file) => file.slice(target.length + 1).replaceAll("\\", "/"));
+    assert.deepEqual(lockfiles, ["Cargo.lock", "services/api/package-lock.json"]);
+  } finally {
+    await rm(target, { recursive: true, force: true });
+  }
+});
+
+test("OSV-Scanner treats exit 1 as a completed scan with findings", { skip: process.platform === "win32" }, async () => {
+  const target = await mkdtemp(join(tmpdir(), "reporook-osv-adapter-test-"));
+  const executable = join(target, "osv-scanner");
+  const previousPath = process.env.PATH;
+  await writeFile(join(target, "Cargo.lock"), "version = 3\n");
+  await writeFile(executable, `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  printf '%s\\n' 'osv-scanner 2.3.8'
+  exit 0
+fi
+printf '%s\\n' '{"results":[{"source":{"path":"Cargo.lock","type":"lockfile"},"packages":[{"package":{"name":"regex","version":"1.5.1","ecosystem":"crates.io"},"groups":[{"ids":["RUSTSEC-1"],"max_severity":"7.5"}],"vulnerabilities":[{"id":"RUSTSEC-1","summary":"Example advisory"}]}]}]}'
+exit 1
+`);
+  await chmod(executable, 0o755);
+  process.env.PATH = `${target}:${previousPath ?? ""}`;
+  try {
+    const result = await new OsvScanner().run({ target, config: structuredClone(defaultConfig) });
+    assert.equal(result.status.status, "ok");
+    assert.equal(result.status.finding_count, 1);
+    assert.equal(result.findings[0].scanner, "osv-scanner");
+  } finally {
+    process.env.PATH = previousPath;
+    await rm(target, { recursive: true, force: true });
+  }
 });

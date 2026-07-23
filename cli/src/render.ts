@@ -3,7 +3,7 @@ import type { Finding, ScanReport, Severity, VerificationReport } from "./types.
 
 const labels: Record<Severity, string> = { critical: "CRITICAL", high: "HIGH", medium: "MEDIUM", low: "LOW" };
 const rank: Record<Severity, number> = { critical: 4, high: 3, medium: 2, low: 1 };
-const dependencyScanners = new Set(["npm-audit", "pip-audit"]);
+const dependencyScanners = new Set(["npm-audit", "pip-audit", "osv-scanner"]);
 
 function compact(value: string, limit = 280): string {
   const normalized = value.replace(/\s+/g, " ").trim();
@@ -48,7 +48,7 @@ export function renderTerminal(report: ScanReport): string {
     if (!finding) continue;
     if (item.findings.length > 1 || dependencyScanners.has(finding.scanner)) {
       const packageName = finding.metadata.package ?? "unknown package";
-      const rules = item.findings.slice(0, 4).map((candidate) => candidate.rule.replace(/^(npm|pip)-audit:/, "")).join(", ");
+      const rules = item.findings.slice(0, 4).map((candidate) => candidate.rule.replace(/^(?:(?:npm|pip)-audit|osv-scanner):/, "")).join(", ");
       lines.push(`[${labels[item.severity]}] ${packageName} — ${item.findings.length} known advisor${item.findings.length === 1 ? "y" : "ies"}`);
       lines.push(`  What this means: ${compact(finding.plain_summary)}`);
       lines.push(`  Where: ${finding.file}`);
