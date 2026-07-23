@@ -58,7 +58,7 @@ test("engine deduplicates findings and produces SARIF", async () => {
     const artifacts = await writeArtifacts(target, report, { writeSarif: false });
     const prompt = await readFile(artifacts.promptPath, "utf8");
     assert.match(prompt, /Do not edit files until I approve that exact change/);
-    assert.equal((await stat(artifacts.promptPath)).mode & 0o777, 0o600);
+    if (process.platform !== "win32") assert.equal((await stat(artifacts.promptPath)).mode & 0o777, 0o600);
   } finally {
     await rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
