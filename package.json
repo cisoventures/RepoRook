@@ -20,6 +20,7 @@
   "scripts": {
     "sync:adapters": "node scripts/sync-adapters.mjs",
     "validate:adapters": "node scripts/validate-adapters.mjs",
+    "fixture:prepare": "node scripts/materialize-fixture.mjs",
     "build": "npm run build --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present",
     "test": "npm run build && npm run test --workspaces --if-present",

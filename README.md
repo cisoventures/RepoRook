@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: cisoventures/RepoRook@main # use a release tag once published
+      - uses: cisoventures/RepoRook@v0.1.0
         with:
           fail-on: high
           mode: diff
@@ -134,6 +134,7 @@ RepoRook does not silently apply patches, rotate credentials, create tickets, or
 ```bash
 npm install
 npm run check
+npm run fixture:prepare
 node cli/dist/index.js scan test-fixtures/vulnerable-app --require-scanners
 ```
 

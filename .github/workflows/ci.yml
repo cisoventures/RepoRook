@@ -35,6 +35,7 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run build
+      - run: npm run fixture:prepare
       - run: ./action/install-scanners.sh
       - name: Confirm fixture is blocked with complete coverage
         shell: bash
