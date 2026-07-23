@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = resolve(new URL("..", import.meta.url).pathname);
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const canonical = await readFile(resolve(root, "adapters/shared/skills/reporook-security/SKILL.md"), "utf8");
 const copies = [
   "adapters/claude/reporook/skills/reporook-security/SKILL.md",
