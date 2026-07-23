@@ -24,3 +24,5 @@ RepoRook is community-maintained with no service-level agreement. Use GitHub Dis
 Implement the adapter interface, record applicability/availability/errors honestly, redact sensitive raw fields, normalize severity, add parser tests, and add an end-to-end fixture. A scanner error must never become zero findings.
 
 By contributing, you agree that your contribution is licensed under MIT.
+
+Maintainers should follow [`docs/RELEASING.md`](docs/RELEASING.md) for the protected npm bootstrap and subsequent staged releases.

@@ -11,6 +11,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    environment: npm-release
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
@@ -36,6 +37,9 @@ jobs:
         run: node scripts/smoke-packages.mjs release
       - name: Publish npm distributions with provenance
         shell: bash
+        env:
+          # Bootstrap only: remove this after both packages use npm trusted publishing.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           version="${GITHUB_REF_NAME#v}"
           npm publish "release/reporook-${version}.tgz" --access public --provenance
