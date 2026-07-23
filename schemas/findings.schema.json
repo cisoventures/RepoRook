@@ -59,7 +59,7 @@
   "$defs": {
     "finding": {
       "type": "object",
-      "required": ["id", "scanner", "rule", "severity", "file", "line", "description", "remediation_hint", "fingerprint", "references", "metadata"],
+      "required": ["id", "scanner", "rule", "severity", "file", "line", "plain_summary", "description", "remediation_hint", "fingerprint", "references", "metadata"],
       "properties": {
         "id": { "type": "string", "pattern": "^rr-[a-f0-9]{12}$" },
         "scanner": { "type": "string" },
@@ -69,6 +69,7 @@
         "line": { "type": "integer", "minimum": 1 },
         "end_line": { "type": "integer", "minimum": 1 },
         "column": { "type": "integer", "minimum": 1 },
+        "plain_summary": { "type": "string", "minLength": 1 },
         "description": { "type": "string" },
         "remediation_hint": { "type": "string" },
         "fingerprint": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },

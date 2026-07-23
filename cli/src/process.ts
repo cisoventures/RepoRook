@@ -8,10 +8,12 @@ export interface CommandResult {
   missing: boolean;
 }
 
+export interface CommandOptions { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number }
+
 export async function runCommand(
   command: string,
   args: string[],
-  options: { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number } = {},
+  options: CommandOptions = {},
 ): Promise<CommandResult> {
   const started = Date.now();
   return await new Promise((resolve) => {
@@ -50,8 +52,12 @@ export async function runCommand(
   });
 }
 
-export async function commandVersion(command: string, args: string[] = ["--version"]): Promise<string | null> {
-  const result = await runCommand(command, args, { timeoutMs: 15_000 });
+export async function commandVersion(
+  command: string,
+  args: string[] = ["--version"],
+  options: Pick<CommandOptions, "env" | "timeoutMs"> = {},
+): Promise<string | null> {
+  const result = await runCommand(command, args, { timeoutMs: options.timeoutMs ?? 15_000, ...options });
   if (result.missing) return null;
   const lines = `${result.stdout}\n${result.stderr}`.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const versionLine = lines.find((line) => /^(?:[a-z][a-z0-9._-]*\s+)?v?\d+\.\d+(?:\.\d+)?(?:[-+][a-z0-9._-]+)?$/i.test(line));

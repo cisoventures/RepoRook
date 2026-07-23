@@ -1,13 +1,33 @@
-import { access, readdir } from "node:fs/promises";
+import { access, mkdtemp, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { findingFingerprint } from "../fingerprint.js";
+import { plainSummary } from "../knowledge.js";
 import { repoRelative } from "../path-utils.js";
 import { runCommand } from "../process.js";
 import { normalizeSeverity } from "../severity.js";
 import type { Finding, ScannerAdapter, ScannerContext, ScannerResult } from "../types.js";
-import { array, errored, jsonFromOutput, record, scannerVersion, strings, successful, text, unavailable } from "./shared.js";
+import { array, errored, jsonFromOutput, record, scannerParseError, scannerVersion, strings, successful, text, unavailable } from "./shared.js";
 
 const codeExtensions = new Set([".js", ".jsx", ".ts", ".tsx", ".py", ".go", ".java", ".rb", ".php", ".cs", ".rs", ".kt", ".swift"]);
+const trustStoreCandidates = [
+  "/etc/ssl/certs/ca-certificates.crt",
+  "/etc/ssl/cert.pem",
+  "/etc/pki/tls/certs/ca-bundle.crt",
+];
+
+async function trustStoreEnvironment(): Promise<NodeJS.ProcessEnv> {
+  if (process.env.SSL_CERT_FILE || process.env.SSL_CERT_DIR) return {};
+  for (const candidate of trustStoreCandidates) {
+    try {
+      await access(candidate);
+      return { SSL_CERT_FILE: candidate };
+    } catch {
+      // Try the next conventional operating-system trust store.
+    }
+  }
+  return {};
+}
 
 async function containsCode(directory: string, depth = 0): Promise<boolean> {
   if (depth > 4) return false;
@@ -44,6 +64,7 @@ export function parseSemgrep(raw: unknown, target: string): Finding[] {
       line: Number(start.line ?? 1),
       end_line: Number(end.line ?? start.line ?? 1),
       column: Number(start.col ?? 1),
+      plain_summary: plainSummary({ scanner: "semgrep", rule, cwes: cwe, description: text(extra.message) }),
       description: text(extra.message, `Semgrep rule ${rule} matched.`),
       remediation_hint: text(metadata.fix, text(metadata.remediation, "Review the matched data flow and apply the rule's recommended secure pattern.")),
       references,
@@ -59,6 +80,14 @@ export function parseSemgrep(raw: unknown, target: string): Finding[] {
   });
 }
 
+export function semgrepErrors(raw: unknown): string[] {
+  const root = record(raw);
+  return array(root.errors).map((item) => {
+    const error = record(item);
+    return text(error.message, text(error.type, "Semgrep reported an unspecified scan error"));
+  });
+}
+
 export class SemgrepScanner implements ScannerAdapter {
   name = "semgrep";
 
@@ -69,27 +98,47 @@ export class SemgrepScanner implements ScannerAdapter {
 
   async run(context: ScannerContext): Promise<ScannerResult> {
     const started = Date.now();
-    const version = await scannerVersion("semgrep");
-    if (!version) return unavailable(this.name, Date.now() - started, "semgrep is not installed; run `reporook setup`");
-    const args = [
-      "scan",
-      "--json",
-      "--config",
-      context.config.semgrepConfig,
-      "--metrics",
-      "off",
-      "--disable-version-check",
-    ];
-    for (const ignored of context.config.ignore) args.push("--exclude", ignored);
-    args.push(context.target);
-    const result = await runCommand("semgrep", args, { cwd: context.target });
-    if (result.missing) return unavailable(this.name, result.duration_ms, "semgrep is not installed");
+    const temporary = await mkdtemp(join(tmpdir(), "reporook-semgrep-"));
+    const env = {
+      ...await trustStoreEnvironment(),
+      XDG_CACHE_HOME: temporary,
+      XDG_CONFIG_HOME: temporary,
+      SEMGREP_LOG_FILE: join(temporary, "semgrep.log"),
+      SEMGREP_SETTINGS_FILE: join(temporary, "settings.yml"),
+    };
     try {
-      const findings = parseSemgrep(jsonFromOutput(result.stdout, result.stderr), context.target);
-      if (![0, 1].includes(result.code)) return errored(this.name, version, result.duration_ms, result.stderr.trim() || `semgrep exited ${result.code}`);
-      return successful(this.name, version, result.duration_ms, findings);
-    } catch (error) {
-      return errored(this.name, version, result.duration_ms, (error as Error).message);
+      const version = await scannerVersion("semgrep", { env, timeoutMs: 60_000 }, ["--version", "--disable-version-check"]);
+      if (!version) return unavailable(this.name, Date.now() - started, "semgrep is not installed or could not start; run `reporook setup`");
+      const args = [
+        "scan",
+        "--json",
+        "--config",
+        context.config.semgrepConfig,
+        "--metrics",
+        "off",
+        "--disable-version-check",
+      ];
+      for (const ignored of context.config.ignore) args.push("--exclude", ignored);
+      args.push(context.target);
+      const result = await runCommand("semgrep", args, { cwd: context.target, env });
+      if (result.missing) return unavailable(this.name, result.duration_ms, "semgrep is not installed");
+      try {
+        const raw = jsonFromOutput(result.stdout, result.stderr);
+        const findings = parseSemgrep(raw, context.target);
+        const errors = semgrepErrors(raw);
+        if (result.code !== 0 || errors.length) {
+          const reason = errors.slice(0, 3).join("; ") || result.stderr.trim() || `semgrep exited ${result.code}`;
+          const failed = errored(this.name, version, result.duration_ms, reason);
+          failed.findings = findings;
+          failed.status.finding_count = findings.length;
+          return failed;
+        }
+        return successful(this.name, version, result.duration_ms, findings);
+      } catch (error) {
+        return errored(this.name, version, result.duration_ms, scannerParseError(error, result.stderr));
+      }
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
     }
   }
 }

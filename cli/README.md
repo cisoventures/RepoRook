@@ -8,6 +8,8 @@ npx reporook scan .
 npx reporook explain FINDING_ID
 ```
 
-Exit code `0` means no finding met the configured threshold, `1` means findings met it, and `2` means a target, configuration, or required scanner failed. A partial scan is never presented as clean.
+Exit code `0` means no finding met the configured threshold, `1` means findings met it, and `2` means the target/configuration failed, a required scanner failed, or no applicable scanner completed. Failed coverage is never a successful gate unless the caller explicitly supplies the unsafe diagnostic override `--allow-no-coverage`.
+
+Every finding includes `plain_summary`, a deterministic jargon-free explanation. Dependency advisories remain individually auditable in JSON and SARIF while terminal and pull-request output groups them by package.
 
 The project is MIT licensed. See the full repository documentation for configuration, GitHub Action, MCP, and agent-host adapters.

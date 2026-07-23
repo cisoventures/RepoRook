@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { sha256 } from "./fingerprint.js";
 import { gitChangedFiles, gitCommit } from "./git.js";
 import { matchesAny } from "./path-utils.js";
-import { sortBySeverity } from "./severity.js";
+import { meetsThreshold, sortBySeverity } from "./severity.js";
 import { GitleaksScanner } from "./scanners/gitleaks.js";
 import { NpmAuditScanner } from "./scanners/npm-audit.js";
 import { PipAuditScanner } from "./scanners/pip-audit.js";
@@ -106,4 +106,16 @@ export function requiredScannerFailure(report: ScanReport, requiredScanners: str
   return report.scanners.some((scanner) =>
     scanner.applicable && scanner.status !== "ok" && (requireAllApplicable || required.has(scanner.name)),
   );
+}
+
+export function scanExitCode(
+  report: ScanReport,
+  failOn: Severity,
+  requiredScanners: string[],
+  requireAllApplicable: boolean,
+  allowNoCoverage: boolean,
+): 0 | 1 | 2 {
+  if (!allowNoCoverage && report.coverage_status === "failed") return 2;
+  if (requiredScannerFailure(report, requiredScanners, requireAllApplicable)) return 2;
+  return report.findings.some((finding) => meetsThreshold(finding.severity, failOn)) ? 1 : 0;
 }

@@ -23,6 +23,7 @@
     "build": "npm run build --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present",
     "test": "npm run build && npm run test --workspaces --if-present",
+    "smoke:packages": "npm run build && node scripts/smoke-packages.mjs",
     "lint": "npm run typecheck --workspaces --if-present",
     "check": "npm run validate:adapters && npm run lint && npm test",
     "reporook": "node cli/dist/index.js"

@@ -10,7 +10,7 @@ Ask your coding agent:
 
 > Check my app before I ship. Explain anything dangerous in simple English and help me fix it safely.
 
-RepoRook supplies deterministic evidence. Your existing agent can validate context and propose a patch. You approve the change. RepoRook and the repository tests verify it. CI remains the merge gate.
+RepoRook supplies deterministic evidence with a plain-English explanation for every finding. Your existing agent can validate context and propose a patch. You approve the change. RepoRook and the repository tests verify it. CI remains the merge gate.
 
 ## Quick start
 
@@ -28,9 +28,10 @@ Exit codes are stable for CI:
 
 - `0`: no finding met the configured threshold
 - `1`: at least one finding met the threshold
-- `2`: target, configuration, or required scanner error
+- `2`: target/configuration error, required scanner error, or no completed coverage
 
 Scanner absence never masquerades as safety. Every report says whether coverage was `complete`, `partial`, or `failed`.
+Failed coverage exits `2` by default. `--allow-no-coverage` exists only for explicit diagnostic workflows where a successful process exit is more important than a security gate.
 
 ## GitHub Action
 
@@ -78,9 +79,11 @@ scanners:
   pip-audit: true
 ```
 
+Configuration is validated strictly: unknown scanner names, invalid value types, unknown keys, and a scanner that is both required and disabled are errors rather than silent fallbacks.
+
 ## Outputs
 
-- `.reporook/findings.json`: deterministic normalized findings
+- `.reporook/findings.json`: deterministic normalized findings, including a jargon-free `plain_summary`
 - `.reporook/results.sarif`: GitHub-compatible projection
 - `.reporook/scan-receipt.json`: commit, configuration hash, scanner versions, and coverage
 - `.reporook/agent-review.json`: optional, separately attributed host-agent analysis
@@ -112,7 +115,7 @@ Run it directly:
 }
 ```
 
-Native packages live under [`adapters/`](adapters/). Every host receives the same canonical security workflow. Native security products may deepen validation, but their conclusions remain separately attributed.
+Native packages live under [`adapters/`](adapters/). Every host receives the same canonical security workflow. Native security products may deepen validation, but their conclusions remain separately attributed. RepoRook scans the code those agents produce, not the agents themselves.
 
 ## Trust model
 

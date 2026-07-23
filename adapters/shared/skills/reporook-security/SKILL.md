@@ -12,7 +12,7 @@ Use RepoRook as the deterministic evidence layer. Use the host's reasoning for c
 1. Prefer the RepoRook MCP tools when available. Otherwise run `reporook scan .` or `npx --yes reporook scan .`.
 2. For a pull request or local change, use `scan_changes` or `reporook scan . --changed <base> --head <head>`.
 3. Read `coverage_status` and every scanner status before interpreting findings.
-4. If coverage is partial or failed, say which checks did not run. Never describe an incomplete scan as clean or safe.
+4. Treat exit `2` or failed coverage as a security-gate failure. If coverage is partial, say which checks did not run. Never describe an incomplete scan as clean or safe.
 5. Never print, copy, or place a detected secret in a prompt, report, patch, test, or log.
 
 ## Explain for a beginner
@@ -23,6 +23,8 @@ For each material finding, explain:
 - **How someone could reach it:** identify the attacker-controlled input and sensitive operation when known.
 - **How certain this is:** label it `RepoRook verified`, `native security agent validated`, or `agent hypothesis`.
 - **What to do next:** propose one focused action without assuming the user understands security terminology.
+
+Start with the finding's deterministic `plain_summary`, then add only repository-specific context you can support with evidence. Dependency findings may be grouped by package in human-facing output, but preserve every advisory in the deterministic artifact.
 
 Treat deterministic matches as evidence, not automatic proof of exploitability. Inspect surrounding code, authorization boundaries, configuration, and tests. If a native security reviewer such as Claude Security, Codex Security, or Cursor Security Review is available, use it for deeper validation after the RepoRook baseline and attribute its conclusions separately.
 
@@ -41,7 +43,7 @@ Treat deterministic matches as evidence, not automatic proof of exploitability. 
 1. Run the focused regression test or strongest safe reproducer.
 2. Run relevant repository tests.
 3. Call `verify_fix` or run `reporook verify .`.
-4. Confirm the original stable finding ID or fingerprint is gone.
+4. Accept scanner resolution only when `verify_fix` says `passed`. `inconclusive` means the original scanner did not complete or the configuration changed; it is not a fix.
 5. Check nearby bypasses and legitimate behavior.
 6. Report separately:
    - scanner resolution;

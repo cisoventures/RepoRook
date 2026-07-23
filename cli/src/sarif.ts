@@ -20,8 +20,8 @@ export function toSarif(report: ScanReport): Record<string, unknown> {
           rules: [...rules.values()].map((finding) => ({
             id: finding.rule,
             name: finding.rule.replace(/[^a-zA-Z0-9]+/g, "_").slice(0, 120),
-            shortDescription: { text: finding.description },
-            help: { text: `${finding.description}\n\nRemediation: ${finding.remediation_hint}` },
+            shortDescription: { text: finding.plain_summary },
+            help: { text: `${finding.plain_summary}\n\nScanner detail: ${finding.description}\n\nRemediation: ${finding.remediation_hint}` },
             properties: { tags: [finding.scanner, ...finding.metadata.cwe, ...finding.metadata.cve] },
           })),
         },
@@ -31,7 +31,7 @@ export function toSarif(report: ScanReport): Record<string, unknown> {
       results: report.findings.map((finding) => ({
         ruleId: finding.rule,
         level: level(finding),
-        message: { text: `${finding.description} ${finding.remediation_hint}` },
+        message: { text: `${finding.plain_summary} ${finding.remediation_hint}` },
         locations: [{ physicalLocation: {
           artifactLocation: { uri: finding.file, uriBaseId: "%SRCROOT%" },
           region: { startLine: Math.max(1, finding.line), ...(finding.end_line ? { endLine: finding.end_line } : {}), ...(finding.column ? { startColumn: finding.column } : {}) },

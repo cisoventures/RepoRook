@@ -3,6 +3,9 @@ import { isAbsolute, relative, resolve } from "node:path";
 
 export interface FindingRecord extends Record<string, unknown> {
   id: string;
+  fingerprint?: string;
+  scanner?: string;
+  rule?: string;
   file: string;
   line: number;
   description: string;

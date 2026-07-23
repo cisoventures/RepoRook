@@ -25,10 +25,38 @@ const compact = (value, limit = 240) => {
   return normalized.length <= limit ? normalized : `${normalized.slice(0, limit - 1).trimEnd()}…`;
 };
 const markdown = (value, limit) => compact(value, limit).replaceAll("|", "\\|").replaceAll("`", "'").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-const rows = report.findings.slice(0, 20).map((finding) =>
-  `| ${icons[finding.severity] ?? "•"} ${finding.severity} | \`${markdown(`${finding.file}:${finding.line}`, 180)}\` | ${markdown(finding.description, 240)} | \`${finding.id}\` |`,
-);
-const omitted = Math.max(0, report.findings.length - rows.length);
+const rank = { critical: 4, high: 3, medium: 2, low: 1 };
+const dependencyScanners = new Set(["npm-audit", "pip-audit"]);
+const dependencyGroups = new Map();
+const items = [];
+for (const finding of report.findings) {
+  if (!dependencyScanners.has(finding.scanner)) {
+    items.push({ severity: finding.severity, findings: [finding] });
+    continue;
+  }
+  const key = [finding.scanner, finding.file, finding.metadata?.package ?? "unknown-package"].join("\0");
+  const group = dependencyGroups.get(key) ?? [];
+  group.push(finding);
+  dependencyGroups.set(key, group);
+}
+for (const findings of dependencyGroups.values()) {
+  findings.sort((a, b) => (rank[b.severity] ?? 0) - (rank[a.severity] ?? 0));
+  items.push({ severity: findings[0]?.severity ?? "low", findings });
+}
+items.sort((a, b) => (rank[b.severity] ?? 0) - (rank[a.severity] ?? 0));
+const visible = items.slice(0, 20);
+const rows = visible.map(({ severity, findings }) => {
+  const finding = findings[0];
+  const dependency = dependencyScanners.has(finding.scanner);
+  const location = dependency ? finding.file : `${finding.file}:${finding.line}`;
+  const explanation = dependency
+    ? `${finding.metadata?.package ?? "Dependency"} has ${findings.length} known advisor${findings.length === 1 ? "y" : "ies"}. ${finding.plain_summary ?? finding.description}`
+    : finding.plain_summary ?? finding.description;
+  const id = dependency ? `${findings.length} advisories` : finding.id;
+  return `| ${icons[severity] ?? "•"} ${severity} | \`${markdown(location, 180)}\` | ${markdown(explanation, 240)} | \`${markdown(id, 80)}\` |`;
+});
+const shownFindings = visible.reduce((total, item) => total + item.findings.length, 0);
+const omitted = Math.max(0, report.findings.length - shownFindings);
 const scannerSummary = report.scanners.map((scanner) =>
   `- ${scanner.status === "ok" ? "✓" : scanner.applicable ? "⚠" : "–"} **${markdown(scanner.name, 80)}**: ${scanner.status}${scanner.reason ? ` — ${markdown(scanner.reason, 240)}` : ""}`,
 ).join("\n");

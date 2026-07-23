@@ -2,6 +2,8 @@ import { sortBySeverity } from "./severity.js";
 import type { Finding, ScanReport, Severity } from "./types.js";
 
 const labels: Record<Severity, string> = { critical: "CRITICAL", high: "HIGH", medium: "MEDIUM", low: "LOW" };
+const rank: Record<Severity, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+const dependencyScanners = new Set(["npm-audit", "pip-audit"]);
 
 function compact(value: string, limit = 280): string {
   const normalized = value.replace(/\s+/g, " ").trim();
@@ -28,16 +30,42 @@ export function renderTerminal(report: ScanReport): string {
   }
   lines.push("");
   const ordered = sortBySeverity(report.findings);
-  const visible = ordered.slice(0, 20);
-  for (const finding of visible) {
-    lines.push(`[${labels[finding.severity]}] ${compact(finding.description)}`);
+  const codeFindings = ordered.filter((finding) => !dependencyScanners.has(finding.scanner));
+  const dependencyGroups = new Map<string, Finding[]>();
+  for (const finding of ordered.filter((candidate) => dependencyScanners.has(candidate.scanner))) {
+    const key = [finding.scanner, finding.file, finding.metadata.package ?? "unknown-package"].join("\0");
+    const group = dependencyGroups.get(key) ?? [];
+    group.push(finding);
+    dependencyGroups.set(key, group);
+  }
+  const items: Array<{ severity: Severity; findings: Finding[] }> = [
+    ...codeFindings.map((finding) => ({ severity: finding.severity, findings: [finding] })),
+    ...[...dependencyGroups.values()].map((findings) => ({ severity: findings[0]?.severity ?? "low", findings })),
+  ].sort((a, b) => rank[b.severity] - rank[a.severity]);
+  const visible = items.slice(0, 20);
+  for (const item of visible) {
+    const finding = item.findings[0];
+    if (!finding) continue;
+    if (item.findings.length > 1 || dependencyScanners.has(finding.scanner)) {
+      const packageName = finding.metadata.package ?? "unknown package";
+      const rules = item.findings.slice(0, 4).map((candidate) => candidate.rule.replace(/^(npm|pip)-audit:/, "")).join(", ");
+      lines.push(`[${labels[item.severity]}] ${packageName} — ${item.findings.length} known advisor${item.findings.length === 1 ? "y" : "ies"}`);
+      lines.push(`  What this means: ${compact(finding.plain_summary)}`);
+      lines.push(`  Where: ${finding.file}`);
+      lines.push(`  Advisories: ${rules}${item.findings.length > 4 ? ` (+${item.findings.length - 4} more)` : ""}`);
+      lines.push(`  Next step: ${finding.remediation_hint}`);
+      lines.push("");
+      continue;
+    }
+    lines.push(`[${labels[finding.severity]}] ${compact(finding.plain_summary)}`);
     lines.push(`  Where: ${finding.file}:${finding.line}`);
     lines.push(`  Risk ID: ${finding.id} (${finding.scanner})`);
+    lines.push(`  Scanner detail: ${compact(finding.description)}`);
     lines.push(`  Next step: ${finding.remediation_hint}`);
     lines.push("");
   }
-  if (ordered.length > visible.length) {
-    lines.push(`${ordered.length - visible.length} additional findings are in .reporook/findings.json and results.sarif.`);
+  if (items.length > visible.length) {
+    lines.push(`Additional findings are in .reporook/findings.json and results.sarif.`);
     lines.push("");
   }
   lines.push("Review each finding before applying a change. After fixing, run `reporook verify .`.");
@@ -46,9 +74,10 @@ export function renderTerminal(report: ScanReport): string {
 
 export function renderFinding(finding: Finding): string {
   return [
-    `${labels[finding.severity]} — ${finding.description}`,
+    `${labels[finding.severity]} — ${finding.plain_summary}`,
     `Location: ${finding.file}:${finding.line}`,
     `Detected by: ${finding.scanner} (${finding.rule})`,
+    `Scanner detail: ${finding.description}`,
     "",
     "What to do:",
     finding.remediation_hint,

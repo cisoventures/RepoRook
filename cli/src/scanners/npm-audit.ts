@@ -1,10 +1,11 @@
 import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { findingFingerprint } from "../fingerprint.js";
+import { plainSummary } from "../knowledge.js";
 import { runCommand } from "../process.js";
 import { normalizeSeverity } from "../severity.js";
 import type { Finding, ScannerAdapter, ScannerContext, ScannerResult } from "../types.js";
-import { array, errored, jsonFromOutput, record, scannerVersion, successful, text, unavailable } from "./shared.js";
+import { array, errored, jsonFromOutput, record, scannerParseError, scannerVersion, successful, text, unavailable } from "./shared.js";
 
 async function exists(path: string): Promise<boolean> { try { await access(path); return true; } catch { return false; } }
 
@@ -28,6 +29,7 @@ export function parseNpmAudit(raw: unknown): Finding[] {
         severity: normalizeSeverity(severityRaw, "high"),
         file: "package-lock.json",
         line: 1,
+        plain_summary: plainSummary({ scanner: "npm-audit", rule: `npm-audit:${source}`, packageName }),
         description: text(advisory.title, `${packageName} has a known security advisory.`),
         remediation_hint: typeof vulnerability.fixAvailable === "object"
           ? `Upgrade ${packageName} to a non-vulnerable version and run the repository test suite.`
@@ -55,6 +57,7 @@ export function parseNpmAudit(raw: unknown): Finding[] {
       severity: normalizeSeverity(advisory.severity, "high"),
       file: "package-lock.json",
       line: 1,
+      plain_summary: plainSummary({ scanner: "npm-audit", rule: `npm-audit:${source}`, packageName }),
       description: text(advisory.title, `${packageName} has a known security advisory.`),
       remediation_hint: `Upgrade ${packageName} outside the vulnerable range ${text(advisory.vulnerable_versions)} and run tests.`,
       references: text(advisory.url) ? [text(advisory.url)] : [],
@@ -82,7 +85,7 @@ export class NpmAuditScanner implements ScannerAdapter {
       if (![0, 1].includes(result.code)) return errored(this.name, version, result.duration_ms, result.stderr.trim() || `npm audit exited ${result.code}`);
       return successful(this.name, version, result.duration_ms, findings);
     } catch (error) {
-      return errored(this.name, version, result.duration_ms, (error as Error).message);
+      return errored(this.name, version, result.duration_ms, scannerParseError(error, result.stderr));
     }
   }
 }

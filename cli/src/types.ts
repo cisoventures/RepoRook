@@ -23,6 +23,7 @@ export interface Finding {
   line: number;
   end_line?: number;
   column?: number;
+  plain_summary: string;
   description: string;
   remediation_hint: string;
   fingerprint: string;

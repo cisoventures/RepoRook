@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { scanViaCli } from "./cli.js";
 import { codeContext, findFinding, findings, readReport } from "./context.js";
+import { verifyFindingResolution } from "./verification.js";
 
 type JsonRecord = Record<string, unknown>;
 type RequestId = string | number;
@@ -161,7 +162,7 @@ const tools: ToolDefinition[] = [
   {
     name: "verify_fix",
     title: "Verify a proposed security fix",
-    description: "Rerun RepoRook and report whether the original stable finding ID remains. This verifies scanner resolution, not all application behavior; also run relevant repository tests.",
+    description: "Rerun RepoRook and report whether the original stable finding remains. Resolution is inconclusive unless the original scanner completes under the same configuration. This does not replace repository tests.",
     inputSchema: {
       type: "object",
       properties: { finding_id: { type: "string" }, repository_path: { type: "string" }, previous_report_path: { type: "string", default: ".reporook/findings.json" } },
@@ -173,9 +174,16 @@ const tools: ToolDefinition[] = [
       const repositoryPath = string(input, "repository_path");
       const previous = await readReport(string(input, "previous_report_path", { default: ".reporook/findings.json" }));
       const original = findFinding(previous, findingId);
-      const current = await scanViaCli(repositoryPath);
-      const remaining = findings(current).find((candidate) => candidate.id === findingId || candidate.fingerprint === original.fingerprint);
-      return { finding_id: findingId, scanner_resolution: remaining ? "failed" : "passed", remaining_finding: remaining ?? null, coverage_status: current.coverage_status, scan_receipt: current.scan_receipt, reminder: "Run the repository's focused and full tests before calling the fix verified." };
+      const current = await scanViaCli(repositoryPath, [], { acceptIncompleteReport: true });
+      const verification = verifyFindingResolution(previous, current, findingId);
+      return {
+        finding_id: findingId,
+        ...verification,
+        original_finding: original,
+        coverage_status: current.coverage_status,
+        scan_receipt: current.scan_receipt,
+        reminder: "Run the repository's focused and full tests before calling the fix verified.",
+      };
     },
   },
   {

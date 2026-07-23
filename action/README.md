@@ -24,3 +24,5 @@ jobs:
 ```
 
 The Action runs the same deterministic CLI used locally, updates one pull-request comment, uploads SARIF, preserves a scan receipt, and fails only after reporting completes.
+
+`require-scanners` defaults to `true`, and failed coverage exits with a tool error even if configuration makes every scanner non-applicable. The Action installs exact scanner versions and pins third-party Actions by commit SHA.

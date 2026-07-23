@@ -7,10 +7,9 @@ import { parseArgs, stringFlag } from "./args.js";
 import { writeArtifacts } from "./artifacts.js";
 import { loadConfig } from "./config.js";
 import { diagnose, renderDoctor } from "./doctor.js";
-import { requiredScannerFailure, scanRepository, VERSION } from "./engine.js";
+import { scanExitCode, scanRepository, VERSION } from "./engine.js";
 import { renderFinding, renderTerminal } from "./render.js";
 import { toSarif } from "./sarif.js";
-import { meetsThreshold } from "./severity.js";
 import { setupInstructions } from "./setup.js";
 import { severities, type ScanReport, type Severity } from "./types.js";
 
@@ -36,6 +35,7 @@ Scan options:
   --changed [BASE]       Keep findings in files changed since BASE (default HEAD~1)
   --head REVISION        Changed-mode head (default HEAD)
   --require-scanners     Treat unavailable applicable scanners as a tool error
+  --allow-no-coverage    Allow exit 0 when no applicable scanner completes (unsafe; explicit opt-in)
   --no-sarif             Do not write SARIF
   --quiet                Suppress terminal summary
 `;
@@ -66,8 +66,13 @@ async function runScan(parsed: ReturnType<typeof parseArgs>): Promise<number> {
     else if (format === "sarif") process.stdout.write(`${JSON.stringify(toSarif(report), null, 2)}\n`);
     else process.stdout.write(`${renderTerminal(report)}\n\nArtifacts: ${artifacts.findingsPath}${artifacts.sarifPath ? `, ${artifacts.sarifPath}` : ""}\n`);
   }
-  if (requiredScannerFailure(report, loaded.config.requiredScanners, parsed.flags["require-scanners"] === true)) return 2;
-  return report.findings.some((finding) => meetsThreshold(finding.severity, loaded.config.failOn)) ? 1 : 0;
+  return scanExitCode(
+    report,
+    loaded.config.failOn,
+    loaded.config.requiredScanners,
+    parsed.flags["require-scanners"] === true,
+    parsed.flags["allow-no-coverage"] === true,
+  );
 }
 
 async function main(): Promise<number> {

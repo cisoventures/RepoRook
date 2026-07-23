@@ -1,9 +1,10 @@
 import { access, readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { findingFingerprint } from "../fingerprint.js";
+import { plainSummary } from "../knowledge.js";
 import { runCommand } from "../process.js";
 import type { Finding, ScannerAdapter, ScannerContext, ScannerResult } from "../types.js";
-import { array, errored, jsonFromOutput, record, scannerVersion, successful, text, unavailable } from "./shared.js";
+import { array, errored, jsonFromOutput, record, scannerParseError, scannerVersion, successful, text, unavailable } from "./shared.js";
 
 async function requirementFiles(target: string): Promise<string[]> {
   let names: string[] = [];
@@ -32,6 +33,7 @@ export function parsePipAudit(raw: unknown, sourceFile: string): Finding[] {
         severity: "high",
         file: sourceFile,
         line: 1,
+        plain_summary: plainSummary({ scanner: "pip-audit", rule: `pip-audit:${advisoryId}`, packageName }),
         description: text(vulnerability.description, `${packageName} ${installed_version ?? ""} is affected by ${advisoryId}.`).trim(),
         remediation_hint: fixed_versions.length
           ? `Upgrade ${packageName} to ${fixed_versions.join(" or ")} and run the repository test suite.`
@@ -73,7 +75,7 @@ export class PipAuditScanner implements ScannerAdapter {
       try {
         findings.push(...parsePipAudit(jsonFromOutput(result.stdout, result.stderr), invocation.source));
       } catch (error) {
-        return errored(this.name, version, duration_ms, (error as Error).message);
+        return errored(this.name, version, duration_ms, scannerParseError(error, result.stderr));
       }
       if (![0, 1].includes(result.code)) return errored(this.name, version, duration_ms, result.stderr.trim() || `pip-audit exited ${result.code}`);
     }

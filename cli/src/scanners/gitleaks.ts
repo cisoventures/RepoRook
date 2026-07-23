@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { findingFingerprint } from "../fingerprint.js";
+import { plainSummary } from "../knowledge.js";
 import { repoRelative } from "../path-utils.js";
 import { runCommand } from "../process.js";
 import type { Finding, ScannerAdapter, ScannerContext, ScannerResult } from "../types.js";
@@ -23,6 +24,7 @@ export function parseGitleaks(raw: unknown, target: string): Finding[] {
       line: Number(result.StartLine ?? 1),
       end_line: Number(result.EndLine ?? result.StartLine ?? 1),
       column: Number(result.StartColumn ?? 1),
+      plain_summary: plainSummary({ scanner: "gitleaks", rule, cwes: ["CWE-798"] }),
       description: text(result.Description, "A credential or secret may be committed in this file."),
       remediation_hint: "Remove the secret from code and history, rotate it with the provider, and load its replacement from a secret store or environment variable.",
       references: ["https://docs.github.com/en/code-security/secret-scanning/introduction/about-secret-scanning"],

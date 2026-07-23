@@ -30,9 +30,20 @@ export async function runRepoRook(args: string[]): Promise<CliResult> {
   });
 }
 
-export async function scanViaCli(path: string, extra: string[] = []): Promise<Record<string, unknown>> {
+export async function scanViaCli(
+  path: string,
+  extra: string[] = [],
+  options: { acceptIncompleteReport?: boolean } = {},
+): Promise<Record<string, unknown>> {
   const result = await runRepoRook(["scan", path, "--format", "json", ...extra]);
-  if (result.code === 2) throw new Error(result.stderr.trim() || "RepoRook could not complete the scan");
-  try { return JSON.parse(result.stdout) as Record<string, unknown>; }
-  catch { throw new Error(`RepoRook returned invalid JSON: ${result.stderr.trim()}`); }
+  let report: Record<string, unknown>;
+  try { report = JSON.parse(result.stdout) as Record<string, unknown>; }
+  catch {
+    if (result.code === 2) throw new Error(result.stderr.trim() || "RepoRook could not complete the scan");
+    throw new Error(`RepoRook returned invalid JSON: ${result.stderr.trim()}`);
+  }
+  if (result.code === 2 && !options.acceptIncompleteReport) {
+    throw new Error(result.stderr.trim() || "RepoRook could not complete the scan");
+  }
+  return report;
 }

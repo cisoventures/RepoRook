@@ -1,7 +1,10 @@
 name: RepoRook example
 
 on:
+  push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,5 +20,6 @@ jobs:
           fetch-depth: 0
       - uses: ./
         with:
+          path: cli
           fail-on: high
-          mode: diff
+          mode: full

@@ -31,6 +31,7 @@ The project is community-maintained with no SLA. Maintainers will coordinate val
 - Never call partial or failed coverage clean.
 - Never let host-agent opinions silently alter deterministic findings.
 - Never apply application patches from the CLI or MCP server.
+- Never report a fix as verified unless the original scanner completed under an equivalent configuration.
 - Keep finding and artifact paths inside the selected repository.
 - Use argument arrays rather than shell interpolation for scanner execution.
 - Pin and checksum downloaded CI scanner binaries.

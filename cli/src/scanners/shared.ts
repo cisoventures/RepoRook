@@ -1,4 +1,4 @@
-import { commandVersion } from "../process.js";
+import { commandVersion, type CommandOptions } from "../process.js";
 import type { Finding, ScannerResult, ScannerRunStatus, ScannerStatus } from "../types.js";
 
 export function text(value: unknown, fallback = ""): string {
@@ -18,8 +18,12 @@ export function strings(value: unknown): string[] {
   return typeof value === "string" ? [value] : [];
 }
 
-export async function scannerVersion(command: string): Promise<string | null> {
-  return await commandVersion(command);
+export async function scannerVersion(
+  command: string,
+  options: Pick<CommandOptions, "env" | "timeoutMs"> = {},
+  args: string[] = ["--version"],
+): Promise<string | null> {
+  return await commandVersion(command, args, options);
 }
 
 export function status(
@@ -67,4 +71,10 @@ export function jsonFromOutput(stdout: string, stderr: string): unknown {
     }
   }
   throw new Error("Scanner did not return valid JSON");
+}
+
+export function scannerParseError(error: unknown, stderr: string): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const diagnostic = stderr.trim().split(/\r?\n/, 1)[0]?.replace(/\s+/g, " ").slice(0, 500);
+  return diagnostic ? `${message}: ${diagnostic}` : message;
 }
