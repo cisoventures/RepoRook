@@ -35,17 +35,15 @@ jobs:
           npm pack --workspace @reporook/mcp-server --pack-destination release
       - name: Install and execute packed distributions
         run: node scripts/smoke-packages.mjs release
-      - name: Publish npm distributions with provenance
+      - name: Stage npm distributions through trusted publishing
         shell: bash
-        env:
-          # Bootstrap only: remove this after both packages use npm trusted publishing.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           version="${GITHUB_REF_NAME#v}"
-          npm publish "./release/reporook-${version}.tgz" --access public --provenance
-          npm publish "./release/reporook-mcp-server-${version}.tgz" --access public --provenance
+          npm stage publish "./release/reporook-${version}.tgz" --access public
+          npm stage publish "./release/reporook-mcp-server-${version}.tgz" --access public
       - name: Archive native adapters
         run: tar -czf release/reporook-adapters-${GITHUB_REF_NAME}.tar.gz adapters
       - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
+          draft: true
           files: release/*
