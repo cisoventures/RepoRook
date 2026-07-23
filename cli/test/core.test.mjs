@@ -9,6 +9,7 @@ import { scanExitCode, scanRepository } from "../dist/engine.js";
 import { renderTerminal } from "../dist/render.js";
 import { toSarif } from "../dist/sarif.js";
 import { gitChangedFiles } from "../dist/git.js";
+import { plainSummary } from "../dist/knowledge.js";
 
 test("simple YAML parser supports lists and scanner flags", () => {
   const parsed = parseSimpleYaml("failOn: medium\nignore:\n  - vendor/**\nscanners:\n  semgrep: false\n");
@@ -53,8 +54,14 @@ test("engine deduplicates findings and produces SARIF", async () => {
     assert.equal(sarif.runs[0].results[0].locations[0].physicalLocation.region.endLine, 2);
     assert.equal("end_line" in sarif.runs[0].results[0].locations[0].physicalLocation.region, false);
   } finally {
-    await rm(target, { recursive: true, force: true });
+    await rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
+});
+
+test("plain explanations do not confuse hardcoded regex advice with a leaked secret", () => {
+  const summary = plainSummary({ scanner: "semgrep", rule: "javascript.lang.security.audit.detect-non-literal-regexp", description: "Prefer hardcoded regexes." });
+  assert.match(summary, /regular expression|CPU time/);
+  assert.doesNotMatch(summary, /API key|token|password/);
 });
 
 test("failed coverage exits 2 unless the user explicitly allows no coverage", () => {
@@ -97,6 +104,6 @@ test("changed-file scans treat revisions as revisions, not Git options", async (
     await assert.rejects(() => gitChangedFiles(target, "--help", "HEAD"), /Invalid Git revision/);
     await assert.rejects(() => gitChangedFiles(target, "HEAD\n--output=oops", "HEAD"), /single non-empty value/);
   } finally {
-    await rm(target, { recursive: true, force: true });
+    await rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });

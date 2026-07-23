@@ -14,7 +14,7 @@ import { setupInstructions } from "./setup.js";
 import { severities, type ScanReport, type Severity } from "./types.js";
 
 export { scanRepository, toSarif };
-export type * from "./types.js";
+export * from "./types.js";
 
 const help = `RepoRook ${VERSION}
 

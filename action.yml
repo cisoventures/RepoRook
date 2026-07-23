@@ -88,6 +88,7 @@ runs:
         name: reporook-${{ github.run_id }}
         path: .reporook/
         if-no-files-found: warn
+        include-hidden-files: true
         retention-days: 14
     - name: Enforce RepoRook result
       if: always()

@@ -37,7 +37,7 @@ test("Semgrep errors are surfaced separately from findings", () => {
   assert.deepEqual(semgrepErrors(raw), ["Could not parse src/broken.py"]);
 });
 
-test("Semgrep adapter fails closed on nonzero partial output", async () => {
+test("Semgrep adapter fails closed on nonzero partial output", { skip: process.platform === "win32" }, async () => {
   const target = await mkdtemp(join(tmpdir(), "reporook-semgrep-adapter-test-"));
   const executable = join(target, "semgrep");
   const previousPath = process.env.PATH;

@@ -18,6 +18,7 @@ const cweSummaries: Record<string, string> = {
   "CWE-611": "The XML parser may follow external references, which can expose local files or internal services.",
   "CWE-798": "A password, API key, or token appears directly in the code. Anyone who can read the code may be able to use it.",
   "CWE-1004": "A session cookie can be read by page scripts. An injected script may be able to steal the user's session.",
+  "CWE-1333": "A specially crafted value may make this regular expression consume excessive CPU time, slowing or stopping the application.",
 };
 
 function cwe(key: string): string {
@@ -37,9 +38,14 @@ const keywordSummaries: Array<[string, string]> = [
   ["md5", cwe("CWE-328")],
   ["sha1", cwe("CWE-328")],
   ["verify=false", cwe("CWE-295")],
-  ["hardcoded", cwe("CWE-798")],
+  ["hardcoded-secret", cwe("CWE-798")],
+  ["hardcoded-password", cwe("CWE-798")],
+  ["hardcoded-credential", cwe("CWE-798")],
   ["secret", cwe("CWE-798")],
   ["path-traversal", cwe("CWE-22")],
+  ["redos", cwe("CWE-1333")],
+  ["regular-expression", cwe("CWE-1333")],
+  ["regex", cwe("CWE-1333")],
 ];
 
 export interface PlainSummaryInput {
