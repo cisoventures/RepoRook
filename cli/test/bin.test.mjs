@@ -8,12 +8,15 @@ import { promisify } from "node:util";
 
 const execute = promisify(execFile);
 
-test("npm-style symlinked CLI executes its entry point", async () => {
+test("CLI executes its entry point through the platform's package launch form", async () => {
   const directory = await mkdtemp(join(tmpdir(), "reporook-bin-test-"));
   const binary = join(directory, "reporook");
   try {
-    await symlink(resolve("dist/index.js"), binary);
-    const { stdout } = await execute(binary, ["--version"]);
+    const entry = resolve("dist/index.js");
+    if (process.platform !== "win32") await symlink(entry, binary);
+    const { stdout } = process.platform === "win32"
+      ? await execute(process.execPath, [entry, "--version"])
+      : await execute(binary, ["--version"]);
     assert.equal(stdout.trim(), "0.1.0");
   } finally {
     await rm(directory, { recursive: true, force: true });
