@@ -11,7 +11,7 @@ import { SemgrepScanner } from "./scanners/semgrep.js";
 import { status } from "./scanners/shared.js";
 import type { Finding, ScanOptions, ScanReport, ScannerAdapter, ScannerStatus, Severity } from "./types.js";
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.1.1";
 
 export const defaultScanners = (): ScannerAdapter[] => [
   new SemgrepScanner(),

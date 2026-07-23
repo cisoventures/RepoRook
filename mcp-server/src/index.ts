@@ -224,7 +224,7 @@ async function handle(message: unknown): Promise<void> {
       result(id, {
         protocolVersion: protocolVersions.includes(requested) ? requested : latestProtocolVersion,
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: "reporook", version: "0.1.0" },
+        serverInfo: { name: "reporook", version: "0.1.1" },
         instructions: "Use RepoRook findings as deterministic evidence. State incomplete scanner coverage, protect secrets, request approval before fixes, and verify with tests plus a rescan.",
       });
       return;

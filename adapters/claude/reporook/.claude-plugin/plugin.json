@@ -1,7 +1,7 @@
 {
   "name": "reporook",
   "description": "Agent-agnostic deterministic security scans, plain-English triage, and verified remediation.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": { "name": "RepoRook contributors" },
   "repository": "https://github.com/reporook/reporook",
   "license": "MIT",

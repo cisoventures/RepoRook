@@ -1,6 +1,6 @@
 {
   "name": "reporook-monorepo",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Agent-agnostic security scanning for code before it ships.",
   "license": "MIT",

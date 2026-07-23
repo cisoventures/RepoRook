@@ -1,7 +1,7 @@
 {
   "name": "reporook",
   "description": "Deterministic repository security scans with separately permissioned review and remediation agents.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": { "name": "RepoRook contributors" },
   "license": "MIT",
   "keywords": ["security", "sast", "secrets", "dependencies", "sarif"],
