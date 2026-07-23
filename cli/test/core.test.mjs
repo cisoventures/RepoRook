@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseSimpleYaml, defaultConfig, normalizeConfig } from "../dist/config.js";
@@ -33,6 +33,19 @@ test("configuration rejects values that can silently weaken coverage", () => {
 
 test("default configuration disables Semgrep telemetry while selecting explicit rules", () => {
   assert.equal(defaultConfig.semgrepConfig, "p/default");
+});
+
+test("artifact paths stay in the worktree while supporting monorepo scan targets", async () => {
+  const root = await mkdtemp(join(tmpdir(), "reporook-artifact-root-"));
+  const target = join(root, "packages", "app");
+  try {
+    await mkdir(join(root, ".git"));
+    await mkdir(target, { recursive: true });
+    assert.equal(artifactPath(target, "../../.reporook/findings.json"), join(root, ".reporook", "findings.json"));
+    assert.throws(() => artifactPath(target, "../../../outside.json"), /outside the repository/);
+  } finally {
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
 });
 
 test("engine deduplicates findings and produces SARIF", async () => {

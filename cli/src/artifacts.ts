@@ -1,5 +1,6 @@
+import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { renderAgentPrompt } from "./render.js";
 import { toSarif } from "./sarif.js";
 import type { ScanReport, VerificationReport } from "./types.js";
@@ -15,8 +16,11 @@ async function writeText(path: string, value: string): Promise<void> {
 }
 
 export function artifactPath(target: string, output: string): string {
-  const root = resolve(target);
-  const path = resolve(root, output);
+  const selected = resolve(target);
+  let root = selected;
+  while (!existsSync(join(root, ".git")) && dirname(root) !== root) root = dirname(root);
+  if (!existsSync(join(root, ".git"))) root = selected;
+  const path = resolve(selected, output);
   const traversal = relative(root, path);
   if (traversal === ".." || traversal.startsWith(`..${sep}`) || isAbsolute(traversal)) {
     throw new Error("Artifact path resolves outside the repository");
