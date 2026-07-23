@@ -42,8 +42,8 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           version="${GITHUB_REF_NAME#v}"
-          npm publish "release/reporook-${version}.tgz" --access public --provenance
-          npm publish "release/reporook-mcp-server-${version}.tgz" --access public --provenance
+          npm publish "./release/reporook-${version}.tgz" --access public --provenance
+          npm publish "./release/reporook-mcp-server-${version}.tgz" --access public --provenance
       - name: Archive native adapters
         run: tar -czf release/reporook-adapters-${GITHUB_REF_NAME}.tar.gz adapters
       - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
