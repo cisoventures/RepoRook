@@ -18,6 +18,16 @@ test("CLI executes its entry point through the platform's package launch form", 
       ? await execute(process.execPath, [entry, "--version"])
       : await execute(binary, ["--version"]);
     assert.equal(stdout.trim(), "0.1.0");
+    const help = process.platform === "win32"
+      ? await execute(process.execPath, [entry, "--help"])
+      : await execute(binary, ["--help"]);
+    assert.match(help.stdout, /verify <finding-id>/);
+    await assert.rejects(
+      process.platform === "win32"
+        ? execute(process.execPath, [entry, "verify"])
+        : execute(binary, ["verify"]),
+      (error) => error.code === 2 && /verify requires a valid finding ID/.test(error.stderr),
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

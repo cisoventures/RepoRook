@@ -64,6 +64,25 @@ export interface ScanReport {
   scan_receipt: ScanReceipt;
 }
 
+export interface VerificationReport {
+  schema_version: "1.0";
+  tool: { name: "reporook"; version: string };
+  finding_id: string;
+  generated_at: string;
+  scanner_resolution: "passed" | "failed" | "inconclusive";
+  reason: string;
+  config_unchanged: boolean | null;
+  original_finding: Finding;
+  remaining_finding: Finding | null;
+  original_scanner_status: ScannerStatus | null;
+  source_scan: ScanReceipt;
+  verification_scan: ScanReceipt;
+  functional_tests: {
+    status: "not-recorded";
+    reminder: string;
+  };
+}
+
 export interface RepoRookConfig {
   failOn: Severity;
   outputDir: string;

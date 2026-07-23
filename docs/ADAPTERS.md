@@ -9,7 +9,8 @@ All host adapters consume the canonical `reporook-security` skill. Run `npm run 
 | Cursor | `adapters/cursor/reporook` |
 | GitHub Copilot CLI | `adapters/copilot/reporook` |
 | Gemini CLI | `adapters/gemini/reporook` |
+| Windsurf | `adapters/windsurf/reporook` |
 
-Each package points to the local stdio MCP server. Claude, Cursor, Copilot, and Gemini also include native reviewer definitions. Reviewer agents are read-only; fixer agents are separately invoked and must honor approval.
+Each package points to the local stdio MCP server. Claude, Cursor, Copilot, and Gemini include read-only reviewer definitions plus separately invoked fixer definitions. Fixers require approval for one exact proposal, stop when scope changes, and report functional tests separately from RepoRook scanner resolution. Codex and Windsurf enforce the same lifecycle through their native skill and workflow formats.
 
 Codex Security, Claude Security, and Cursor Security Review are optional deep-validation layers. RepoRook does not redistribute, invoke without user intent, or relabel their findings.

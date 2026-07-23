@@ -3,7 +3,7 @@
   "hooks": {
     "stop": [
       {
-        "command": "npx --yes reporook verify . --quiet --fail-on critical"
+        "command": "npx --yes reporook scan . --quiet --fail-on critical"
       }
     ]
   }

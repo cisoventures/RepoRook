@@ -47,3 +47,11 @@ export async function scanViaCli(
   }
   return report;
 }
+
+export async function verifyViaCli(path: string, findingId: string, previousReportPath: string, requireScanners = false): Promise<Record<string, unknown>> {
+  const result = await runRepoRook(["verify", findingId, path, "--input", previousReportPath, "--format", "json", ...(requireScanners ? ["--require-scanners"] : [])]);
+  try { return JSON.parse(result.stdout) as Record<string, unknown>; }
+  catch {
+    throw new Error(result.stderr.trim() || "RepoRook could not produce a verification receipt");
+  }
+}

@@ -1,6 +1,6 @@
 # RepoRook
 
-RepoRook is a free, open-source security gate for code written by people or coding agents. It combines deterministic scanners behind one CLI, one findings schema, one GitHub check, and thin integrations for Claude Code, Codex, Cursor, GitHub Copilot, and Gemini CLI.
+RepoRook is a free, open-source security gate for code written by people or coding agents. It combines deterministic scanners behind one CLI, one findings schema, one GitHub check, and thin integrations for Claude Code, Codex, Cursor, GitHub Copilot, Gemini CLI, and Windsurf.
 
 **MIT licensed · no hosted service · no telemetry · no maintainer-funded inference.** RepoRook scans application code, not the agents, skills, plugins, or MCP servers that produced it.
 
@@ -90,6 +90,7 @@ Configuration is validated strictly: unknown scanner names, invalid value types,
 - `.reporook/scan-receipt.json`: commit, configuration hash, scanner versions, and coverage
 - `.reporook/agent-prompt.txt`: copy-ready, approval-based instructions for any coding agent
 - `.reporook/agent-review.json`: optional, separately attributed host-agent analysis
+- `.reporook/verifications/FINDING_ID/verification.json`: preserved before/after scanner-resolution receipt
 
 The v1 schemas are in [`schemas/`](schemas/). Finding IDs intentionally exclude line numbers so inserting code above a finding does not change its identity.
 
@@ -130,7 +131,7 @@ Native packages live under [`adapters/`](adapters/). Every host receives the sam
 | Scanner resolution passed | The original stable finding is absent after the patch |
 | Fix verified | Scanner resolution, focused regression evidence, and relevant tests passed |
 
-RepoRook does not silently apply patches, rotate credentials, create tickets, or publish advisories.
+Run `reporook verify FINDING_ID .` after an approved patch. It preserves the baseline, writes a separate verification receipt, and exits `0` only when the original scanner completed under the same configuration and no equivalent finding remains. RepoRook does not silently apply patches, rotate credentials, create tickets, or publish advisories.
 
 ## Development
 

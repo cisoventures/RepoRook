@@ -46,3 +46,5 @@ jobs:
           set -e
           test "$code" -eq 1
           node -e "const r=require('./test-fixtures/vulnerable-app/.reporook/findings.json'); if(r.coverage_status!=='complete'||r.summary.total<3) process.exit(1)"
+      - name: Confirm verification preserves the baseline
+        run: npm run fixture:verify

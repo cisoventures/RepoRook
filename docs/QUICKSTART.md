@@ -6,7 +6,7 @@ This path takes a project from “I do not know security” to deterministic sca
 
 Paste this into Claude Code, Codex, Cursor, GitHub Copilot, or Gemini CLI from the project you want to check:
 
-> Set up RepoRook for this project. First run `npx --yes reporook@latest doctor .` and explain any missing scanners. Ask before installing system software. When coverage is ready, run `npx --yes reporook@latest scan . --require-scanners`. Explain the highest-risk result in plain English and propose one minimal fix, but do not edit files until I approve. After an approved fix, run the relevant tests and `npx --yes reporook@latest verify . --require-scanners`. Treat incomplete coverage as inconclusive.
+> Set up RepoRook for this project. First run `npx --yes reporook@latest doctor .` and explain any missing scanners. Ask before installing system software. When coverage is ready, run `npx --yes reporook@latest scan . --require-scanners`. Explain the highest-risk result in plain English and propose one minimal fix, but do not edit files until I approve. After an approved fix, run the relevant tests and `npx --yes reporook@latest verify FINDING_ID . --require-scanners`. Treat incomplete coverage as inconclusive.
 
 RepoRook supplies scanner evidence; your agent supplies contextual reasoning. The agent must keep those two kinds of conclusions separate.
 
@@ -60,10 +60,10 @@ npx --yes reporook@latest explain FINDING_ID
 After the focused test and relevant project tests pass:
 
 ```bash
-npx --yes reporook@latest verify . --require-scanners
+npx --yes reporook@latest verify FINDING_ID . --require-scanners
 ```
 
-A disappeared finding is not called fixed when its original scanner did not complete or the configuration changed.
+Verification exit `0` means scanner resolution passed, exit `1` means the finding remains, and exit `2` means the result is inconclusive. The baseline is preserved and the before/after receipt is written under `.reporook/verifications/FINDING_ID/`. A disappeared finding is not called fixed when its original scanner did not complete or the configuration changed, and scanner resolution does not replace functional tests.
 
 ## Add the pull-request gate
 

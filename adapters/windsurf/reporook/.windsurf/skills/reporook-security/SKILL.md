@@ -42,7 +42,7 @@ Treat deterministic matches as evidence, not automatic proof of exploitability. 
 
 1. Run the focused regression test or strongest safe reproducer.
 2. Run relevant repository tests.
-3. Call `verify_fix` or run `reporook verify .`.
+3. Call `verify_fix` or run `reporook verify FINDING_ID .` for the exact accepted finding.
 4. Accept scanner resolution only when `verify_fix` says `passed`. `inconclusive` means the original scanner did not complete or the configuration changed; it is not a fix.
 5. Check nearby bypasses and legitimate behavior.
 6. Report separately:

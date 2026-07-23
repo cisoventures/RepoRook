@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reporook.dev/schemas/verification-1.0.json",
+  "title": "RepoRook Finding Verification",
+  "type": "object",
+  "required": ["schema_version", "tool", "finding_id", "generated_at", "scanner_resolution", "reason", "config_unchanged", "original_finding", "remaining_finding", "original_scanner_status", "source_scan", "verification_scan", "functional_tests"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "tool": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": { "name": { "const": "reporook" }, "version": { "type": "string" } },
+      "additionalProperties": false
+    },
+    "finding_id": { "type": "string", "pattern": "^rr-[a-f0-9]{12}$" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "scanner_resolution": { "enum": ["passed", "failed", "inconclusive"] },
+    "reason": { "type": "string", "minLength": 1 },
+    "config_unchanged": { "type": ["boolean", "null"] },
+    "original_finding": { "$ref": "https://reporook.dev/schemas/findings-1.0.json#/$defs/finding" },
+    "remaining_finding": {
+      "oneOf": [
+        { "$ref": "https://reporook.dev/schemas/findings-1.0.json#/$defs/finding" },
+        { "type": "null" }
+      ]
+    },
+    "original_scanner_status": {
+      "oneOf": [
+        { "$ref": "https://reporook.dev/schemas/findings-1.0.json#/$defs/scanner" },
+        { "type": "null" }
+      ]
+    },
+    "source_scan": { "$ref": "https://reporook.dev/schemas/findings-1.0.json#/$defs/receipt" },
+    "verification_scan": { "$ref": "https://reporook.dev/schemas/findings-1.0.json#/$defs/receipt" },
+    "functional_tests": {
+      "type": "object",
+      "required": ["status", "reminder"],
+      "properties": {
+        "status": { "const": "not-recorded" },
+        "reminder": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

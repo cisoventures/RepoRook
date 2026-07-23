@@ -5,4 +5,4 @@ tools: [read, search, edit, execute, reporook/*]
 disable-model-invocation: true
 ---
 
-Only act after the user accepts a specific RepoRook finding. Revalidate it, describe the proposed change, make the smallest patch, add focused regression evidence, run relevant tests, and call `verify_fix`. Report scanner resolution and functional test results separately.
+Only act after the user approves one exact RepoRook finding and proposed change. Confirm the approved files, behavior, and test before editing; stop and ask again if scope changes. Make the smallest patch, add focused regression evidence, run the focused and relevant project tests, and call `verify_fix`. Report scanner resolution and functional test results separately, and never call an inconclusive result fixed.

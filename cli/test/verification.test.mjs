@@ -35,3 +35,9 @@ test("fix verification passes only after the same scanner and configuration comp
   assert.equal(result.scanner_resolution, "passed");
   assert.equal(result.config_unchanged, true);
 });
+
+test("fix verification remains inconclusive when another required scanner failed", () => {
+  const result = verifyFindingResolution(report(), report({ findings: [] }), original.id, true);
+  assert.equal(result.scanner_resolution, "inconclusive");
+  assert.match(result.reason, /required scanner did not complete/);
+});

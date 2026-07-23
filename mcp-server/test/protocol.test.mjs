@@ -26,5 +26,6 @@ test("stdio server negotiates MCP and exposes all tools", async () => {
   assert.deepEqual(responses[1].result.tools.map((tool) => tool.name), [
     "scan_repository", "scan_changes", "list_findings", "get_finding", "get_remediation_context", "verify_fix", "export_findings",
   ]);
+  assert.equal(responses[1].result.tools.find((tool) => tool.name === "verify_fix").inputSchema.properties.require_scanners.default, true);
   assert.deepEqual(responses[2].result, {});
 });

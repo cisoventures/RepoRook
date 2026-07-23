@@ -24,4 +24,10 @@ const manifests = [
   "adapters/gemini/reporook/gemini-extension.json"
 ];
 for (const manifest of manifests) JSON.parse(await readFile(resolve(root, manifest), "utf8"));
-process.stdout.write(`Validated ${copies.length} skill copies and ${manifests.length} manifests.\n`);
+const schemas = [
+  "schemas/findings.schema.json",
+  "schemas/agent-review.schema.json",
+  "schemas/verification.schema.json",
+];
+for (const schema of schemas) JSON.parse(await readFile(resolve(root, schema), "utf8"));
+process.stdout.write(`Validated ${copies.length} skill copies, ${manifests.length} manifests, and ${schemas.length} schemas.\n`);

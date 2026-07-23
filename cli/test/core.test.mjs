@@ -5,7 +5,7 @@ import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseSimpleYaml, defaultConfig, normalizeConfig } from "../dist/config.js";
-import { writeArtifacts } from "../dist/artifacts.js";
+import { artifactPath, writeArtifacts } from "../dist/artifacts.js";
 import { scanExitCode, scanRepository } from "../dist/engine.js";
 import { renderAgentPrompt, renderTerminal } from "../dist/render.js";
 import { toSarif } from "../dist/sarif.js";
@@ -37,6 +37,7 @@ test("default configuration disables Semgrep telemetry while selecting explicit 
 
 test("engine deduplicates findings and produces SARIF", async () => {
   const target = await mkdtemp(join(tmpdir(), "reporook-test-"));
+  assert.throws(() => artifactPath(target, "../outside.json"), /outside the repository/);
   const finding = {
     id: "rr-aaaaaaaaaaaa", scanner: "fake", rule: "fake.rule", severity: "high", file: "src/app.js", line: 1, end_line: 2,
     plain_summary: "An unsafe operation can be reached.", description: "Unsafe operation", remediation_hint: "Use a safe operation", fingerprint: `sha256:${"a".repeat(64)}`,
@@ -107,7 +108,7 @@ test("terminal output groups dependency advisories and uses plain English", () =
   assert.equal((output.match(/Next step:/g) ?? []).length, 1);
   const prompt = renderAgentPrompt(report);
   assert.match(prompt, /Do not edit files until I approve that exact change/);
-  assert.match(prompt, /reporook verify \./);
+  assert.match(prompt, /reporook verify rr-bbbbbbbbbbbb \./);
   assert.match(prompt, /incomplete coverage as inconclusive/);
 });
 

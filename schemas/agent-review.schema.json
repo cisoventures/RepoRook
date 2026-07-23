@@ -22,7 +22,7 @@
         "required": ["finding_id", "status", "explanation", "evidence", "confidence"],
         "properties": {
           "finding_id": { "type": "string" },
-          "status": { "enum": ["validated", "rejected", "needs-review", "fixed", "verification-failed"] },
+          "status": { "enum": ["validated", "rejected", "needs-review"] },
           "explanation": { "type": "string" },
           "evidence": { "type": "array", "items": { "type": "string" } },
           "confidence": { "enum": ["high", "medium", "low"] }

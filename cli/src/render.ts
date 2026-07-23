@@ -1,5 +1,5 @@
 import { sortBySeverity } from "./severity.js";
-import type { Finding, ScanReport, Severity } from "./types.js";
+import type { Finding, ScanReport, Severity, VerificationReport } from "./types.js";
 
 const labels: Record<Severity, string> = { critical: "CRITICAL", high: "HIGH", medium: "MEDIUM", low: "LOW" };
 const rank: Record<Severity, number> = { critical: 4, high: 3, medium: 2, low: 1 };
@@ -68,7 +68,7 @@ export function renderTerminal(report: ScanReport): string {
     lines.push(`Additional findings are in .reporook/findings.json and results.sarif.`);
     lines.push("");
   }
-  lines.push("Review each finding before applying a change. After fixing, run `reporook verify .`.");
+  lines.push("Review each finding before applying a change. After fixing one, run `reporook verify FINDING_ID .`.");
   lines.push("Want agent help? Use the generated `agent-prompt.txt`; it requires approval before edits and verification afterward.");
   return lines.join("\n").trimEnd();
 }
@@ -86,10 +86,27 @@ export function renderAgentPrompt(report: ScanReport, findingsPath = ".reporook/
     "1. Explain the risk and likely real-world impact in plain English.",
     "2. Inspect the nearby code and say whether the finding appears applicable. Keep your reasoning separate from RepoRook's evidence.",
     "3. Propose the smallest safe change and any focused regression test. Do not edit files until I approve that exact change.",
-    "4. After approval, apply only the approved change, run the focused test and relevant project tests, then run `reporook verify .`.",
+    `4. After approval, apply only the approved change, run the focused test and relevant project tests, then run \`reporook verify ${highest?.id ?? "FINDING_ID"} .\`.`,
     "5. Call the finding fixed only if verification passes with the original scanner and configuration. Treat incomplete coverage as inconclusive.",
     "",
     "Never print or repeat detected secret values. If a real credential is exposed, tell me it must be revoked and replaced outside the repository.",
+  ].join("\n");
+}
+
+export function renderVerification(report: VerificationReport): string {
+  const heading = report.scanner_resolution === "passed"
+    ? "PASSED — the scanner no longer reports this finding"
+    : report.scanner_resolution === "failed"
+      ? "FAILED — the finding is still present"
+      : "INCONCLUSIVE — scanner evidence is incomplete";
+  return [
+    `RepoRook verification: ${heading}`,
+    `Finding: ${report.finding_id}`,
+    `Reason: ${report.reason}`,
+    "Functional tests: not recorded by RepoRook. Run and report the focused and relevant project tests separately.",
+    report.scanner_resolution === "passed"
+      ? "Scanner resolution passed, but call the fix verified only after the relevant tests also pass."
+      : "Do not call this finding fixed.",
   ].join("\n");
 }
 

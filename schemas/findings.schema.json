@@ -34,21 +34,7 @@
     },
     "scanners": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["name", "applicable", "available", "version", "status", "finding_count", "duration_ms"],
-        "properties": {
-          "name": { "type": "string" },
-          "applicable": { "type": "boolean" },
-          "available": { "type": "boolean" },
-          "version": { "type": ["string", "null"] },
-          "status": { "enum": ["ok", "skipped", "error"] },
-          "finding_count": { "type": "integer", "minimum": 0 },
-          "duration_ms": { "type": "integer", "minimum": 0 },
-          "reason": { "type": "string" }
-        },
-        "additionalProperties": false
-      }
+      "items": { "$ref": "#/$defs/scanner" }
     },
     "findings": {
       "type": "array",
@@ -57,6 +43,21 @@
     "scan_receipt": { "$ref": "#/$defs/receipt" }
   },
   "$defs": {
+    "scanner": {
+      "type": "object",
+      "required": ["name", "applicable", "available", "version", "status", "finding_count", "duration_ms"],
+      "properties": {
+        "name": { "type": "string" },
+        "applicable": { "type": "boolean" },
+        "available": { "type": "boolean" },
+        "version": { "type": ["string", "null"] },
+        "status": { "enum": ["ok", "skipped", "error"] },
+        "finding_count": { "type": "integer", "minimum": 0 },
+        "duration_ms": { "type": "integer", "minimum": 0 },
+        "reason": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
     "finding": {
       "type": "object",
       "required": ["id", "scanner", "rule", "severity", "file", "line", "plain_summary", "description", "remediation_hint", "fingerprint", "references", "metadata"],
