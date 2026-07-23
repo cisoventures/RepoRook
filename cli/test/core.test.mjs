@@ -1,12 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseSimpleYaml, defaultConfig, normalizeConfig } from "../dist/config.js";
+import { writeArtifacts } from "../dist/artifacts.js";
 import { scanExitCode, scanRepository } from "../dist/engine.js";
-import { renderTerminal } from "../dist/render.js";
+import { renderAgentPrompt, renderTerminal } from "../dist/render.js";
 import { toSarif } from "../dist/sarif.js";
 import { gitChangedFiles } from "../dist/git.js";
 import { plainSummary } from "../dist/knowledge.js";
@@ -54,6 +55,10 @@ test("engine deduplicates findings and produces SARIF", async () => {
     assert.equal(sarif.runs[0].results.length, 1);
     assert.equal(sarif.runs[0].results[0].locations[0].physicalLocation.region.endLine, 2);
     assert.equal("end_line" in sarif.runs[0].results[0].locations[0].physicalLocation.region, false);
+    const artifacts = await writeArtifacts(target, report, { writeSarif: false });
+    const prompt = await readFile(artifacts.promptPath, "utf8");
+    assert.match(prompt, /Do not edit files until I approve that exact change/);
+    assert.equal((await stat(artifacts.promptPath)).mode & 0o777, 0o600);
   } finally {
     await rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
@@ -100,6 +105,10 @@ test("terminal output groups dependency advisories and uses plain English", () =
   assert.match(output, /urllib3 — 2 known advisories/);
   assert.match(output, /What this means: The urllib3 package has a known flaw/);
   assert.equal((output.match(/Next step:/g) ?? []).length, 1);
+  const prompt = renderAgentPrompt(report);
+  assert.match(prompt, /Do not edit files until I approve that exact change/);
+  assert.match(prompt, /reporook verify \./);
+  assert.match(prompt, /incomplete coverage as inconclusive/);
 });
 
 test("changed-file scans treat revisions as revisions, not Git options", async () => {

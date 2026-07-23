@@ -1,6 +1,6 @@
 # RepoRook
 
-RepoRook is a free, open-source security gate for code written by people or coding agents. It combines deterministic scanners behind one CLI, one findings schema, one GitHub check, and thin integrations for Claude Code, Codex, Cursor, GitHub Copilot, Gemini CLI, and Windsurf.
+RepoRook is a free, open-source security gate for code written by people or coding agents. It combines deterministic scanners behind one CLI, one findings schema, one GitHub check, and thin integrations for Claude Code, Codex, Cursor, GitHub Copilot, and Gemini CLI.
 
 **MIT licensed · no hosted service · no telemetry · no maintainer-funded inference.** RepoRook scans application code, not the agents, skills, plugins, or MCP servers that produced it.
 
@@ -12,17 +12,19 @@ Ask your coding agent:
 
 RepoRook supplies deterministic evidence with a plain-English explanation for every finding. Your existing agent can validate context and propose a patch. You approve the change. RepoRook and the repository tests verify it. CI remains the merge gate.
 
-## Quick start
+## Five-minute quick start
 
 Requirements: Node.js 20 or later. RepoRook orchestrates Semgrep, Gitleaks, `npm audit`, and `pip-audit` when applicable.
 
 By default Semgrep downloads the public `p/default` rule bundle and runs it with metrics disabled. Set `semgrepConfig` to a pinned local rules file when you need fully offline or byte-for-byte reproducible source scans.
 
 ```bash
-npx reporook doctor
-npx reporook setup
-npx reporook scan .
+npx --yes reporook@latest doctor .
+npx --yes reporook@latest setup # prints reviewed install commands; does not install
+npx --yes reporook@latest scan . --require-scanners
 ```
+
+Exit `1` means the scan worked and found something to review; exit `2` means coverage failed. Every scan also writes `.reporook/agent-prompt.txt`, a safe copy-ready prompt that asks your coding agent to explain one risk, propose the smallest fix, wait for approval, test it, and verify it. See the [five-minute onboarding guide](docs/QUICKSTART.md).
 
 Exit codes are stable for CI:
 
@@ -86,6 +88,7 @@ Configuration is validated strictly: unknown scanner names, invalid value types,
 - `.reporook/findings.json`: deterministic normalized findings, including a jargon-free `plain_summary`
 - `.reporook/results.sarif`: GitHub-compatible projection
 - `.reporook/scan-receipt.json`: commit, configuration hash, scanner versions, and coverage
+- `.reporook/agent-prompt.txt`: copy-ready, approval-based instructions for any coding agent
 - `.reporook/agent-review.json`: optional, separately attributed host-agent analysis
 
 The v1 schemas are in [`schemas/`](schemas/). Finding IDs intentionally exclude line numbers so inserting code above a finding does not change its identity.

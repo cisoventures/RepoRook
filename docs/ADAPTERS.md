@@ -9,7 +9,6 @@ All host adapters consume the canonical `reporook-security` skill. Run `npm run 
 | Cursor | `adapters/cursor/reporook` |
 | GitHub Copilot CLI | `adapters/copilot/reporook` |
 | Gemini CLI | `adapters/gemini/reporook` |
-| Windsurf | `adapters/windsurf/reporook` |
 
 Each package points to the local stdio MCP server. Claude, Cursor, Copilot, and Gemini also include native reviewer definitions. Reviewer agents are read-only; fixer agents are separately invoked and must honor approval.
 

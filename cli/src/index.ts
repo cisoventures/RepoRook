@@ -64,7 +64,7 @@ async function runScan(parsed: ReturnType<typeof parseArgs>): Promise<number> {
   if (parsed.flags.quiet !== true) {
     if (format === "json") process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
     else if (format === "sarif") process.stdout.write(`${JSON.stringify(toSarif(report), null, 2)}\n`);
-    else process.stdout.write(`${renderTerminal(report)}\n\nArtifacts: ${artifacts.findingsPath}${artifacts.sarifPath ? `, ${artifacts.sarifPath}` : ""}\n`);
+    else process.stdout.write(`${renderTerminal(report)}\n\nArtifacts: ${artifacts.findingsPath}${artifacts.sarifPath ? `, ${artifacts.sarifPath}` : ""}, ${artifacts.promptPath}\n`);
   }
   return scanExitCode(
     report,

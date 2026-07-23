@@ -70,7 +70,7 @@ const body = [
   ...(rows.length ? ["| Severity | Location | What could be wrong | ID |", "|---|---|---|---|", ...rows, ""] : ["No vulnerabilities were reported by the checks that completed.", ""]),
   ...(omitted ? [`_${omitted} additional findings are available in the uploaded artifact and SARIF report._`, ""] : []),
   "<details><summary>Scanner coverage</summary>", "", scannerSummary, "", "</details>", "",
-  "Ask your coding agent: **“Explain the RepoRook findings and help me fix them one at a time.”**",
+  "Ask your coding agent: **“Read the RepoRook findings, explain the highest risk in plain English, and propose the smallest fix. Wait for my approval before editing; then run tests and RepoRook verification.”**",
 ].join("\n");
 
 const headers = {

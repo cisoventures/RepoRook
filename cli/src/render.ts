@@ -69,7 +69,28 @@ export function renderTerminal(report: ScanReport): string {
     lines.push("");
   }
   lines.push("Review each finding before applying a change. After fixing, run `reporook verify .`.");
+  lines.push("Want agent help? Use the generated `agent-prompt.txt`; it requires approval before edits and verification afterward.");
   return lines.join("\n").trimEnd();
+}
+
+export function renderAgentPrompt(report: ScanReport, findingsPath = ".reporook/findings.json"): string {
+  const highest = sortBySeverity(report.findings)[0];
+  const priority = highest ? `${highest.severity} finding ${highest.id}` : "scanner coverage and the absence of findings";
+  return [
+    "Help me review and safely resolve this RepoRook security scan.",
+    "",
+    `Read the deterministic evidence in ${findingsPath}.`,
+    `The scan reported ${report.summary.total} finding(s) with ${report.coverage_status} coverage. Start with the ${priority}.`,
+    "",
+    "Work one finding at a time:",
+    "1. Explain the risk and likely real-world impact in plain English.",
+    "2. Inspect the nearby code and say whether the finding appears applicable. Keep your reasoning separate from RepoRook's evidence.",
+    "3. Propose the smallest safe change and any focused regression test. Do not edit files until I approve that exact change.",
+    "4. After approval, apply only the approved change, run the focused test and relevant project tests, then run `reporook verify .`.",
+    "5. Call the finding fixed only if verification passes with the original scanner and configuration. Treat incomplete coverage as inconclusive.",
+    "",
+    "Never print or repeat detected secret values. If a real credential is exposed, tell me it must be revoked and replaced outside the repository.",
+  ].join("\n");
 }
 
 export function renderFinding(finding: Finding): string {

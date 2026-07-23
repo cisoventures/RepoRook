@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: cisoventures/RepoRook@main # use a release tag once published
+      - uses: cisoventures/RepoRook@v0.1.0
         with:
           fail-on: high
           mode: diff
