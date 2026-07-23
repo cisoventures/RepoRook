@@ -43,7 +43,7 @@ runs:
   using: composite
   steps:
     - name: Set up Node.js
-      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
       with:
         node-version: "22"
         cache: npm
@@ -71,7 +71,7 @@ runs:
       run: "$GITHUB_ACTION_PATH/action/run-scan.sh"
     - name: Upload SARIF
       if: always() && hashFiles('.reporook/results.sarif') != ''
-      uses: github/codeql-action/upload-sarif@4187e74d05793876e9989daffde9c3e66b4acd07 # v3
+      uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4
       with:
         sarif_file: .reporook/results.sarif
         category: reporook
