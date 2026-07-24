@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline";
-import { VERSION } from "reporook";
 import { prioritizeViaCli, remediationPlanViaCli, scanViaCli, verifyViaCli } from "./cli.js";
 import { codeContext, findFinding, findings, readReport } from "./context.js";
 
@@ -21,6 +21,8 @@ interface ToolDefinition {
 const latestProtocolVersion = "2025-11-25";
 const protocolVersions = [latestProtocolVersion, "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"];
 const severityValues = ["critical", "high", "medium", "low"];
+const packageMetadata = createRequire(import.meta.url)("../package.json") as { version: string };
+const VERSION = packageMetadata.version;
 
 function object(value: unknown, label = "arguments"): JsonRecord {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be an object`);
