@@ -4,6 +4,7 @@ set -uo pipefail
 target="${INPUT_PATH:-.}"
 findings="$GITHUB_WORKSPACE/.reporook/findings.json"
 sarif="$GITHUB_WORKSPACE/.reporook/results.sarif"
+priorities="$GITHUB_WORKSPACE/.reporook/priorities.json"
 args=(scan "$target" --fail-on "${INPUT_FAIL_ON:-high}" --output "$findings" --sarif-output "$sarif")
 
 if [ -n "${INPUT_CONFIG:-}" ]; then
@@ -28,6 +29,7 @@ set -e
   echo "exit_code=$exit_code"
   echo "findings_file=$findings"
   echo "sarif_file=$sarif"
+  echo "priorities_file=$priorities"
 } >> "$GITHUB_OUTPUT"
 
 exit 0

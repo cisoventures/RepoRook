@@ -8,7 +8,7 @@ RepoRook is a free, open-source security gate for code written by people or codi
 
 Ask your coding agent:
 
-> Check my app before I ship. Explain anything dangerous in simple English and help me fix it safely.
+> Check my app before I ship. Tell me what to fix now versus later, explain the first risk in simple English, and show me the exact patch and test plan before changing anything.
 
 RepoRook supplies deterministic evidence with a plain-English explanation for every finding. Your existing agent can validate context and propose a patch. You approve the change. RepoRook and the repository tests verify it. CI remains the merge gate.
 
@@ -19,12 +19,15 @@ Requirements: Node.js 20 or later. RepoRook orchestrates Semgrep, Gitleaks, `npm
 By default Semgrep downloads the public `p/default` rule bundle and runs it with metrics disabled. Set `semgrepConfig` to a pinned local rules file when you need fully offline or byte-for-byte reproducible source scans.
 
 ```bash
+npx --yes reporook@latest init .
 npx --yes reporook@latest doctor .
 npx --yes reporook@latest setup # prints reviewed install commands; does not install
 npx --yes reporook@latest scan . --require-scanners
 ```
 
-Exit `1` means the scan worked and found something to review; exit `2` means coverage failed. Every scan also writes `.reporook/agent-prompt.txt`, a safe copy-ready prompt that asks your coding agent to explain one risk, propose the smallest fix, wait for approval, test it, and verify it. See the [five-minute onboarding guide](docs/QUICKSTART.md).
+`init` detects the project stack, writes a fail-closed `reporook.yml`, and keeps local evidence out of Git. It never replaces an existing configuration unless you explicitly pass `--force`.
+
+Exit `1` means the scan worked and found something to review; exit `2` means coverage failed. Every scan writes `.reporook/priorities.json` with a deterministic fix-now/fix-next/review-later queue and `.reporook/agent-prompt.txt` with the safe next step. Prepare one finding-bound workflow with `reporook plan FINDING_ID .`; its exact patch and test plan still require approval. See the [guided-fix workflow](docs/GUIDED_FIX.md) and [five-minute onboarding guide](docs/QUICKSTART.md).
 
 Exit codes are stable for CI:
 
@@ -53,13 +56,13 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: cisoventures/RepoRook@v0.2.0
+      - uses: cisoventures/RepoRook@v0.3.0
         with:
           fail-on: high
           mode: diff
 ```
 
-The Action installs pinned scanners, updates one PR comment, uploads SARIF, preserves the full scan receipt, and enforces the configured threshold after reporting.
+The Action installs pinned scanners, updates one PR comment with the guided fix queue, uploads SARIF, preserves the full scan and priority receipts, and enforces the configured threshold after reporting.
 
 ## Detection coverage
 
@@ -101,8 +104,11 @@ Configuration is validated strictly: unknown scanner names, invalid value types,
 - `.reporook/findings.json`: deterministic normalized findings, including a jargon-free `plain_summary`
 - `.reporook/results.sarif`: GitHub-compatible projection
 - `.reporook/scan-receipt.json`: commit, configuration hash, scanner versions, and coverage
+- `.reporook/priorities.json`: deterministic fix-now, fix-next, and review-later queue
 - `.reporook/agent-prompt.txt`: copy-ready, approval-based instructions for any coding agent
 - `.reporook/agent-review.json`: optional, separately attributed host-agent analysis
+- `.reporook/remediations/FINDING_ID/plan.json`: finding- and source-scan-bound remediation requirements
+- `.reporook/remediations/FINDING_ID/fix-prompt.txt`: copy-ready exact-preview and approval workflow
 - `.reporook/verifications/FINDING_ID/verification.json`: preserved before/after scanner-resolution receipt
 
 The v1 schemas are in [`schemas/`](schemas/). Finding IDs intentionally exclude line numbers so inserting code above a finding does not change its identity.
@@ -113,9 +119,11 @@ The local MCP server exposes:
 
 - `scan_repository`
 - `scan_changes`
+- `prioritize_findings`
 - `list_findings`
 - `get_finding`
 - `get_remediation_context`
+- `prepare_remediation_plan`
 - `verify_fix`
 - `export_findings`
 
@@ -139,6 +147,8 @@ Native packages live under [`adapters/`](adapters/). Every host receives the sam
 | Label | Meaning |
 |---|---|
 | RepoRook finding | A deterministic scanner matched evidence in this revision |
+| RepoRook priority | Deterministic severity-based scheduling guidance for a reported finding |
+| Remediation plan | A finding- and scan-bound workflow requiring an exact patch, test plan, and approval |
 | Native-agent validated | A named host security reviewer validated context or attack path |
 | Agent hypothesis | Reasoning that has not been deterministically reproduced |
 | Scanner resolution passed | The original stable finding is absent after the patch |
@@ -155,8 +165,8 @@ npm run fixture:prepare
 node cli/dist/index.js scan test-fixtures/vulnerable-app --require-scanners
 ```
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/ADAPTERS.md`](docs/ADAPTERS.md), and [`CONTRIBUTING.md`](CONTRIBUTING.md).
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/ADAPTERS.md`](docs/ADAPTERS.md), the [`roadmap`](docs/ROADMAP.md), and [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Project status
 
-The repository contains the complete beta architecture. Scanner detection accuracy and host packaging should be treated as pre-1.0 and expanded through fixture-backed contributions.
+The repository contains the complete v0.3 guided-fix beta architecture. Scanner accuracy, prioritization policy, and host packaging remain pre-1.0 and should expand only through fixture-backed, reviewable contributions.

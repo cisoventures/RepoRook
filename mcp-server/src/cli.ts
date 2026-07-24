@@ -55,3 +55,20 @@ export async function verifyViaCli(path: string, findingId: string, previousRepo
     throw new Error(result.stderr.trim() || "RepoRook could not produce a verification receipt");
   }
 }
+
+function jsonResult(result: CliResult, label: string): Record<string, unknown> {
+  try { return JSON.parse(result.stdout) as Record<string, unknown>; }
+  catch { throw new Error(result.stderr.trim() || `RepoRook could not produce ${label}`); }
+}
+
+export async function prioritizeViaCli(path: string, reportPath: string): Promise<Record<string, unknown>> {
+  const result = await runRepoRook(["prioritize", path, "--input", reportPath, "--format", "json"]);
+  if (result.code !== 0) throw new Error(result.stderr.trim() || "RepoRook could not prioritize the findings");
+  return jsonResult(result, "a priority report");
+}
+
+export async function remediationPlanViaCli(path: string, findingId: string, reportPath: string): Promise<Record<string, unknown>> {
+  const result = await runRepoRook(["plan", findingId, path, "--input", reportPath, "--format", "json"]);
+  if (result.code !== 0) throw new Error(result.stderr.trim() || "RepoRook could not prepare the remediation plan");
+  return jsonResult(result, "a remediation plan");
+}

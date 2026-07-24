@@ -1,7 +1,7 @@
 {
   "name": "@reporook/mcp-server",
-  "version": "0.2.0",
-  "description": "Read-only MCP tools for RepoRook security scanning and fix verification.",
+  "version": "0.3.0",
+  "description": "MCP tools for RepoRook scanning, guided remediation planning, and fix verification.",
   "license": "MIT",
   "homepage": "https://github.com/cisoventures/RepoRook#readme",
   "repository": {
@@ -26,6 +26,6 @@
   },
   "engines": { "node": ">=20" },
   "dependencies": {
-    "reporook": "0.2.0"
+    "reporook": "0.3.0"
   }
 }

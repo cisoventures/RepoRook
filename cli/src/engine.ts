@@ -11,8 +11,9 @@ import { PipAuditScanner } from "./scanners/pip-audit.js";
 import { SemgrepScanner } from "./scanners/semgrep.js";
 import { status } from "./scanners/shared.js";
 import type { Finding, ScanOptions, ScanReport, ScannerAdapter, ScannerStatus, Severity } from "./types.js";
+import { VERSION } from "./version.js";
 
-export const VERSION = "0.2.0";
+export { VERSION };
 
 export const defaultScanners = (): ScannerAdapter[] => [
   new SemgrepScanner(),

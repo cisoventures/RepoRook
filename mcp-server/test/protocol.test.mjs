@@ -24,8 +24,9 @@ test("stdio server negotiates MCP and exposes all tools", async () => {
   assert.equal(responses[0].result.protocolVersion, "2025-03-26");
   assert.equal(responses[0].result.serverInfo.name, "reporook");
   assert.deepEqual(responses[1].result.tools.map((tool) => tool.name), [
-    "scan_repository", "scan_changes", "list_findings", "get_finding", "get_remediation_context", "verify_fix", "export_findings",
+    "scan_repository", "scan_changes", "prioritize_findings", "list_findings", "get_finding", "get_remediation_context", "prepare_remediation_plan", "verify_fix", "export_findings",
   ]);
+  assert.match(responses[0].result.instructions, /exact patch and test plan/);
   assert.equal(responses[1].result.tools.find((tool) => tool.name === "verify_fix").inputSchema.properties.require_scanners.default, true);
   assert.deepEqual(responses[2].result, {});
 });

@@ -83,6 +83,96 @@ export interface VerificationReport {
   };
 }
 
+export const priorityBands = ["fix-now", "fix-next", "review-later"] as const;
+export type PriorityBand = (typeof priorityBands)[number];
+
+export interface PrioritizedFinding {
+  rank: number;
+  priority: PriorityBand;
+  finding_id: string;
+  severity: Severity;
+  scanner: string;
+  package: string | null;
+  file: string;
+  line: number;
+  title: string;
+  reason: string;
+  next_step: string;
+  related_finding_ids: string[];
+}
+
+export interface PrioritizationReport {
+  schema_version: "1.0";
+  tool: { name: "reporook"; version: string };
+  generated_at: string;
+  coverage_status: CoverageStatus;
+  source_scan: ScanReceipt;
+  summary: {
+    fix_now: number;
+    fix_next: number;
+    review_later: number;
+    total: number;
+  };
+  priorities: PrioritizedFinding[];
+}
+
+export interface RemediationPlan {
+  schema_version: "1.0";
+  tool: { name: "reporook"; version: string };
+  plan_id: string;
+  status: "awaiting-proposal";
+  generated_at: string;
+  finding: Finding;
+  priority: PrioritizedFinding;
+  source_scan: ScanReceipt;
+  goal: string;
+  validation_questions: string[];
+  scope: {
+    allowed_files: string[];
+    related_finding_ids: string[];
+    stop_if_scope_changes: true;
+  };
+  proposal_requirements: {
+    explain_risk_in_plain_english: true;
+    exact_patch_preview: true;
+    behavior_impact: true;
+    focused_test_plan: true;
+  };
+  approval: {
+    required: true;
+    status: "pending";
+    binds_to: ["finding", "source-scan", "exact-patch", "test-plan"];
+    instruction: string;
+  };
+  safety_rules: string[];
+  verification: {
+    command: string;
+    scanner_pass_condition: string;
+    functional_tests_required: true;
+  };
+}
+
+export interface ProjectStack {
+  name: string;
+  evidence: string[];
+}
+
+export interface ProjectProfile {
+  target: string;
+  stacks: ProjectStack[];
+  recommended_scanners: string[];
+  evidence_truncated: boolean;
+}
+
+export interface InitializationResult {
+  target: string;
+  config_path: string;
+  status: "created" | "overwritten" | "already-configured";
+  gitignore_updated: boolean;
+  profile: ProjectProfile;
+  next_commands: string[];
+}
+
 export interface RepoRookConfig {
   failOn: Severity;
   outputDir: string;
