@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -28,7 +28,9 @@ try {
   const version = execFileSync(process.execPath, [cliEntry, "--version"], { encoding: "utf8" }).trim();
   if (version !== cliPackage.version) throw new Error(`Packed CLI returned ${version}, expected ${cliPackage.version}`);
   const help = execFileSync(process.execPath, [cliEntry, "--help"], { encoding: "utf8" });
-  if (!/reporook init/.test(help) || !/reporook plan/.test(help)) throw new Error("Packed CLI did not expose the guided-fix commands");
+  if (!/reporook init/.test(help) || !/reporook plan/.test(help) || !/reporook integrate/.test(help)) throw new Error("Packed CLI did not expose the guided-fix and integration commands");
+  const packagedAdapter = join(installation, "node_modules", "reporook", "dist", "integrations", "codex", "reporook", ".codex-plugin", "plugin.json");
+  if (!(await stat(packagedAdapter)).isFile()) throw new Error("Packed CLI did not include native agent integration assets");
   const sample = join(temporary, "sample");
   await mkdir(join(sample, "src"), { recursive: true });
   await writeFile(join(sample, "src", "app.js"), "export const ready = true;\n");

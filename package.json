@@ -1,6 +1,6 @@
 {
   "name": "reporook-monorepo",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Agent-agnostic security scanning for code before it ships.",
   "license": "MIT",
@@ -35,7 +35,7 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "@types/node": "^26.1.1",
+    "@types/node": "^24.0.0",
     "typescript": "^5.9.0"
   }
 }

@@ -17,11 +17,12 @@ test("CLI executes its entry point through the platform's package launch form", 
     const { stdout } = process.platform === "win32"
       ? await execute(process.execPath, [entry, "--version"])
       : await execute(binary, ["--version"]);
-    assert.equal(stdout.trim(), "0.3.0");
+    assert.equal(stdout.trim(), "0.4.0");
     const help = process.platform === "win32"
       ? await execute(process.execPath, [entry, "--help"])
       : await execute(binary, ["--help"]);
     assert.match(help.stdout, /verify <finding-id>/);
+    assert.match(help.stdout, /integrate <install\|update\|doctor\|uninstall>/);
     await assert.rejects(
       process.platform === "win32"
         ? execute(process.execPath, [entry, "verify"])

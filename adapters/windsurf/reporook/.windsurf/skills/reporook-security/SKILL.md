@@ -70,3 +70,7 @@ When asked to set up or improve the threat model, ask simple questions about acc
 ## Preserve provenance
 
 Keep deterministic findings in `.reporook/findings.json`. Put host-generated validation in `.reporook/agent-review.json` using the repository's agent-review schema. Do not rewrite an agent hypothesis as a RepoRook finding. CI remains the enforcement point.
+
+## Manage this host integration
+
+When the user asks to install, update, check, or remove RepoRook's coding-agent integration, use `reporook integrate install|update|doctor|uninstall .`. Show the preview first and request approval before adding `--apply`. Never edit global agent configuration, overwrite a conflict, or delete a managed file that RepoRook reports as modified.

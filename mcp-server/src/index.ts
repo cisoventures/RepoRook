@@ -2,6 +2,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline";
+import { VERSION } from "reporook";
 import { prioritizeViaCli, remediationPlanViaCli, scanViaCli, verifyViaCli } from "./cli.js";
 import { codeContext, findFinding, findings, readReport } from "./context.js";
 
@@ -257,7 +258,7 @@ async function handle(message: unknown): Promise<void> {
       result(id, {
         protocolVersion: protocolVersions.includes(requested) ? requested : latestProtocolVersion,
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: "reporook", version: "0.3.0" },
+        serverInfo: { name: "reporook", version: VERSION },
         instructions: "Use RepoRook findings as deterministic evidence. State incomplete coverage, prioritize reported risk, prepare one finding-bound remediation plan, protect secrets, show the exact patch and test plan for approval, and verify with tests plus the original scanner.",
       });
       return;

@@ -2,6 +2,17 @@
 
 All host adapters consume the canonical `reporook-security` skill. Run `npm run sync:adapters` after editing it and `npm run validate:adapters` before release.
 
+The CLI packages these adapters and installs only repository-local integration files:
+
+```bash
+reporook integrate install . --apply
+reporook integrate doctor .
+reporook integrate update . --apply
+reporook integrate uninstall . --apply
+```
+
+Without `--apply`, mutating commands are previews. The lifecycle receipt stores content hashes in `.reporook/integrations.json`; update and uninstall refuse user-modified destinations. JSON integrations are merged at the owned entry, preserving unrelated configuration. See [`AGENT_SETUP.md`](AGENT_SETUP.md) for the concrete host paths and trust prompts.
+
 | Host | Package |
 |---|---|
 | Claude Code | `adapters/claude/reporook` |
