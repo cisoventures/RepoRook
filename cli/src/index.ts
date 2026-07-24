@@ -9,6 +9,7 @@ import { loadConfig } from "./config.js";
 import { diagnose, renderDoctor } from "./doctor.js";
 import { requiredScannerFailure, scanExitCode, scanRepository, VERSION } from "./engine.js";
 import { initializeRepository, renderInitialization } from "./initializer.js";
+import { integrationExitCode, manageIntegrations, parseIntegrationHosts, renderIntegration, type IntegrationOperation } from "./integrations.js";
 import { prioritizeFindings } from "./prioritization.js";
 import { createRemediationPlan } from "./remediation.js";
 import { renderFinding, renderPrioritization, renderRemediationPlan, renderTerminal, renderVerification } from "./render.js";
@@ -18,8 +19,10 @@ import { severities, type ScanReport, type Severity, type VerificationReport } f
 import { verifyFindingResolution } from "./verification.js";
 
 export { scanRepository, toSarif };
+export { VERSION };
 export { verifyFindingResolution };
 export { initializeRepository, prioritizeFindings, createRemediationPlan };
+export { manageIntegrations, parseIntegrationHosts };
 export { detectProject } from "./initializer.js";
 export * from "./types.js";
 
@@ -34,6 +37,7 @@ Usage:
   reporook explain <finding-id> [--input .reporook/findings.json]
   reporook doctor [path]
   reporook setup
+  reporook integrate <install|update|doctor|uninstall> [path] [--host all] [--apply]
 
 Scan options:
   --config PATH          Configuration file (default: reporook.yml when present)
@@ -58,6 +62,10 @@ Guided-fix options:
   --output PATH          Priorities or remediation-plan JSON output
   --prompt-output PATH   Remediation prompt output
   --force                Replace an existing RepoRook configuration during init
+
+Agent integration options:
+  --host HOSTS           Comma-separated hosts or all (default: all)
+  --apply                Apply the displayed install, update, or uninstall plan
 `;
 
 async function runScan(parsed: ReturnType<typeof parseArgs>): Promise<number> {
@@ -230,6 +238,21 @@ async function main(): Promise<number> {
     return checks.some((check) => check.needed && !check.available) ? 1 : 0;
   }
   if (parsed.command === "setup") { process.stdout.write(`${setupInstructions()}\n`); return 0; }
+  if (parsed.command === "integrate") {
+    const operation = (parsed.positionals[0] ?? "doctor") as IntegrationOperation;
+    if (!["install", "update", "doctor", "uninstall"].includes(operation)) throw new Error("integrate requires install, update, doctor, or uninstall");
+    if (operation === "doctor" && parsed.flags.apply === true) throw new Error("integrate doctor is read-only and does not accept --apply");
+    const result = await manageIntegrations({
+      operation,
+      target: parsed.positionals[1] ?? ".",
+      hosts: parseIntegrationHosts(stringFlag(parsed.flags, "host")),
+      apply: parsed.flags.apply === true,
+    });
+    const format = stringFlag(parsed.flags, "format") ?? "terminal";
+    if (!["terminal", "json"].includes(format)) throw new Error("integrate format must be terminal or json");
+    process.stdout.write(format === "json" ? `${JSON.stringify(result, null, 2)}\n` : `${renderIntegration(result)}\n`);
+    return integrationExitCode(result);
+  }
   if (parsed.command === "explain") {
     const id = parsed.positionals[0];
     if (!id) throw new Error("explain requires a finding ID");

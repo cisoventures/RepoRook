@@ -1,8 +1,6 @@
 {
-  "mcpServers": {
-    "reporook": {
-      "command": "npx",
-      "args": ["--yes", "@reporook/mcp-server"]
-    }
+  "reporook": {
+    "command": "npx",
+    "args": ["--yes", "@reporook/mcp-server"]
   }
 }

@@ -22,6 +22,7 @@ By default Semgrep downloads the public `p/default` rule bundle and runs it with
 npx --yes reporook@latest init .
 npx --yes reporook@latest doctor .
 npx --yes reporook@latest setup # prints reviewed install commands; does not install
+npx --yes reporook@latest integrate install . --apply
 npx --yes reporook@latest scan . --require-scanners
 ```
 
@@ -56,7 +57,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: cisoventures/RepoRook@v0.3.0
+      - uses: cisoventures/RepoRook@v0.4.0
         with:
           fail-on: high
           mode: diff
@@ -115,6 +116,14 @@ The v1 schemas are in [`schemas/`](schemas/). Finding IDs intentionally exclude 
 
 ## Agent integrations
 
+Install repository-local support for all six coding-agent hosts with one command:
+
+```bash
+npx --yes reporook@latest integrate install . --apply
+```
+
+Then ask your agent, “Scan this project for security vulnerabilities and explain what I should fix first.” Use `reporook integrate doctor .`, `update . --apply`, or `uninstall . --apply` for the managed lifecycle. RepoRook previews changes without `--apply`, preserves unrelated JSON configuration, and refuses to overwrite or remove user-edited content. See the [step-by-step agent setup guide](docs/AGENT_SETUP.md).
+
 The local MCP server exposes:
 
 - `scan_repository`
@@ -165,8 +174,8 @@ npm run fixture:prepare
 node cli/dist/index.js scan test-fixtures/vulnerable-app --require-scanners
 ```
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/ADAPTERS.md`](docs/ADAPTERS.md), the [`roadmap`](docs/ROADMAP.md), and [`CONTRIBUTING.md`](CONTRIBUTING.md).
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/ADAPTERS.md`](docs/ADAPTERS.md), [`docs/AGENT_SETUP.md`](docs/AGENT_SETUP.md), the [`roadmap`](docs/ROADMAP.md), and [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Project status
 
-The repository contains the complete v0.3 guided-fix beta architecture. Scanner accuracy, prioritization policy, and host packaging remain pre-1.0 and should expand only through fixture-backed, reviewable contributions.
+The repository contains the complete v0.4 native-agent beta architecture. Scanner accuracy, prioritization policy, and host packaging remain pre-1.0 and should expand only through fixture-backed, reviewable contributions.

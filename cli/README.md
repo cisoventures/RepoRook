@@ -6,6 +6,7 @@ RepoRook is a free, deterministic, agent-agnostic security scanner for repositor
 npx --yes reporook@latest init .
 npx --yes reporook@latest doctor .
 npx --yes reporook@latest setup
+npx --yes reporook@latest integrate install . --apply
 npx --yes reporook@latest scan . --require-scanners
 npx --yes reporook@latest explain FINDING_ID
 npx --yes reporook@latest prioritize .
@@ -20,4 +21,4 @@ OSV-Scanner complements the root Node and Python adapters with supported manifes
 
 After an approved patch and the relevant tests, run `npx --yes reporook@latest verify FINDING_ID . --require-scanners`. RepoRook preserves the baseline scan and writes a separate receipt under `.reporook/verifications/FINDING_ID/`. Exit `0` means scanner resolution passed, `1` means the finding remains, and `2` means verification is inconclusive. Scanner resolution does not replace functional tests.
 
-The project is MIT licensed. See the [five-minute onboarding guide](https://github.com/cisoventures/RepoRook/blob/main/docs/QUICKSTART.md) for the beginner workflow, then the full repository documentation for configuration, GitHub Action, MCP, and agent-host adapters.
+The project is MIT licensed. See the [five-minute onboarding guide](https://github.com/cisoventures/RepoRook/blob/main/docs/QUICKSTART.md) for the beginner workflow and the [agent setup guide](https://github.com/cisoventures/RepoRook/blob/main/docs/AGENT_SETUP.md) for managed Claude Code, Codex, Cursor, Copilot, Gemini, and Windsurf installation.

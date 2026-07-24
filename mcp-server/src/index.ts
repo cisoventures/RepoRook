@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { prioritizeViaCli, remediationPlanViaCli, scanViaCli, verifyViaCli } from "./cli.js";
@@ -20,6 +21,8 @@ interface ToolDefinition {
 const latestProtocolVersion = "2025-11-25";
 const protocolVersions = [latestProtocolVersion, "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"];
 const severityValues = ["critical", "high", "medium", "low"];
+const packageMetadata = createRequire(import.meta.url)("../package.json") as { version: string };
+const VERSION = packageMetadata.version;
 
 function object(value: unknown, label = "arguments"): JsonRecord {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be an object`);
@@ -257,7 +260,7 @@ async function handle(message: unknown): Promise<void> {
       result(id, {
         protocolVersion: protocolVersions.includes(requested) ? requested : latestProtocolVersion,
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: "reporook", version: "0.3.0" },
+        serverInfo: { name: "reporook", version: VERSION },
         instructions: "Use RepoRook findings as deterministic evidence. State incomplete coverage, prioritize reported risk, prepare one finding-bound remediation plan, protect secrets, show the exact patch and test plan for approval, and verify with tests plus the original scanner.",
       });
       return;

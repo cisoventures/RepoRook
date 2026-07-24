@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: cisoventures/RepoRook@v0.3.0
+      - uses: cisoventures/RepoRook@v0.4.0
         with:
           fail-on: high
           mode: diff

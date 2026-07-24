@@ -34,7 +34,15 @@ npx --yes reporook@latest setup
 
 `setup` does not install anything. Review and run only the commands for scanners that `doctor` marked as needed, then rerun `doctor`. Projects with OSV-supported dependency files may need OSV-Scanner in addition to the source, secret, Node, or Python scanners.
 
-### 3. Run the gate
+### 3. Connect your coding agent
+
+```bash
+npx --yes reporook@latest integrate install . --apply
+```
+
+This installs repository-local support for Claude Code, Codex, Cursor, GitHub Copilot, Gemini CLI, and Windsurf. Restart your agent, accept its repository trust prompt if you recognize the repository, then ask: “Scan this project and explain what I should fix first.” See [Agent setup](AGENT_SETUP.md) for host-specific details and update/uninstall commands.
+
+### 4. Run the gate
 
 ```bash
 npx --yes reporook@latest scan . --require-scanners
@@ -46,7 +54,7 @@ The result is deliberately simple:
 - Exit `1`: one or more findings met the threshold. The scan worked; review the findings.
 - Exit `2`: coverage or configuration failed. Do not treat the repository as safe.
 
-### 4. Choose and plan one fix
+### 5. Choose and plan one fix
 
 Every scan writes:
 
@@ -76,7 +84,7 @@ To inspect one finding yourself:
 npx --yes reporook@latest explain FINDING_ID
 ```
 
-### 5. Verify an approved fix
+### 6. Verify an approved fix
 
 After the focused test and relevant project tests pass:
 
@@ -104,7 +112,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: cisoventures/RepoRook@v0.3.0
+      - uses: cisoventures/RepoRook@v0.4.0
         with:
           fail-on: high
           mode: diff
