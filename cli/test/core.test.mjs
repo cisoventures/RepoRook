@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseSimpleYaml, defaultConfig, normalizeConfig } from "../dist/config.js";
@@ -19,6 +19,7 @@ test("simple YAML parser supports lists and scanner flags", () => {
   assert.deepEqual(parsed.ignore, ["vendor/**"]);
   assert.deepEqual(parsed.scanners, { semgrep: false });
   assert.equal(normalizeConfig(parsed).scanners.semgrep, false);
+  assert.deepEqual(parseSimpleYaml("requiredScanners: []\n").requiredScanners, []);
 });
 
 test("configuration rejects values that can silently weaken coverage", () => {
@@ -49,6 +50,18 @@ test("artifact paths stay in the worktree while supporting monorepo scan targets
   }
 });
 
+test("artifact paths reject symbolic-link output components", async () => {
+  if (process.platform === "win32") return;
+  const root = await mkdtemp(join(tmpdir(), "reporook-artifact-symlink-"));
+  try {
+    await mkdir(join(root, "evidence"));
+    await symlink(join(root, "evidence"), join(root, ".reporook"));
+    assert.throws(() => artifactPath(root, ".reporook/findings.json"), /symbolic link/);
+  } finally {
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
 test("engine deduplicates findings and produces SARIF", async () => {
   const target = await mkdtemp(join(tmpdir(), "reporook-test-"));
   assert.throws(() => artifactPath(target, "../outside.json"), /outside the repository/);
@@ -73,7 +86,13 @@ test("engine deduplicates findings and produces SARIF", async () => {
     const artifacts = await writeArtifacts(target, report, { writeSarif: false });
     const prompt = await readFile(artifacts.promptPath, "utf8");
     assert.match(prompt, /Do not edit files until I approve that exact change/);
+    const priorities = JSON.parse(await readFile(artifacts.prioritiesPath, "utf8"));
+    assert.equal(priorities.priorities[0].finding_id, finding.id);
     if (process.platform !== "win32") assert.equal((await stat(artifacts.promptPath)).mode & 0o777, 0o600);
+    await assert.rejects(
+      () => writeArtifacts(target, report, { output: ".reporook/priorities.json", writeSarif: false }),
+      /artifact paths must be distinct/,
+    );
   } finally {
     await rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }

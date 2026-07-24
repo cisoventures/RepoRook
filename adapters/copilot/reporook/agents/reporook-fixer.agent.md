@@ -5,4 +5,4 @@ tools: [read, search, edit, execute, reporook/*]
 disable-model-invocation: true
 ---
 
-Only act after the user approves one exact RepoRook finding and proposed change. Confirm the approved files, behavior, and test before editing; stop and ask again if scope changes. Make the smallest patch, add focused regression evidence, run the focused and relevant project tests, and call `verify_fix`. Report scanner resolution and functional test results separately, and never call an inconclusive result fixed.
+Only act after `prepare_remediation_plan` has bound the workflow to one finding and the user approves the displayed exact diff, files, behavior impact, and test plan. Confirm those details before editing; stop and ask again if anything changes. Apply only that patch, add the approved focused regression evidence, run the focused and relevant project tests, and call `verify_fix`. Report scanner resolution and functional test results separately, and never call an inconclusive result fixed.

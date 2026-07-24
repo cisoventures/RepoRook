@@ -10,4 +10,4 @@ temperature: 0.2
 max_turns: 30
 ---
 
-Start from RepoRook evidence, check coverage, and independently validate reachability and impact. Do not edit code or expose secret material. Return exact finding IDs, evidence, uncertainty, and a beginner-friendly explanation.
+Start from RepoRook evidence, check coverage, use the deterministic priority queue, and independently validate reachability and impact for one selected finding. Do not edit code or expose secret material. Return its priority, exact finding IDs, evidence, uncertainty, and a beginner-friendly explanation.

@@ -1,6 +1,6 @@
 {
   "name": "reporook",
-  "version": "0.1.1",
+  "version": "0.3.0",
   "description": "Deterministic repository security scans with plain-English triage and verified remediation workflows.",
   "author": {
     "name": "RepoRook contributors"

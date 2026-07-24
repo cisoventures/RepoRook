@@ -1,25 +1,19 @@
-import { access, readdir } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
+import { detectProject } from "./initializer.js";
 import { commandVersion } from "./process.js";
-import { discoverOsvLockfiles } from "./scanners/osv-scanner.js";
-
-async function exists(path: string): Promise<boolean> { try { await access(path); return true; } catch { return false; } }
 
 export interface DoctorCheck { name: string; needed: boolean; available: boolean; version: string | null; reason: string; }
 
 export async function diagnose(targetInput: string): Promise<DoctorCheck[]> {
   const target = resolve(targetInput);
-  const names = await readdir(target).catch(() => [] as string[]);
-  const codeNeeded = names.some((name) => /\.(js|jsx|ts|tsx|py|go|java|rb|php|cs|rs|kt|swift)$/i.test(name)) || names.some((name) => ["src", "app", "lib"].includes(name));
-  const npmNeeded = await exists(join(target, "package-lock.json"));
-  const pipNeeded = names.some((name) => /^requirements.*\.txt$/i.test(name)) || await exists(join(target, "poetry.lock")) || await exists(join(target, "uv.lock"));
-  const osvNeeded = (await discoverOsvLockfiles(target)).length > 0;
+  const profile = await detectProject(target);
+  const recommended = new Set(profile.recommended_scanners);
   const specs = [
-    { name: "semgrep", needed: codeNeeded, reason: "source-code vulnerability checks" },
-    { name: "gitleaks", needed: true, reason: "secret and credential checks" },
-    { name: "npm", needed: npmNeeded, reason: "Node dependency checks" },
-    { name: "pip-audit", needed: pipNeeded, reason: "Python dependency checks" },
-    { name: "osv-scanner", needed: osvNeeded, reason: "additional ecosystem dependency checks" },
+    { name: "semgrep", needed: recommended.has("semgrep"), reason: "source-code vulnerability checks" },
+    { name: "gitleaks", needed: recommended.has("gitleaks"), reason: "secret and credential checks" },
+    { name: "npm", needed: recommended.has("npm-audit"), reason: "Node dependency checks" },
+    { name: "pip-audit", needed: recommended.has("pip-audit"), reason: "Python dependency checks" },
+    { name: "osv-scanner", needed: recommended.has("osv-scanner"), reason: "additional ecosystem dependency checks" },
   ];
   return await Promise.all(specs.map(async (spec) => {
     const version = await commandVersion(spec.name);

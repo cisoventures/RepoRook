@@ -1,6 +1,6 @@
 {
   "name": "reporook-monorepo",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Agent-agnostic security scanning for code before it ships.",
   "license": "MIT",
@@ -22,6 +22,7 @@
     "validate:adapters": "node scripts/validate-adapters.mjs",
     "fixture:prepare": "node scripts/materialize-fixture.mjs",
     "fixture:verify": "node scripts/verify-fixture.mjs",
+    "fixture:guided": "node scripts/verify-guided-fixture.mjs",
     "build": "npm run build --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present",
     "test": "npm run build && npm run test --workspaces --if-present",

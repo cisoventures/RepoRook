@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -27,6 +27,15 @@ try {
   const cliEntry = join(installation, "node_modules", "reporook", "dist", "index.js");
   const version = execFileSync(process.execPath, [cliEntry, "--version"], { encoding: "utf8" }).trim();
   if (version !== cliPackage.version) throw new Error(`Packed CLI returned ${version}, expected ${cliPackage.version}`);
+  const help = execFileSync(process.execPath, [cliEntry, "--help"], { encoding: "utf8" });
+  if (!/reporook init/.test(help) || !/reporook plan/.test(help)) throw new Error("Packed CLI did not expose the guided-fix commands");
+  const sample = join(temporary, "sample");
+  await mkdir(join(sample, "src"), { recursive: true });
+  await writeFile(join(sample, "src", "app.js"), "export const ready = true;\n");
+  const initialized = JSON.parse(execFileSync(process.execPath, [cliEntry, "init", sample, "--format", "json"], { encoding: "utf8" }));
+  if (initialized.status !== "created" || !initialized.profile?.recommended_scanners?.includes("semgrep")) {
+    throw new Error("Packed CLI did not initialize and detect the sample project");
+  }
 
   const mcpEntry = join(installation, "node_modules", "@reporook", "mcp-server", "dist", "index.js");
   const input = [
@@ -35,7 +44,10 @@ try {
   ].map((message) => JSON.stringify(message)).join("\n") + "\n";
   const output = execFileSync(process.execPath, [mcpEntry], { input, encoding: "utf8" }).trim().split(/\r?\n/).map((line) => JSON.parse(line));
   const tools = output.find((message) => message.id === 2)?.result?.tools;
-  if (!Array.isArray(tools) || !tools.some((tool) => tool.name === "verify_fix")) throw new Error("Packed MCP server did not expose verify_fix");
+  const toolNames = new Set(Array.isArray(tools) ? tools.map((tool) => tool.name) : []);
+  if (!["prioritize_findings", "prepare_remediation_plan", "verify_fix"].every((name) => toolNames.has(name))) {
+    throw new Error("Packed MCP server did not expose the guided-fix and verification tools");
+  }
   process.stdout.write(`Packed RepoRook ${version} and MCP server passed clean-install smoke tests.\n`);
 } finally {
   await rm(temporary, { recursive: true, force: true });

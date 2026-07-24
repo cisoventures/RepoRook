@@ -9,11 +9,19 @@ Use RepoRook as the deterministic evidence layer. Use the host's reasoning for c
 
 ## Run the baseline
 
-1. Prefer the RepoRook MCP tools when available. Otherwise run `reporook scan .` or `npx --yes reporook scan .`.
-2. For a pull request or local change, use `scan_changes` or `reporook scan . --changed <base> --head <head>`.
-3. Read `coverage_status` and every scanner status before interpreting findings.
-4. Treat exit `2` or failed coverage as a security-gate failure. If coverage is partial, say which checks did not run. Never describe an incomplete scan as clean or safe.
-5. Never print, copy, or place a detected secret in a prompt, report, patch, test, or log.
+1. If the user asks to configure RepoRook and no configuration exists, run `reporook init .`, show what it detected, and review the generated fail-closed scanner requirements. Do not replace an existing configuration without explicit approval for `--force`.
+2. Prefer the RepoRook MCP tools when available. Otherwise run `reporook scan .` or `npx --yes reporook scan .`.
+3. For a pull request or local change, use `scan_changes` or `reporook scan . --changed <base> --head <head>`.
+4. Read `coverage_status` and every scanner status before interpreting findings.
+5. Treat exit `2` or failed coverage as a security-gate failure. If coverage is partial, say which checks did not run. Never describe an incomplete scan as clean or safe.
+6. Never print, copy, or place a detected secret in a prompt, report, patch, test, or log.
+
+## Prioritize for a beginner
+
+1. Call `prioritize_findings` or read `.reporook/priorities.json`. If only a findings artifact exists, run `reporook prioritize .`.
+2. Explain the queue as **fix now**, **fix next**, and **review later**. Say that the queue covers reported findings only when scanner coverage is incomplete.
+3. Start with one fix-now item. Do not bury a code or secret risk behind repeated dependency advisories; related package findings may be discussed as one upgrade while preserving every finding ID.
+4. Let the user choose a different item. Severity-based ordering is deterministic guidance, not permission to edit.
 
 ## Explain for a beginner
 
@@ -31,12 +39,14 @@ Treat deterministic matches as evidence, not automatic proof of exploitability. 
 ## Fix safely
 
 1. Work on one accepted finding at a time.
-2. Use `get_remediation_context` when available.
-3. Explain the intended change and likely behavior impact before editing.
-4. Ask for approval before applying a security patch unless the user already explicitly authorized that exact remediation.
-5. Make the smallest patch that closes the identified path. Avoid unrelated refactors and never weaken another control.
-6. Add a focused regression test or reproducer when feasible.
-7. Do not rotate credentials, create issues, publish advisories, or change external systems without explicit authorization.
+2. Call `prepare_remediation_plan` or run `reporook plan FINDING_ID .`. Read the resulting plan and fix prompt before proposing code changes. Use `get_remediation_context` for nearby source when needed.
+3. Answer the plan's validation questions and explain the intended change in plain English. Keep unsupported conclusions labeled as agent hypotheses.
+4. Before editing, show the exact diff, every affected file, behavior impact, dependency version change if any, and the focused plus relevant test commands.
+5. Ask the user to approve that exact proposal. Approval binds to the finding, source scan, displayed patch, and test plan. If any of those change, stop and ask again.
+6. If the repository changed after the source scan beyond the displayed proposal, rescan and prepare a new plan before editing.
+7. Make only the approved patch. Avoid unrelated refactors and never weaken another control.
+8. Add the approved focused regression test or reproducer when feasible.
+9. Do not rotate credentials, create issues, publish advisories, or change external systems without separate explicit authorization.
 
 ## Verify the result
 

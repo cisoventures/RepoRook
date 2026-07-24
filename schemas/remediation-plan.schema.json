@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reporook.dev/schemas/remediation-plan-1.0.json",
+  "title": "RepoRook Guided Remediation Plan",
+  "type": "object",
+  "required": ["schema_version", "tool", "plan_id", "status", "generated_at", "finding", "priority", "source_scan", "goal", "validation_questions", "scope", "proposal_requirements", "approval", "safety_rules", "verification"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "tool": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": { "name": { "const": "reporook" }, "version": { "type": "string" } },
+      "additionalProperties": false
+    },
+    "plan_id": { "type": "string", "pattern": "^rrp-[a-f0-9]{12}$" },
+    "status": { "const": "awaiting-proposal" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "finding": { "$ref": "https://reporook.dev/schemas/findings-1.0.json#/$defs/finding" },
+    "priority": { "$ref": "https://reporook.dev/schemas/priorities-1.0.json#/properties/priorities/items" },
+    "source_scan": { "$ref": "https://reporook.dev/schemas/findings-1.0.json#/$defs/receipt" },
+    "goal": { "type": "string", "minLength": 1 },
+    "validation_questions": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+    "scope": {
+      "type": "object",
+      "required": ["allowed_files", "related_finding_ids", "stop_if_scope_changes"],
+      "properties": {
+        "allowed_files": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "related_finding_ids": { "type": "array", "items": { "type": "string", "pattern": "^rr-[a-f0-9]{12}$" }, "uniqueItems": true },
+        "stop_if_scope_changes": { "const": true }
+      },
+      "additionalProperties": false
+    },
+    "proposal_requirements": {
+      "type": "object",
+      "required": ["explain_risk_in_plain_english", "exact_patch_preview", "behavior_impact", "focused_test_plan"],
+      "properties": {
+        "explain_risk_in_plain_english": { "const": true },
+        "exact_patch_preview": { "const": true },
+        "behavior_impact": { "const": true },
+        "focused_test_plan": { "const": true }
+      },
+      "additionalProperties": false
+    },
+    "approval": {
+      "type": "object",
+      "required": ["required", "status", "binds_to", "instruction"],
+      "properties": {
+        "required": { "const": true },
+        "status": { "const": "pending" },
+        "binds_to": {
+          "type": "array",
+          "prefixItems": [
+            { "const": "finding" },
+            { "const": "source-scan" },
+            { "const": "exact-patch" },
+            { "const": "test-plan" }
+          ],
+          "minItems": 4,
+          "maxItems": 4
+        },
+        "instruction": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "safety_rules": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+    "verification": {
+      "type": "object",
+      "required": ["command", "scanner_pass_condition", "functional_tests_required"],
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "scanner_pass_condition": { "type": "string", "minLength": 1 },
+        "functional_tests_required": { "const": true }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

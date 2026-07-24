@@ -48,7 +48,8 @@ export function parseSimpleYaml(text: string): Record<string, unknown> {
     const rest = trimmed.slice(separator + 1).trim();
     if (rest) {
       if (rest.startsWith("[") && rest.endsWith("]")) {
-        parent[key] = rest.slice(1, -1).split(",").map((entry) => scalar(entry.trim()));
+        const contents = rest.slice(1, -1).trim();
+        parent[key] = contents ? contents.split(",").map((entry) => scalar(entry.trim())) : [];
       } else {
         parent[key] = scalar(rest);
       }

@@ -2,7 +2,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline";
-import { scanViaCli, verifyViaCli } from "./cli.js";
+import { prioritizeViaCli, remediationPlanViaCli, scanViaCli, verifyViaCli } from "./cli.js";
 import { codeContext, findFinding, findings, readReport } from "./context.js";
 
 type JsonRecord = Record<string, unknown>;
@@ -100,6 +100,22 @@ const tools: ToolDefinition[] = [
     },
   },
   {
+    name: "prioritize_findings",
+    title: "Prioritize RepoRook findings",
+    description: "Classify existing deterministic findings as fix now, fix next, or review later. Writes only .reporook priority evidence and does not modify application code.",
+    inputSchema: {
+      type: "object",
+      properties: { repository_path: { type: "string" }, report_path: { type: "string", default: ".reporook/findings.json" } },
+      required: ["repository_path"],
+      additionalProperties: false,
+    },
+    async handler(input) {
+      const repositoryPath = string(input, "repository_path");
+      const reportPath = resolve(repositoryPath, string(input, "report_path", { default: ".reporook/findings.json" }));
+      return await prioritizeViaCli(repositoryPath, reportPath);
+    },
+  },
+  {
     name: "list_findings",
     title: "List RepoRook findings",
     description: "Read an existing findings artifact and return deterministic findings plus coverage status. Does not rescan or modify code.",
@@ -156,6 +172,23 @@ const tools: ToolDefinition[] = [
           "Call verify_fix after tests pass.",
         ],
       };
+    },
+  },
+  {
+    name: "prepare_remediation_plan",
+    title: "Prepare a guided remediation plan",
+    description: "Create a finding- and scan-bound plan that requires an exact patch preview, human approval, focused tests, and same-scanner verification. Writes only under .reporook and never applies a patch.",
+    inputSchema: {
+      type: "object",
+      properties: { finding_id: { type: "string" }, repository_path: { type: "string" }, report_path: { type: "string", default: ".reporook/findings.json" } },
+      required: ["finding_id", "repository_path"],
+      additionalProperties: false,
+    },
+    async handler(input) {
+      const findingId = string(input, "finding_id");
+      const repositoryPath = string(input, "repository_path");
+      const reportPath = resolve(repositoryPath, string(input, "report_path", { default: ".reporook/findings.json" }));
+      return await remediationPlanViaCli(repositoryPath, findingId, reportPath);
     },
   },
   {
@@ -224,8 +257,8 @@ async function handle(message: unknown): Promise<void> {
       result(id, {
         protocolVersion: protocolVersions.includes(requested) ? requested : latestProtocolVersion,
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: "reporook", version: "0.2.0" },
-        instructions: "Use RepoRook findings as deterministic evidence. State incomplete scanner coverage, protect secrets, request approval before fixes, and verify with tests plus a rescan.",
+        serverInfo: { name: "reporook", version: "0.3.0" },
+        instructions: "Use RepoRook findings as deterministic evidence. State incomplete coverage, prioritize reported risk, prepare one finding-bound remediation plan, protect secrets, show the exact patch and test plan for approval, and verify with tests plus the original scanner.",
       });
       return;
     }

@@ -4,11 +4,14 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs, stringFlag } from "./args.js";
-import { artifactPath, writeArtifacts, writeVerificationArtifact } from "./artifacts.js";
+import { artifactPath, writeArtifacts, writePrioritizationArtifact, writeRemediationArtifacts, writeVerificationArtifact } from "./artifacts.js";
 import { loadConfig } from "./config.js";
 import { diagnose, renderDoctor } from "./doctor.js";
 import { requiredScannerFailure, scanExitCode, scanRepository, VERSION } from "./engine.js";
-import { renderFinding, renderTerminal, renderVerification } from "./render.js";
+import { initializeRepository, renderInitialization } from "./initializer.js";
+import { prioritizeFindings } from "./prioritization.js";
+import { createRemediationPlan } from "./remediation.js";
+import { renderFinding, renderPrioritization, renderRemediationPlan, renderTerminal, renderVerification } from "./render.js";
 import { toSarif } from "./sarif.js";
 import { setupInstructions } from "./setup.js";
 import { severities, type ScanReport, type Severity, type VerificationReport } from "./types.js";
@@ -16,12 +19,17 @@ import { verifyFindingResolution } from "./verification.js";
 
 export { scanRepository, toSarif };
 export { verifyFindingResolution };
+export { initializeRepository, prioritizeFindings, createRemediationPlan };
+export { detectProject } from "./initializer.js";
 export * from "./types.js";
 
 const help = `RepoRook ${VERSION}
 
 Usage:
   reporook scan [path] [--fail-on high] [--changed BASE] [--head HEAD]
+  reporook init [path] [--force]
+  reporook prioritize [path] [--input .reporook/findings.json]
+  reporook plan <finding-id> [path] [--input .reporook/findings.json]
   reporook verify <finding-id> [path] [--input .reporook/findings.json]
   reporook explain <finding-id> [--input .reporook/findings.json]
   reporook doctor [path]
@@ -44,6 +52,12 @@ Scan options:
 Verify options:
   --input PATH           Baseline findings JSON (default: .reporook/findings.json)
   --verification-output  Verification receipt output
+
+Guided-fix options:
+  --input PATH           Baseline findings JSON
+  --output PATH          Priorities or remediation-plan JSON output
+  --prompt-output PATH   Remediation prompt output
+  --force                Replace an existing RepoRook configuration during init
 `;
 
 async function runScan(parsed: ReturnType<typeof parseArgs>): Promise<number> {
@@ -70,7 +84,7 @@ async function runScan(parsed: ReturnType<typeof parseArgs>): Promise<number> {
   if (parsed.flags.quiet !== true) {
     if (format === "json") process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
     else if (format === "sarif") process.stdout.write(`${JSON.stringify(toSarif(report), null, 2)}\n`);
-    else process.stdout.write(`${renderTerminal(report)}\n\nArtifacts: ${artifacts.findingsPath}${artifacts.sarifPath ? `, ${artifacts.sarifPath}` : ""}, ${artifacts.promptPath}\n`);
+    else process.stdout.write(`${renderTerminal(report)}\n\nArtifacts: ${artifacts.findingsPath}${artifacts.sarifPath ? `, ${artifacts.sarifPath}` : ""}, ${artifacts.prioritiesPath}, ${artifacts.promptPath}\n`);
   }
   return scanExitCode(
     report,
@@ -79,6 +93,51 @@ async function runScan(parsed: ReturnType<typeof parseArgs>): Promise<number> {
     parsed.flags["require-scanners"] === true,
     parsed.flags["allow-no-coverage"] === true,
   );
+}
+
+async function baselineReport(target: string, input: string): Promise<{ report: ScanReport; path: string }> {
+  const path = artifactPath(target, input);
+  const report = JSON.parse(await readFile(path, "utf8")) as ScanReport;
+  if (resolve(report.scan_receipt?.target ?? "") !== target) throw new Error("The baseline report belongs to a different repository path");
+  if (!Array.isArray(report.findings) || !report.scan_receipt?.config_hash) throw new Error("The baseline report is not a valid RepoRook findings artifact");
+  return { report, path };
+}
+
+async function runPrioritize(parsed: ReturnType<typeof parseArgs>): Promise<number> {
+  const target = resolve(parsed.positionals[0] ?? ".");
+  const loaded = await loadConfig(target, stringFlag(parsed.flags, "config"));
+  const input = stringFlag(parsed.flags, "input") ?? `${loaded.config.outputDir}/findings.json`;
+  const { report, path: inputPath } = await baselineReport(target, input);
+  const priorities = prioritizeFindings(report);
+  const output = stringFlag(parsed.flags, "output") ?? `${loaded.config.outputDir}/priorities.json`;
+  const outputPath = artifactPath(target, output);
+  if (outputPath === inputPath) throw new Error("Priorities must not overwrite the baseline findings artifact");
+  await writePrioritizationArtifact(target, priorities, output);
+  const format = stringFlag(parsed.flags, "format") ?? "terminal";
+  if (!["terminal", "json"].includes(format)) throw new Error("prioritize format must be terminal or json");
+  if (parsed.flags.quiet !== true) process.stdout.write(format === "json" ? `${JSON.stringify(priorities, null, 2)}\n` : `${renderPrioritization(priorities)}\n\nArtifact: ${outputPath}\n`);
+  return 0;
+}
+
+async function runPlan(parsed: ReturnType<typeof parseArgs>): Promise<number> {
+  const findingId = parsed.positionals[0];
+  if (!findingId || !/^rr-[a-f0-9]{12}$/.test(findingId)) throw new Error("plan requires a valid finding ID such as rr-0123456789ab");
+  const target = resolve(parsed.positionals[1] ?? ".");
+  const loaded = await loadConfig(target, stringFlag(parsed.flags, "config"));
+  const input = stringFlag(parsed.flags, "input") ?? `${loaded.config.outputDir}/findings.json`;
+  const { report, path: inputPath } = await baselineReport(target, input);
+  const plan = createRemediationPlan(report, findingId);
+  const directory = `${loaded.config.outputDir}/remediations/${findingId}`;
+  const planOutput = stringFlag(parsed.flags, "output") ?? `${directory}/plan.json`;
+  const promptOutput = stringFlag(parsed.flags, "prompt-output") ?? `${directory}/fix-prompt.txt`;
+  if ([artifactPath(target, planOutput), artifactPath(target, promptOutput)].includes(inputPath)) {
+    throw new Error("Remediation artifacts must not overwrite the baseline findings artifact");
+  }
+  const artifacts = await writeRemediationArtifacts(target, plan, { planOutput, promptOutput, findingsReference: input });
+  const format = stringFlag(parsed.flags, "format") ?? "terminal";
+  if (!["terminal", "json"].includes(format)) throw new Error("plan format must be terminal or json");
+  if (parsed.flags.quiet !== true) process.stdout.write(format === "json" ? `${JSON.stringify(plan, null, 2)}\n` : `${renderRemediationPlan(plan)}\n\nArtifacts: ${artifacts.planPath}, ${artifacts.promptPath}\n`);
+  return 0;
 }
 
 async function runVerify(parsed: ReturnType<typeof parseArgs>): Promise<number> {
@@ -101,6 +160,7 @@ async function runVerify(parsed: ReturnType<typeof parseArgs>): Promise<number> 
   const outputPaths = [
     artifactPath(target, currentOutput),
     artifactPath(target, `${dirname(currentOutput)}/scan-receipt.json`),
+    artifactPath(target, `${dirname(currentOutput)}/priorities.json`),
     artifactPath(target, `${dirname(currentOutput)}/agent-prompt.txt`),
     artifactPath(target, verificationOutput),
     ...(parsed.flags.sarif === false ? [] : [artifactPath(target, sarifOutput)]),
@@ -144,7 +204,7 @@ async function runVerify(parsed: ReturnType<typeof parseArgs>): Promise<number> 
   const verificationPath = await writeVerificationArtifact(target, report, verificationOutput);
   if (parsed.flags.quiet !== true) {
     if (format === "json") process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-    else process.stdout.write(`${renderVerification(report)}\n\nArtifacts: ${verificationPath}, ${artifacts.findingsPath}${artifacts.sarifPath ? `, ${artifacts.sarifPath}` : ""}\n`);
+    else process.stdout.write(`${renderVerification(report)}\n\nArtifacts: ${verificationPath}, ${artifacts.findingsPath}${artifacts.sarifPath ? `, ${artifacts.sarifPath}` : ""}, ${artifacts.prioritiesPath}\n`);
   }
   return report.scanner_resolution === "passed" ? 0 : report.scanner_resolution === "failed" ? 1 : 2;
 }
@@ -153,7 +213,16 @@ async function main(): Promise<number> {
   const parsed = parseArgs(process.argv.slice(2));
   if (["help", "--help", "-h"].includes(parsed.command) || parsed.flags.help) { process.stdout.write(help); return 0; }
   if (parsed.command === "version" || parsed.flags.version) { process.stdout.write(`${VERSION}\n`); return 0; }
+  if (parsed.command === "init") {
+    const result = await initializeRepository(parsed.positionals[0] ?? ".", parsed.flags.force === true);
+    const format = stringFlag(parsed.flags, "format") ?? "terminal";
+    if (!["terminal", "json"].includes(format)) throw new Error("init format must be terminal or json");
+    process.stdout.write(format === "json" ? `${JSON.stringify(result, null, 2)}\n` : `${renderInitialization(result)}\n`);
+    return 0;
+  }
   if (parsed.command === "scan") return await runScan(parsed);
+  if (parsed.command === "prioritize") return await runPrioritize(parsed);
+  if (parsed.command === "plan") return await runPlan(parsed);
   if (parsed.command === "verify") return await runVerify(parsed);
   if (parsed.command === "doctor") {
     const checks = await diagnose(parsed.positionals[0] ?? ".");

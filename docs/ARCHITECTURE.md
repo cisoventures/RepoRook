@@ -4,7 +4,8 @@ RepoRook has one deterministic execution path:
 
 ```text
 host plugin → stdio MCP → RepoRook CLI → scanner subprocesses
-GitHub Action ────────────────────────→ RepoRook CLI
+                         ├────────────→ priorities + remediation plans
+GitHub Action ───────────┘
 ```
 
 ## Core boundary
@@ -13,7 +14,7 @@ The CLI detects applicable scanners, invokes them without a shell, parses untrus
 
 Dependency ownership is explicit. Root `package-lock.json` belongs to `npm audit`; root requirements files, `poetry.lock`, and `uv.lock` belong to `pip-audit`. OSV-Scanner receives other supported manifests and supported nested-project files. This expands ecosystem and monorepo coverage without duplicate results from overlapping scanners. Generated dependency and build directories are not traversed during OSV applicability discovery.
 
-The MCP server shells out to the CLI and exposes read-only evidence and verification tools. The Action builds and invokes the same CLI. Neither owns scanner parsing or severity policy.
+The MCP server shells out to the CLI and exposes scan, priority, remediation-plan, evidence, and verification tools. Its writes remain under `.reporook/`; it does not apply patches. The Action builds and invokes the same CLI. Neither owns scanner parsing or severity policy.
 
 ## Coverage
 
@@ -27,4 +28,4 @@ Source findings hash scanner, rule, repository-relative file, and stable matched
 
 ## Remediation
 
-Host agents may validate, explain, and patch only outside the deterministic finding artifact. `verify_fix` checks whether the original scanner completed under the same configuration before checking the stable finding and equivalent rule/file matches. Missing scanner evidence or changed configuration produces `inconclusive`, never `passed`. Repository tests and human review establish functional confidence.
+Prioritization is deterministic and severity-led. A remediation plan binds one stable finding to the source commit and configuration, requires an exact patch preview and test plan, and keeps approval pending. Host agents may validate, explain, and patch only outside the deterministic finding artifact. They apply a change only after approval of that exact proposal and stop when scope changes. `verify_fix` checks whether the original scanner completed under the same configuration before checking the stable finding and equivalent rule/file matches. Missing scanner evidence or changed configuration produces `inconclusive`, never `passed`. Repository tests and human review establish functional confidence.

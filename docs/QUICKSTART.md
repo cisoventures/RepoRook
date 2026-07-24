@@ -6,13 +6,21 @@ This path takes a project from “I do not know security” to deterministic sca
 
 Paste this into Claude Code, Codex, Cursor, GitHub Copilot, or Gemini CLI from the project you want to check:
 
-> Set up RepoRook for this project. First run `npx --yes reporook@latest doctor .` and explain any missing scanners. Ask before installing system software. When coverage is ready, run `npx --yes reporook@latest scan . --require-scanners`. Explain the highest-risk result in plain English and propose one minimal fix, but do not edit files until I approve. After an approved fix, run the relevant tests and `npx --yes reporook@latest verify FINDING_ID . --require-scanners`. Treat incomplete coverage as inconclusive.
+> Set up RepoRook for this project with `npx --yes reporook@latest init .`. Explain the detected stack and any missing scanners; ask before installing system software. Run a complete scan, show me the fix-now/fix-next/review-later queue, and prepare a guided plan for one finding. Explain it in plain English and show me the exact diff and test plan before editing. After I approve that proposal, apply only it, run the tests, and verify the original finding. Treat incomplete coverage as inconclusive.
 
 RepoRook supplies scanner evidence; your agent supplies contextual reasoning. The agent must keep those two kinds of conclusions separate.
 
 ## Terminal path
 
-### 1. Check what your project needs
+### 1. Initialize the project
+
+```bash
+npx --yes reporook@latest init .
+```
+
+RepoRook detects supported source and dependency ecosystems, creates a fail-closed `reporook.yml`, and adds `.reporook/` to `.gitignore`. It will not replace an existing configuration unless you explicitly pass `--force`.
+
+### 2. Check what your project needs
 
 ```bash
 npx --yes reporook@latest doctor .
@@ -26,7 +34,7 @@ npx --yes reporook@latest setup
 
 `setup` does not install anything. Review and run only the commands for scanners that `doctor` marked as needed, then rerun `doctor`. Projects with OSV-supported dependency files may need OSV-Scanner in addition to the source, secret, Node, or Python scanners.
 
-### 2. Run the gate
+### 3. Run the gate
 
 ```bash
 npx --yes reporook@latest scan . --require-scanners
@@ -38,16 +46,29 @@ The result is deliberately simple:
 - Exit `1`: one or more findings met the threshold. The scan worked; review the findings.
 - Exit `2`: coverage or configuration failed. Do not treat the repository as safe.
 
-### 3. Let RepoRook brief your agent
+### 4. Choose and plan one fix
 
 Every scan writes:
 
 - `.reporook/findings.json` — deterministic evidence
 - `.reporook/results.sarif` — GitHub-compatible results
 - `.reporook/scan-receipt.json` — coverage and scanner versions
+- `.reporook/priorities.json` — deterministic fix-now, fix-next, and review-later queue
 - `.reporook/agent-prompt.txt` — a copy-ready remediation prompt that requires approval before edits
 
-Give `agent-prompt.txt` to your coding agent. It directs the agent to explain one risk at a time, propose the smallest change, wait for approval, add regression evidence, and verify the result.
+Review the queue directly:
+
+```bash
+npx --yes reporook@latest prioritize .
+```
+
+Then prepare one finding-bound workflow:
+
+```bash
+npx --yes reporook@latest plan FINDING_ID .
+```
+
+This writes `plan.json` and `fix-prompt.txt` under `.reporook/remediations/FINDING_ID/`. Give the prompt to your coding agent. Before editing, it must show the exact diff, affected behavior, and focused plus relevant test commands. Your approval applies only to that displayed proposal; a changed file, dependency version, behavior, or test plan requires a new approval.
 
 To inspect one finding yourself:
 
@@ -55,7 +76,7 @@ To inspect one finding yourself:
 npx --yes reporook@latest explain FINDING_ID
 ```
 
-### 4. Verify an approved fix
+### 5. Verify an approved fix
 
 After the focused test and relevant project tests pass:
 
@@ -83,13 +104,13 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: cisoventures/RepoRook@v0.2.0
+      - uses: cisoventures/RepoRook@v0.3.0
         with:
           fail-on: high
           mode: diff
 ```
 
-The Action installs pinned scanners, comments in plain English, uploads SARIF, preserves the scan receipt, and fails closed when required coverage is unavailable.
+The Action installs pinned scanners, comments with the guided fix queue, uploads SARIF, preserves scan and priority receipts, and fails closed when required coverage is unavailable.
 
 ## Safety boundaries
 

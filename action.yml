@@ -38,6 +38,9 @@ outputs:
   sarif-file:
     description: Absolute path to SARIF.
     value: ${{ steps.scan.outputs.sarif_file }}
+  priorities-file:
+    description: Absolute path to guided fix priorities JSON.
+    value: ${{ steps.scan.outputs.priorities_file }}
 
 runs:
   using: composite
@@ -79,6 +82,7 @@ runs:
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
         REPORT_PATH: ${{ steps.scan.outputs.findings_file }}
+        PRIORITIES_PATH: ${{ steps.scan.outputs.priorities_file }}
         ISSUE_NUMBER: ${{ github.event.pull_request.number }}
       run: node "$GITHUB_ACTION_PATH/action/comment.mjs"
     - name: Preserve scan evidence
