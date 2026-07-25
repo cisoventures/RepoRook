@@ -14,14 +14,17 @@ export const defaultConfig: RepoRookConfig = {
   baselineFile: "reporook-baseline.json",
   suppressionsFile: "reporook-suppressions.json",
   pathPolicies: {},
+  containerImages: [],
+  gitHistory: false,
 };
 
-export const scannerNames = ["semgrep", "gitleaks", "npm-audit", "pip-audit", "osv-scanner"] as const;
+export const scannerNames = ["semgrep", "gitleaks", "npm-audit", "pip-audit", "osv-scanner", "checkov", "trivy-image"] as const;
 const scannerNameSet = new Set<string>(scannerNames);
 const topLevelKeys = new Set([
   "failOn", "fail-on", "outputDir", "output-dir", "semgrepConfig", "semgrep-config",
   "paths", "ignore", "requiredScanners", "required-scanners", "scanners",
   "baseline", "baselineFile", "suppressions", "suppressionsFile", "pathPolicies", "path-policies",
+  "containerImages", "container-images", "gitHistory", "git-history",
 ]);
 
 function scalar(value: string): string | boolean | number | null {
@@ -108,6 +111,30 @@ function stringList(value: unknown, name: string, fallback: string[]): string[] 
   return [...value];
 }
 
+function booleanValue(value: unknown, name: string, fallback: boolean): boolean {
+  if (value === undefined) return fallback;
+  if (typeof value !== "boolean") throw new Error(`${name} must be true or false`);
+  return value;
+}
+
+function containerImageList(value: unknown): string[] {
+  const images = stringList(value, "containerImages", defaultConfig.containerImages);
+  if (images.length > 20) throw new Error("containerImages supports at most 20 explicit image references");
+  for (const image of images) {
+    const atCount = (image.match(/@/g) ?? []).length;
+    if (image.length > 512
+      || !/^[A-Za-z0-9][A-Za-z0-9._/:@+\-]{0,511}$/.test(image)
+      || image.includes("..")
+      || image.includes("//")
+      || image.endsWith("/")
+      || atCount > 1) {
+      throw new Error(`Invalid container image reference: ${image}`);
+    }
+  }
+  if (new Set(images).size !== images.length) throw new Error("containerImages must not contain duplicates");
+  return images;
+}
+
 function scannerSettings(value: unknown): Record<string, boolean> {
   if (value === undefined) return {};
   const settings = configObject(value);
@@ -162,6 +189,10 @@ export function normalizeConfig(parsedValue: unknown): RepoRookConfig {
       throw new Error(`Path policy ${pattern} cannot weaken the global failOn threshold (${threshold} is weaker than ${failOn})`);
     }
   }
+  const containerImages = containerImageList(aliased(parsed, "containerImages", "container-images"));
+  if (requiredScanners.includes("trivy-image") && !containerImages.length) {
+    throw new Error("trivy-image cannot be required without at least one containerImages entry");
+  }
 
   return {
     failOn,
@@ -174,6 +205,8 @@ export function normalizeConfig(parsedValue: unknown): RepoRookConfig {
     baselineFile: stringValue(aliased(parsed, "baseline", "baselineFile"), "baseline", defaultConfig.baselineFile),
     suppressionsFile: stringValue(aliased(parsed, "suppressions", "suppressionsFile"), "suppressions", defaultConfig.suppressionsFile),
     pathPolicies,
+    containerImages,
+    gitHistory: booleanValue(aliased(parsed, "gitHistory", "git-history"), "gitHistory", defaultConfig.gitHistory),
   };
 }
 

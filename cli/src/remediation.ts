@@ -3,9 +3,16 @@ import { prioritizeFindings } from "./prioritization.js";
 import type { Finding, RemediationPlan, ScanReport } from "./types.js";
 import { VERSION } from "./version.js";
 
-const dependencyScanners = new Set(["npm-audit", "pip-audit", "osv-scanner"]);
+const dependencyScanners = new Set(["npm-audit", "pip-audit", "osv-scanner", "trivy-image"]);
 
 function validationQuestions(finding: Finding): string[] {
+  if (finding.scanner === "trivy-image") {
+    return [
+      "Which Dockerfile, lockfile, base-image declaration, or build pipeline produces this exact image target?",
+      "Is the affected package present in the shipped image path, and is a fixed package or base-image version available?",
+      "Which image build, runtime, and focused regression checks demonstrate that the rebuilt immutable image preserves behavior?",
+    ];
+  }
   if (finding.scanner === "gitleaks") {
     return [
       "Is this a real credential or a harmless example? Do not print or copy its value while checking.",
@@ -55,7 +62,7 @@ export function createRemediationPlan(report: ScanReport, findingId: string): Re
     goal: finding.remediation_hint,
     validation_questions: validationQuestions(finding),
     scope: {
-      allowed_files: [finding.file],
+      allowed_files: finding.metadata.target_kind === "container-image" ? [] : [finding.file],
       related_finding_ids: priority.related_finding_ids,
       stop_if_scope_changes: true,
     },

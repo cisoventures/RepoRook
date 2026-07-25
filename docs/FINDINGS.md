@@ -15,3 +15,7 @@ SARIF is a projection for code-scanning interfaces. Keep the JSON report and rec
 Dependency advisories remain one finding per advisory in JSON and SARIF. Human-facing terminal and pull-request reports group those findings by package so repeated advisories do not bury code-level risks.
 
 OSV alias groups become one RepoRook finding even when the same flaw has CVE, GHSA, and ecosystem-specific identifiers. The complete aliases, fixed versions, ecosystem tag, and source manifest remain in the normalized evidence.
+
+Infrastructure findings keep the Checkov rule, framework, resource, and repository-relative line range. If Checkov's local offline policy does not provide severity, RepoRook records `raw_severity: null` and uses the conservative `medium` fallback.
+
+Container-image findings use `metadata.target_kind: container-image` and retain the exact configured image reference in `metadata.target`; Git-history secrets use `metadata.target_kind: git-history` and may retain only a safe commit hash. Neither kind gets a pretend current-file SARIF location or MCP code excerpt. Secret values are never copied into normalized evidence.

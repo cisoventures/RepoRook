@@ -106,13 +106,19 @@ test("init detects project stacks, writes a secure config, and remains idempoten
     await writeFile(join(target, "package.json"), "{}\n");
     await writeFile(join(target, "package-lock.json"), "{}\n");
     await writeFile(join(target, "crates", "demo", "Cargo.lock"), "# fixture\n");
+    await mkdir(join(target, "infrastructure"));
+    await writeFile(join(target, "infrastructure", "main.tf"), "resource \"aws_s3_bucket\" \"demo\" {}\n");
 
     const created = await initializeRepository(target);
     assert.equal(created.status, "created");
-    assert.deepEqual(created.profile.recommended_scanners, ["semgrep", "gitleaks", "npm-audit", "osv-scanner"]);
+    assert.deepEqual(created.profile.recommended_scanners, ["semgrep", "gitleaks", "npm-audit", "osv-scanner", "checkov"]);
     const loaded = await loadConfig(target);
     assert.deepEqual(loaded.config.requiredScanners, created.profile.recommended_scanners);
     assert.equal(loaded.config.scanners["pip-audit"], true);
+    assert.equal(loaded.config.scanners.checkov, true);
+    assert.equal(loaded.config.scanners["trivy-image"], true);
+    assert.deepEqual(loaded.config.containerImages, []);
+    assert.equal(loaded.config.gitHistory, false);
     assert.match(await readFile(join(target, ".gitignore"), "utf8"), /^# RepoRook local evidence\n\.reporook\/\n$/);
     const before = await readFile(created.config_path, "utf8");
     const repeated = await initializeRepository(target);

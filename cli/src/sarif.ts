@@ -32,13 +32,19 @@ export function toSarif(report: ScanReport): Record<string, unknown> {
         ruleId: finding.rule,
         level: level(finding),
         message: { text: `${finding.plain_summary} ${finding.remediation_hint}` },
-        locations: [{ physicalLocation: {
+        ...(finding.metadata.target_kind ? {} : { locations: [{ physicalLocation: {
           artifactLocation: { uri: finding.file, uriBaseId: "%SRCROOT%" },
           region: { startLine: Math.max(1, finding.line), ...(finding.end_line ? { endLine: finding.end_line } : {}), ...(finding.column ? { startColumn: finding.column } : {}) },
-        } }],
+        } }] }),
         partialFingerprints: { primaryLocationLineHash: finding.fingerprint },
         fingerprints: { reporookFingerprint: finding.fingerprint },
-        properties: { id: finding.id, scanner: finding.scanner, severity: finding.severity, references: finding.references },
+        properties: {
+          id: finding.id,
+          scanner: finding.scanner,
+          severity: finding.severity,
+          references: finding.references,
+          ...(finding.metadata.target_kind ? { target_kind: finding.metadata.target_kind, target: finding.metadata.target } : {}),
+        },
       })),
     }],
   };

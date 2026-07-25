@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-python3 -m pip install --disable-pip-version-check --no-input "semgrep==1.171.0" "pip-audit==2.10.1"
+python3 -m pip install --disable-pip-version-check --no-input "semgrep==1.171.0" "pip-audit==2.10.1" "checkov==3.3.8"
 
 GITLEAKS_VERSION="8.28.0"
 case "$(uname -m)" in
@@ -54,3 +54,35 @@ actual="$(sha256sum "$osv_binary" | awk '{print $1}')"
 test "$osv_sha256" = "$actual"
 chmod +x "$osv_binary"
 echo "$osv_dir" >> "$GITHUB_PATH"
+
+TRIVY_VERSION="0.72.0"
+TRIVY_CHECKSUMS_SHA256="ebe9d19a774b950e240b1017a038e9b5a002ea068e02023369ff6d241c10c580"
+case "$(uname -m)" in
+  x86_64) trivy_arch="64bit" ;;
+  aarch64|arm64) trivy_arch="ARM64" ;;
+  *) echo "Unsupported runner architecture: $(uname -m)" >&2; exit 2 ;;
+esac
+
+trivy_dir="${RUNNER_TEMP:-/tmp}/reporook-trivy"
+mkdir -p "$trivy_dir"
+trivy_archive_name="trivy_${TRIVY_VERSION}_Linux_${trivy_arch}.tar.gz"
+trivy_archive="$trivy_dir/$trivy_archive_name"
+trivy_checksums="$trivy_dir/trivy_${TRIVY_VERSION}_checksums.txt"
+curl --fail --silent --show-error --location \
+  "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/$trivy_archive_name" \
+  --output "$trivy_archive"
+curl --fail --silent --show-error --location \
+  "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_checksums.txt" \
+  --output "$trivy_checksums"
+actual_checksums_sha256="$(sha256sum "$trivy_checksums" | awk '{print $1}')"
+test "$TRIVY_CHECKSUMS_SHA256" = "$actual_checksums_sha256"
+expected_trivy_sha256="$(awk -v name="$trivy_archive_name" '$2 == name { print $1 }' "$trivy_checksums")"
+test -n "$expected_trivy_sha256"
+actual_trivy_sha256="$(sha256sum "$trivy_archive" | awk '{print $1}')"
+test "$expected_trivy_sha256" = "$actual_trivy_sha256"
+(
+  cd "$trivy_dir"
+  tar -xzf "$trivy_archive_name" trivy
+)
+chmod +x "$trivy_dir/trivy"
+echo "$trivy_dir" >> "$GITHUB_PATH"

@@ -28,6 +28,11 @@ test("configuration rejects values that can silently weaken coverage", () => {
   assert.throws(() => normalizeConfig({ requiredScanners: ["semgrep"], scanners: { semgrep: false } }), /required and disabled/);
   assert.throws(() => normalizeConfig({ scanners: { gitleaks: "no" } }), /must be true or false/);
   assert.equal(normalizeConfig({ scanners: { "osv-scanner": true } }).scanners["osv-scanner"], true);
+  assert.deepEqual(normalizeConfig({ "container-images": ["registry.example.test/app@sha256:abc"], "git-history": true }).containerImages, ["registry.example.test/app@sha256:abc"]);
+  assert.equal(normalizeConfig({ gitHistory: true }).gitHistory, true);
+  assert.throws(() => normalizeConfig({ gitHistory: "yes" }), /must be true or false/);
+  assert.throws(() => normalizeConfig({ containerImages: ["--input"] }), /Invalid container image reference/);
+  assert.throws(() => normalizeConfig({ requiredScanners: ["trivy-image"] }), /cannot be required without/);
   assert.throws(() => normalizeConfig({ requireScanners: ["gitleaks"] }), /Unknown RepoRook configuration key/);
   assert.throws(() => normalizeConfig(parseSimpleYaml("paths: [false]\n")), /list of non-empty strings/);
   assert.throws(() => parseSimpleYaml("failOn: high\nfailOn: low\n"), /Duplicate configuration key/);
@@ -95,6 +100,30 @@ test("engine deduplicates findings and produces SARIF", async () => {
     );
   } finally {
     await rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
+test("external image findings are not discarded by repository path filters", async () => {
+  const target = await mkdtemp(join(tmpdir(), "reporook-external-target-test-"));
+  const finding = {
+    id: "rr-dddddddddddd", scanner: "trivy-image", rule: "trivy-image:CVE-1", severity: "high", file: "container-image:example/app:1", line: 1,
+    plain_summary: "An image package has a known flaw.", description: "Known flaw", remediation_hint: "Rebuild the image.", fingerprint: `sha256:${"d".repeat(64)}`,
+    references: [], metadata: { cwe: [], cve: ["CVE-1"], package: "libc", raw_severity: "HIGH", target_kind: "container-image", target: "example/app:1" },
+  };
+  const scanner = {
+    name: "trivy-image",
+    async isApplicable() { return { applicable: true }; },
+    async run() { return { status: { name: "trivy-image", applicable: true, available: true, version: "1", status: "ok", finding_count: 1, duration_ms: 1 }, findings: [finding] }; },
+  };
+  try {
+    const config = structuredClone(defaultConfig);
+    config.paths = ["src"];
+    config.ignore = ["container-image:**"];
+    const report = await scanRepository({ target, config }, [scanner]);
+    assert.equal(report.findings.length, 1);
+    assert.equal(toSarif(report).runs[0].results[0].locations, undefined);
+  } finally {
+    await rm(target, { recursive: true, force: true });
   }
 });
 

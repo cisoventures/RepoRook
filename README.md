@@ -1,8 +1,8 @@
 # RepoRook
 
-RepoRook is a free, open-source security gate for code written by people or coding agents. It combines deterministic scanners, new-finding baselines, owned expiring suppressions, path-specific policy, and exact approval receipts behind one CLI, one findings contract, one GitHub check, and thin integrations for Claude Code, Codex, Cursor, GitHub Copilot, Gemini CLI, and Windsurf.
+RepoRook is a free, open-source security gate for code written by people or coding agents. It combines deterministic source, secret, dependency, infrastructure, workflow, and explicitly configured container-image scans with new-finding baselines, owned expiring suppressions, path-specific policy, and exact approval receipts behind one CLI, one findings contract, one GitHub check, and thin integrations for Claude Code, Codex, Cursor, GitHub Copilot, Gemini CLI, and Windsurf.
 
-**MIT licensed · no hosted service · no telemetry · no maintainer-funded inference.** RepoRook scans application code, not the agents, skills, plugins, or MCP servers that produced it.
+**MIT licensed · no hosted service · no telemetry · no maintainer-funded inference.** RepoRook scans the repository and only the container targets you explicitly configure, not the agents, skills, plugins, or MCP servers that produced them.
 
 ## The beginner experience
 
@@ -14,7 +14,7 @@ RepoRook supplies deterministic evidence with a plain-English explanation for ev
 
 ## Five-minute quick start
 
-Requirements: Node.js 20 or later. RepoRook orchestrates Semgrep, Gitleaks, `npm audit`, `pip-audit`, and OSV-Scanner when applicable.
+Requirements: Node.js 20 or later. RepoRook orchestrates Semgrep, Gitleaks, `npm audit`, `pip-audit`, OSV-Scanner, Checkov, and Trivy when applicable.
 
 By default Semgrep downloads the public `p/default` rule bundle and runs it with metrics disabled. Set `semgrepConfig` to a pinned local rules file when you need fully offline or byte-for-byte reproducible source scans.
 
@@ -57,7 +57,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: cisoventures/RepoRook@v0.5.0
+      - uses: cisoventures/RepoRook@v0.6.0
         with:
           fail-on: high
           mode: diff
@@ -74,6 +74,9 @@ The Action installs pinned scanners, updates one PR comment with policy disposit
 | Node dependencies | `npm audit` | Root `package-lock.json` |
 | Python dependencies | `pip-audit` | Root requirements files, `poetry.lock`, or `uv.lock` |
 | Additional dependencies | [OSV-Scanner](https://google.github.io/osv-scanner/supported-languages-and-lockfiles/) | Go, Rust, Java, Ruby, PHP, .NET, Dart, Elixir, R, Haskell, C/C++, Yarn, pnpm, Bun, and additional Python manifests |
+| Infrastructure and workflows | [Checkov](https://www.checkov.io/) | Terraform, Kubernetes, Helm, Kustomize, Dockerfiles, and GitHub Actions; built-in local policies only |
+| Container packages | [Trivy](https://trivy.dev/) | Known vulnerabilities in image references explicitly listed in `containerImages` |
+| Historical credentials | [Gitleaks](https://github.com/gitleaks/gitleaks) | Opt-in Git-history scan with secret values redacted before normalization |
 
 RepoRook gives each dependency file one primary scanner: OSV-Scanner handles supported manifests that the root `npm audit` and `pip-audit` adapters do not already own, including supported manifests in nested projects. That expands monorepo and ecosystem coverage without showing the same advisory twice merely because two scanners queried it.
 
@@ -85,6 +88,8 @@ Create `reporook.yml`:
 failOn: high
 outputDir: .reporook
 semgrepConfig: p/default # or a pinned local Semgrep rules file
+gitHistory: false # opt in only when you intend to scan past commits
+containerImages: [] # explicit refs only; RepoRook never guesses or builds images
 paths:
   - .
 ignore:
@@ -96,6 +101,8 @@ requiredScanners:
 scanners:
   pip-audit: true
   osv-scanner: true
+  checkov: true
+  trivy-image: true
 baseline: reporook-baseline.json
 suppressions: reporook-suppressions.json
 pathPolicies:
@@ -104,6 +111,8 @@ pathPolicies:
 ```
 
 Configuration is validated strictly: unknown scanner names, invalid value types, unknown keys, a scanner that is both required and disabled, and a path rule that weakens the global threshold are errors rather than silent fallbacks. Baseline and suppression files are repository-relative, reviewable JSON. Missing policy files fail safe by making findings actionable rather than hiding them.
+
+Checkov runs with uploads and external downloads disabled and ignores repository-supplied Checkov configuration. Trivy runs only when `containerImages` contains an explicit target; tags work, but immutable digest references are safer. Git-history scanning is off by default because it expands scope and runtime. See [Infrastructure, container, and history scanning](docs/INFRASTRUCTURE.md).
 
 ## Outputs
 
@@ -192,4 +201,4 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/TEAM_POLICY.md`](docs
 
 ## Project status
 
-The repository contains the v0.5 team-policy implementation on top of the v0.4 native-agent beta architecture. Scanner accuracy, policy contracts, and host packaging remain pre-1.0 and should expand only through fixture-backed, reviewable contributions.
+The repository contains the v0.6 infrastructure-coverage implementation on top of the v0.5 team-policy architecture. Scanner accuracy, policy contracts, and host packaging remain pre-1.0 and should expand only through fixture-backed, reviewable contributions.

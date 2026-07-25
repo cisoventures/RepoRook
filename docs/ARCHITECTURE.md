@@ -15,6 +15,10 @@ The CLI detects applicable scanners, invokes them without a shell, parses untrus
 
 Dependency ownership is explicit. Root `package-lock.json` belongs to `npm audit`; root requirements files, `poetry.lock`, and `uv.lock` belong to `pip-audit`. OSV-Scanner receives other supported manifests and supported nested-project files. This expands ecosystem and monorepo coverage without duplicate results from overlapping scanners. Generated dependency and build directories are not traversed during OSV applicability discovery.
 
+Checkov receives only local Terraform, Kubernetes, Helm, Kustomize, Dockerfile, and GitHub Actions frameworks. RepoRook supplies an empty trusted config, disables result uploads, cloud policy downloads, external module downloads, and inherited API tokens, and ignores repository-supplied Checkov settings. Checkov's offline local policies do not consistently carry severity, so missing severities normalize to `medium` rather than being overstated.
+
+Trivy image scanning is a separate external-target adapter. It receives at most 20 validated image references from `containerImages`; RepoRook never guesses an image, builds one, or broadens the target from a Dockerfile. Tags are supported, but digests provide reproducible identity. Gitleaks scans the working tree by default and switches to redacted Git-history mode only when `gitHistory` is true. Historical and image findings retain safe provenance, bypass changed-file/path filtering that only makes sense for current repository files, and do not create misleading SARIF or MCP source locations.
+
 The MCP server shells out to the CLI and exposes scan, team-policy, priority, remediation-plan, approval-receipt, evidence, and verification tools. Its local writes are limited to RepoRook evidence and explicitly confirmed repository policy files; it does not apply patches. The Action builds and invokes the same CLI. Neither owns scanner parsing.
 
 ## Coverage

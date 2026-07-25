@@ -38,3 +38,12 @@ export async function codeContext(target: string, finding: FindingRecord, radius
   const selected = lines.slice(start - 1, end).map((line, index) => `${String(start + index).padStart(5, " ")} | ${line}`).join("\n");
   return { start_line: start, end_line: end, code: selected };
 }
+
+export async function findingContext(target: string, finding: FindingRecord, radius = 8): Promise<{ start_line: number; end_line: number; code: string } | null> {
+  const metadata = finding.metadata;
+  const targetKind = metadata && typeof metadata === "object" && !Array.isArray(metadata)
+    ? (metadata as Record<string, unknown>).target_kind
+    : undefined;
+  if (targetKind === "container-image" || targetKind === "git-history") return null;
+  return await codeContext(target, finding, radius);
+}
