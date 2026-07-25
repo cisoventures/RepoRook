@@ -128,7 +128,7 @@ export class CheckovScanner implements ScannerAdapter {
     if (!version) return unavailable(this.name, Date.now() - started, "checkov is not installed; run `reporook setup`");
     const temporary = await mkdtemp(join(tmpdir(), "reporook-checkov-"));
     const configPath = join(temporary, "checkov.yml");
-    await writeFile(configPath, "---\n", { encoding: "utf8", mode: 0o600 });
+    await writeFile(configPath, "{}\n", { encoding: "utf8", mode: 0o600 });
     try {
       const args = [
         "-d", context.target,

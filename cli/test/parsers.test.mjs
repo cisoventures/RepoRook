@@ -166,6 +166,14 @@ if [ "$1" = "--version" ]; then printf '%s\\n' '3.3.8'; exit 0; fi
 if [ "\${BC_API_KEY+x}" = "x" ]; then exit 5; fi
 printf '%s\\n' "$*" > "$REPOROOK_CHECKOV_TEST_ARGS"
 case " $* " in *" --skip-results-upload "*) exit 4 ;; esac
+previous=""
+config=""
+for value in "$@"; do
+  if [ "$previous" = "--config-file" ]; then config="$value"; fi
+  previous="$value"
+done
+test -n "$config" || exit 6
+test "$(cat "$config")" = "{}" || exit 7
 printf '%s\\n' '{"check_type":"dockerfile","results":{"failed_checks":[{"check_id":"CKV_DOCKER_3","check_name":"Ensure that a user for the container has been created","file_abs_path":"${target}/Dockerfile","file_line_range":[1,2],"resource":"Dockerfile.test"}]}}'
 exit 1
 `);
