@@ -159,9 +159,12 @@ test("Checkov and Trivy adapters treat scanner findings as completed runs", { sk
   const target = await mkdtemp(join(tmpdir(), "reporook-infrastructure-adapter-test-"));
   const previousPath = process.env.PATH;
   const checkov = join(target, "checkov");
+  const checkovArgsPath = join(target, "checkov-args.txt");
   const trivy = join(target, "trivy");
   await writeFile(checkov, `#!/bin/sh
 if [ "$1" = "--version" ]; then printf '%s\\n' '3.3.8'; exit 0; fi
+printf '%s\\n' "$*" > "$REPOROOK_CHECKOV_TEST_ARGS"
+case " $* " in *" --skip-results-upload "*) exit 4 ;; esac
 printf '%s\\n' '{"check_type":"dockerfile","results":{"failed_checks":[{"check_id":"CKV_DOCKER_3","check_name":"Ensure that a user for the container has been created","file_abs_path":"${target}/Dockerfile","file_line_range":[1,2],"resource":"Dockerfile.test"}]}}'
 exit 1
 `);
@@ -172,6 +175,8 @@ exit 0
 `);
   await Promise.all([chmod(checkov, 0o755), chmod(trivy, 0o755), writeFile(join(target, "Dockerfile"), "FROM alpine:3.17\n")]);
   process.env.PATH = `${target}:${previousPath ?? ""}`;
+  const previousCheckovArgsPath = process.env.REPOROOK_CHECKOV_TEST_ARGS;
+  process.env.REPOROOK_CHECKOV_TEST_ARGS = checkovArgsPath;
   try {
     const config = structuredClone(defaultConfig);
     config.containerImages = ["example/app:1"];
@@ -181,8 +186,14 @@ exit 0
     assert.equal(checkovResult.findings[0].scanner, "checkov");
     assert.equal(trivyResult.status.status, "ok");
     assert.equal(trivyResult.findings[0].scanner, "trivy-image");
+    const checkovArgs = await readFile(checkovArgsPath, "utf8");
+    assert.match(checkovArgs, /--skip-download/);
+    assert.match(checkovArgs, /--config-file/);
+    assert.doesNotMatch(checkovArgs, /--skip-results-upload/);
   } finally {
     process.env.PATH = previousPath;
+    if (previousCheckovArgsPath === undefined) delete process.env.REPOROOK_CHECKOV_TEST_ARGS;
+    else process.env.REPOROOK_CHECKOV_TEST_ARGS = previousCheckovArgsPath;
     await rm(target, { recursive: true, force: true });
   }
 });

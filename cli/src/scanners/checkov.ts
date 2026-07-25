@@ -137,7 +137,6 @@ export class CheckovScanner implements ScannerAdapter {
         "--compact",
         "--quiet",
         "--skip-download",
-        "--skip-results-upload",
         "--config-file", configPath,
       ];
       const result = await runCommand("checkov", args, {
