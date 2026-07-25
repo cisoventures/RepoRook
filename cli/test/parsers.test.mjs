@@ -1,10 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SemgrepScanner, parseSemgrep, semgrepErrors } from "../dist/scanners/semgrep.js";
-import { parseGitleaks } from "../dist/scanners/gitleaks.js";
+import { GitleaksScanner, parseGitleaks } from "../dist/scanners/gitleaks.js";
+import { CheckovScanner, parseCheckov } from "../dist/scanners/checkov.js";
+import { parseTrivyImage, TrivyImageScanner } from "../dist/scanners/trivy-image.js";
 import { parseNpmAudit } from "../dist/scanners/npm-audit.js";
 import { parsePipAudit } from "../dist/scanners/pip-audit.js";
 import { discoverOsvLockfiles, OsvScanner, parseOsvScanner } from "../dist/scanners/osv-scanner.js";
@@ -71,6 +73,142 @@ test("Gitleaks parser never preserves secret material", () => {
   assert.doesNotMatch(JSON.stringify(findings), /DO_NOT_KEEP_ME/);
   assert.equal(findings[0].severity, "critical");
   assert.match(findings[0].plain_summary, /API key|token|password/);
+});
+
+test("Gitleaks history findings retain only safe commit provenance", () => {
+  const findings = parseGitleaks([{ RuleID: "generic-api-key", File: "/repo/old.env", StartLine: 3, Secret: "DO_NOT_KEEP_ME", Commit: "a".repeat(40), Fingerprint: "abc:3", Description: "API key" }], "/repo", true);
+  assert.equal(findings[0].metadata.target_kind, "git-history");
+  assert.equal(findings[0].metadata.source_commit, "a".repeat(40));
+  assert.doesNotMatch(JSON.stringify(findings), /DO_NOT_KEEP_ME/);
+});
+
+test("Gitleaks history mode is explicit and invokes the history command", { skip: process.platform === "win32" }, async () => {
+  const target = await mkdtemp(join(tmpdir(), "reporook-gitleaks-history-test-"));
+  const executable = join(target, "gitleaks");
+  const argsPath = join(target, "args.txt");
+  const previousPath = process.env.PATH;
+  const previousArgsPath = process.env.REPOROOK_GITLEAKS_TEST_ARGS;
+  await writeFile(executable, `#!/bin/sh
+if [ "$1" = "--version" ]; then printf '%s\\n' 'gitleaks 8.28.0'; exit 0; fi
+previous=""
+report=""
+for value in "$@"; do
+  if [ "$previous" = "--report-path" ]; then report="$value"; fi
+  previous="$value"
+done
+printf '%s\\n' "$*" > "$REPOROOK_GITLEAKS_TEST_ARGS"
+printf '%s\\n' '[]' > "$report"
+exit 0
+`);
+  await chmod(executable, 0o755);
+  process.env.PATH = `${target}:${previousPath ?? ""}`;
+  process.env.REPOROOK_GITLEAKS_TEST_ARGS = argsPath;
+  try {
+    const config = structuredClone(defaultConfig);
+    config.gitHistory = true;
+    const result = await new GitleaksScanner().run({ target, config });
+    assert.equal(result.status.status, "ok");
+    assert.match(await readFile(argsPath, "utf8"), /^git /);
+  } finally {
+    process.env.PATH = previousPath;
+    if (previousArgsPath === undefined) delete process.env.REPOROOK_GITLEAKS_TEST_ARGS;
+    else process.env.REPOROOK_GITLEAKS_TEST_ARGS = previousArgsPath;
+    await rm(target, { recursive: true, force: true });
+  }
+});
+
+test("Checkov output becomes a repository-relative infrastructure finding", () => {
+  const findings = parseCheckov({
+    check_type: "terraform",
+    results: { failed_checks: [{
+      check_id: "CKV_AWS_18",
+      check_name: "Ensure the S3 bucket has access logging enabled",
+      file_abs_path: "/repo/infrastructure/main.tf",
+      file_line_range: [2, 8],
+      resource: "aws_s3_bucket.logs",
+      guideline: "https://example.test/checkov/CKV_AWS_18",
+    }] },
+  }, "/repo");
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].scanner, "checkov");
+  assert.equal(findings[0].file, "infrastructure/main.tf");
+  assert.equal(findings[0].severity, "medium");
+  assert.match(findings[0].plain_summary, /security safeguard/);
+});
+
+test("Trivy image output preserves image provenance and fixed versions", () => {
+  const findings = parseTrivyImage({ Results: [{ Target: "alpine:3.17 (alpine 3.17.0)", Type: "alpine", Vulnerabilities: [{
+    VulnerabilityID: "CVE-2026-0001",
+    PkgName: "libssl3",
+    InstalledVersion: "3.0.1",
+    FixedVersion: "3.0.2, 3.0.3",
+    Severity: "HIGH",
+    Title: "Example TLS flaw",
+    CweIDs: ["CWE-295"],
+    PrimaryURL: "https://example.test/CVE-2026-0001",
+  }] }] }, "registry.example.test/app@sha256:abc");
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].scanner, "trivy-image");
+  assert.equal(findings[0].metadata.target_kind, "container-image");
+  assert.equal(findings[0].metadata.target, "registry.example.test/app@sha256:abc");
+  assert.deepEqual(findings[0].metadata.fixed_versions, ["3.0.2", "3.0.3"]);
+  assert.equal(findings[0].severity, "high");
+});
+
+test("Checkov and Trivy adapters treat scanner findings as completed runs", { skip: process.platform === "win32" }, async () => {
+  const target = await mkdtemp(join(tmpdir(), "reporook-infrastructure-adapter-test-"));
+  const previousPath = process.env.PATH;
+  const checkov = join(target, "checkov");
+  const checkovArgsPath = join(target, "checkov-args.txt");
+  const trivy = join(target, "trivy");
+  await writeFile(checkov, `#!/bin/sh
+if [ "$1" = "--version" ]; then printf '%s\\n' '3.3.8'; exit 0; fi
+if [ "\${BC_API_KEY+x}" = "x" ]; then exit 5; fi
+printf '%s\\n' "$*" > "$REPOROOK_CHECKOV_TEST_ARGS"
+case " $* " in *" --skip-results-upload "*) exit 4 ;; esac
+previous=""
+config=""
+for value in "$@"; do
+  if [ "$previous" = "--config-file" ]; then config="$value"; fi
+  previous="$value"
+done
+test -n "$config" || exit 6
+test "$(cat "$config")" = "{}" || exit 7
+printf '%s\\n' '{"check_type":"dockerfile","results":{"failed_checks":[{"check_id":"CKV_DOCKER_3","check_name":"Ensure that a user for the container has been created","file_abs_path":"${target}/Dockerfile","file_line_range":[1,2],"resource":"Dockerfile.test"}]}}'
+exit 1
+`);
+  await writeFile(trivy, `#!/bin/sh
+if [ "$1" = "--version" ]; then printf '%s\\n' 'Version: 0.72.0'; exit 0; fi
+printf '%s\\n' '{"Results":[{"Target":"example/app:1","Type":"alpine","Vulnerabilities":[{"VulnerabilityID":"CVE-2026-0002","PkgName":"busybox","InstalledVersion":"1","FixedVersion":"2","Severity":"CRITICAL"}]}]}'
+exit 0
+`);
+  await Promise.all([chmod(checkov, 0o755), chmod(trivy, 0o755), writeFile(join(target, "Dockerfile"), "FROM alpine:3.17\n")]);
+  process.env.PATH = `${target}:${previousPath ?? ""}`;
+  const previousCheckovArgsPath = process.env.REPOROOK_CHECKOV_TEST_ARGS;
+  const previousCheckovApiKey = process.env.BC_API_KEY;
+  process.env.REPOROOK_CHECKOV_TEST_ARGS = checkovArgsPath;
+  process.env.BC_API_KEY = "must-not-reach-checkov";
+  try {
+    const config = structuredClone(defaultConfig);
+    config.containerImages = ["example/app:1"];
+    const checkovResult = await new CheckovScanner().run({ target, config });
+    const trivyResult = await new TrivyImageScanner().run({ target, config });
+    assert.equal(checkovResult.status.status, "ok");
+    assert.equal(checkovResult.findings[0].scanner, "checkov");
+    assert.equal(trivyResult.status.status, "ok");
+    assert.equal(trivyResult.findings[0].scanner, "trivy-image");
+    const checkovArgs = await readFile(checkovArgsPath, "utf8");
+    assert.match(checkovArgs, /--skip-download/);
+    assert.match(checkovArgs, /--config-file/);
+    assert.doesNotMatch(checkovArgs, /--skip-results-upload/);
+  } finally {
+    process.env.PATH = previousPath;
+    if (previousCheckovArgsPath === undefined) delete process.env.REPOROOK_CHECKOV_TEST_ARGS;
+    else process.env.REPOROOK_CHECKOV_TEST_ARGS = previousCheckovArgsPath;
+    if (previousCheckovApiKey === undefined) delete process.env.BC_API_KEY;
+    else process.env.BC_API_KEY = previousCheckovApiKey;
+    await rm(target, { recursive: true, force: true });
+  }
 });
 
 test("npm audit v7 output becomes one advisory finding", () => {

@@ -8,7 +8,7 @@ export interface CommandResult {
   missing: boolean;
 }
 
-export interface CommandOptions { cwd?: string; env?: NodeJS.ProcessEnv; timeoutMs?: number }
+export interface CommandOptions { cwd?: string; env?: NodeJS.ProcessEnv; unsetEnv?: string[]; timeoutMs?: number }
 
 export async function runCommand(
   command: string,
@@ -20,9 +20,11 @@ export async function runCommand(
     let stdout = "";
     let stderr = "";
     let settled = false;
+    const env = { ...process.env, ...options.env };
+    for (const name of options.unsetEnv ?? []) delete env[name];
     const child = spawn(command, args, {
       cwd: options.cwd,
-      env: { ...process.env, ...options.env },
+      env,
       stdio: ["ignore", "pipe", "pipe"],
       shell: false,
     });

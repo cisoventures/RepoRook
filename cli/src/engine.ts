@@ -6,10 +6,12 @@ import { matchesAny } from "./path-utils.js";
 import { evaluatePolicy } from "./policy.js";
 import { meetsThreshold, sortBySeverity } from "./severity.js";
 import { GitleaksScanner } from "./scanners/gitleaks.js";
+import { CheckovScanner } from "./scanners/checkov.js";
 import { NpmAuditScanner } from "./scanners/npm-audit.js";
 import { OsvScanner } from "./scanners/osv-scanner.js";
 import { PipAuditScanner } from "./scanners/pip-audit.js";
 import { SemgrepScanner } from "./scanners/semgrep.js";
+import { TrivyImageScanner } from "./scanners/trivy-image.js";
 import { status } from "./scanners/shared.js";
 import type { Finding, ScanOptions, ScanReport, ScannerAdapter, ScannerStatus, Severity } from "./types.js";
 import { VERSION } from "./version.js";
@@ -22,6 +24,8 @@ export const defaultScanners = (): ScannerAdapter[] => [
   new NpmAuditScanner(),
   new PipAuditScanner(),
   new OsvScanner(),
+  new CheckovScanner(),
+  new TrivyImageScanner(),
 ];
 
 function summary(findings: Finding[]): Record<Severity | "total", number> {
@@ -49,6 +53,7 @@ function coverage(statuses: ScannerStatus[]): "complete" | "partial" | "failed" 
 
 function filterFindings(findings: Finding[], ignore: string[], paths: string[], changed_files?: string[]): Finding[] {
   return findings.filter((finding) => {
+    if (finding.metadata.target_kind) return true;
     if (matchesAny(finding.file, ignore)) return false;
     if (paths.length && !paths.includes(".") && !matchesAny(finding.file, paths.map((path) => path.endsWith("/**") ? path : `${path.replace(/\/$/, "")}/**`))) return false;
     if (changed_files && !changed_files.includes(finding.file)) return false;
@@ -68,7 +73,7 @@ export async function scanRepository(options: ScanOptions, scanners: ScannerAdap
     if (options.config.scanners[scanner.name] === false) {
       return { status: status(scanner.name, { applicable: false, available: false, status: "skipped", reason: "disabled by configuration" }), findings: [] };
     }
-    const applicability = await scanner.isApplicable(target);
+    const applicability = await scanner.isApplicable(target, options.config);
     if (!applicability.applicable) {
       return { status: status(scanner.name, { applicable: false, available: false, status: "skipped", reason: applicability.reason ?? "not applicable" }), findings: [] };
     }

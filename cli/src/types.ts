@@ -12,6 +12,9 @@ export interface FindingMetadata {
   raw_severity: string | null;
   confidence?: string | null;
   tags?: string[];
+  target_kind?: "container-image" | "git-history";
+  target?: string;
+  source_commit?: string;
 }
 
 export interface Finding {
@@ -298,6 +301,8 @@ export interface RepoRookConfig {
   baselineFile: string;
   suppressionsFile: string;
   pathPolicies: Record<string, Severity>;
+  containerImages: string[];
+  gitHistory: boolean;
 }
 
 export interface ScanOptions {
@@ -320,6 +325,6 @@ export interface ScannerResult {
 
 export interface ScannerAdapter {
   name: string;
-  isApplicable(target: string): Promise<{ applicable: boolean; reason?: string }>;
+  isApplicable(target: string, config?: RepoRookConfig): Promise<{ applicable: boolean; reason?: string }>;
   run(context: ScannerContext): Promise<ScannerResult>;
 }

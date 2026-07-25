@@ -1,6 +1,6 @@
 {
   "name": "reporook",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Deterministic code security scanning with plain-English agent triage and fix verification.",
   "mcpServers": {
     "reporook": {

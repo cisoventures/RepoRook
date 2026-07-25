@@ -87,7 +87,10 @@
             "fixed_versions": { "type": "array", "items": { "type": "string" } },
             "raw_severity": { "type": ["string", "null"] },
             "confidence": { "type": ["string", "null"] },
-            "tags": { "type": "array", "items": { "type": "string" } }
+            "tags": { "type": "array", "items": { "type": "string" } },
+            "target_kind": { "enum": ["container-image", "git-history"] },
+            "target": { "type": "string" },
+            "source_commit": { "type": "string", "pattern": "^[a-fA-F0-9]{7,64}$" }
           },
           "additionalProperties": false
         }

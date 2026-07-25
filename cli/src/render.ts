@@ -4,7 +4,7 @@ import type { Finding, PrioritizationReport, RemediationPlan, ScanReport, Severi
 
 const labels: Record<Severity, string> = { critical: "CRITICAL", high: "HIGH", medium: "MEDIUM", low: "LOW" };
 const rank: Record<Severity, number> = { critical: 4, high: 3, medium: 2, low: 1 };
-const dependencyScanners = new Set(["npm-audit", "pip-audit", "osv-scanner"]);
+const dependencyScanners = new Set(["npm-audit", "pip-audit", "osv-scanner", "trivy-image"]);
 
 function compact(value: string, limit = 280): string {
   const normalized = value.replace(/\s+/g, " ").trim();
@@ -68,7 +68,9 @@ export function renderTerminal(report: ScanReport): string {
       continue;
     }
     lines.push(`[${labels[finding.severity]}] ${compact(finding.plain_summary)}`);
-    lines.push(`  Where: ${finding.file}:${finding.line}`);
+    const historical = finding.metadata.target_kind === "git-history";
+    const sourceCommit = historical && finding.metadata.source_commit ? ` in commit ${finding.metadata.source_commit.slice(0, 12)}` : historical ? " in Git history" : "";
+    lines.push(`  Where: ${finding.file}:${finding.line}${sourceCommit}`);
     lines.push(`  Risk ID: ${finding.id} (${finding.scanner})`);
     const policy = policyByFinding.get(finding.id);
     if (policy) {
@@ -226,9 +228,14 @@ export function renderVerification(report: VerificationReport): string {
 }
 
 export function renderFinding(finding: Finding): string {
+  const location = finding.metadata.target_kind === "container-image"
+    ? `Container image: ${finding.metadata.target ?? finding.file.replace(/^container-image:/, "")}`
+    : finding.metadata.target_kind === "git-history"
+      ? `Historical location: ${finding.file}:${finding.line}${finding.metadata.source_commit ? ` in commit ${finding.metadata.source_commit}` : ""}`
+      : `Location: ${finding.file}:${finding.line}`;
   return [
     `${labels[finding.severity]} — ${finding.plain_summary}`,
-    `Location: ${finding.file}:${finding.line}`,
+    location,
     `Detected by: ${finding.scanner} (${finding.rule})`,
     `Scanner detail: ${finding.description}`,
     "",

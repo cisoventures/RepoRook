@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { approvalViaCli, baselineViaCli, prioritizeViaCli, remediationPlanViaCli, scanViaCli, suppressionViaCli, verifyViaCli } from "./cli.js";
-import { codeContext, findFinding, findings, readReport } from "./context.js";
+import { findFinding, findingContext, findings, readReport } from "./context.js";
 
 type JsonRecord = Record<string, unknown>;
 type RequestId = string | number;
@@ -69,7 +69,7 @@ const tools: ToolDefinition[] = [
   {
     name: "scan_repository",
     title: "Scan repository with RepoRook",
-    description: "Run deterministic SAST, secret, and dependency checks. Read-only except for .reporook evidence files. Distinguish partial coverage from a clean scan.",
+    description: "Run deterministic source, secret, dependency, infrastructure, workflow, and explicitly configured container-image checks. Read-only except for .reporook evidence files. Distinguish partial coverage from a clean scan.",
     inputSchema: {
       type: "object",
       properties: { path: { type: "string", description: "Absolute repository path" }, fail_on: severitySchema, require_scanners: { type: "boolean" } },
@@ -219,7 +219,7 @@ const tools: ToolDefinition[] = [
     async handler(input) {
       const report = await readReport(string(input, "report_path", { default: ".reporook/findings.json" }));
       const finding = findFinding(report, string(input, "finding_id"));
-      return { finding, context: await codeContext(string(input, "repository_path"), finding, integer(input, "context_lines", 8, 1, 30)), coverage_status: report.coverage_status, scan_receipt: report.scan_receipt };
+      return { finding, context: await findingContext(string(input, "repository_path"), finding, integer(input, "context_lines", 8, 1, 30)), coverage_status: report.coverage_status, scan_receipt: report.scan_receipt };
     },
   },
   {
@@ -245,7 +245,7 @@ const tools: ToolDefinition[] = [
       return {
         trust_status: "reporook-deterministic-finding",
         finding,
-        context: await codeContext(string(input, "repository_path"), finding, 12),
+        context: await findingContext(string(input, "repository_path"), finding, 12),
         instructions: [
           "Validate reachability and impact before changing code.",
           "Describe the risk in plain English and ask for approval before applying a patch.",

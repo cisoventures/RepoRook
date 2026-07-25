@@ -1,6 +1,8 @@
 failOn: high
 outputDir: .reporook
 semgrepConfig: p/default
+gitHistory: false
+containerImages: []
 paths:
   - .
 ignore:
@@ -16,3 +18,5 @@ scanners:
   npm-audit: true
   pip-audit: true
   osv-scanner: true
+  checkov: true
+  trivy-image: true

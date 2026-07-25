@@ -1,5 +1,5 @@
 name: RepoRook Security Scan
-description: Deterministic SAST, secrets, and dependency checks with SARIF and a single PR summary.
+description: Deterministic source, secret, dependency, infrastructure, workflow, and explicit container-image checks.
 author: RepoRook contributors
 branding:
   icon: shield

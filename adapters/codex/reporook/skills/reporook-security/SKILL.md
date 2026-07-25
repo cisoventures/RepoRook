@@ -1,6 +1,6 @@
 ---
 name: reporook-security
-description: Scan application code for vulnerabilities with RepoRook, explain findings in plain English, validate likely impact, prepare minimal fixes with approval, and verify remediation. Use for repository or diff security reviews, pre-release checks, threat-model setup, vulnerability triage, security patching, or whenever a user asks whether code is safe to ship. Do not use for scanning agent, skill, plugin, or MCP supply chains.
+description: Scan application code, dependencies, infrastructure, workflows, explicit container images, and opt-in Git history with RepoRook; explain findings in plain English, validate likely impact, prepare minimal fixes with approval, and verify remediation. Use for repository or diff security reviews, pre-release checks, threat-model setup, vulnerability triage, security patching, or whenever a user asks whether code is safe to ship. Do not use for scanning agent, skill, plugin, or MCP supply chains.
 ---
 
 # RepoRook Security
@@ -16,6 +16,7 @@ Use RepoRook as the deterministic evidence layer. Use the host's reasoning for c
 5. Treat exit `2` or failed coverage as a security-gate failure. If coverage is partial, say which checks did not run. Never describe an incomplete scan as clean or safe.
 6. Never print, copy, or place a detected secret in a prompt, report, patch, test, or log.
 7. Read `policy.summary` and each finding's policy disposition. Prioritize only `actionable` findings. Keep baseline, suppressed, and below-threshold findings visible as audit evidence without treating them as permission to edit.
+8. Treat `containerImages` and `gitHistory` as explicit scope. Never add an image, trigger a build or push, enable historical scanning, or supply registry credentials without the user's intent. Prefer immutable image digests. Historical and container findings do not have current-file context; do not fabricate one.
 
 ## Manage team policy safely
 
@@ -41,6 +42,8 @@ For each material finding, explain:
 - **What to do next:** propose one focused action without assuming the user understands security terminology.
 
 Start with the finding's deterministic `plain_summary`, then add only repository-specific context you can support with evidence. Dependency findings may be grouped by package in human-facing output, but preserve every advisory in the deterministic artifact.
+
+For Checkov findings, identify the infrastructure resource and failed safeguard; offline checks without scanner severity normalize to medium. For container findings, identify the exact configured image and affected package. For Git-history findings, distinguish the historical commit from the current working tree and never repeat secret material.
 
 Treat deterministic matches as evidence, not automatic proof of exploitability. Inspect surrounding code, authorization boundaries, configuration, and tests. If a native security reviewer such as Claude Security, Codex Security, or Cursor Security Review is available, use it for deeper validation after the RepoRook baseline and attribute its conclusions separately.
 

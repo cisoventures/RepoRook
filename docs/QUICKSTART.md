@@ -18,7 +18,7 @@ RepoRook supplies scanner evidence; your agent supplies contextual reasoning. Th
 npx --yes reporook@latest init .
 ```
 
-RepoRook detects supported source and dependency ecosystems, creates a fail-closed `reporook.yml`, and adds `.reporook/` to `.gitignore`. It will not replace an existing configuration unless you explicitly pass `--force`.
+RepoRook detects supported source, dependency, infrastructure, container-build, and workflow files, creates a fail-closed `reporook.yml`, and adds `.reporook/` to `.gitignore`. It will not replace an existing configuration unless you explicitly pass `--force`.
 
 ### 2. Check what your project needs
 
@@ -32,7 +32,9 @@ If anything is missing, print platform-specific installation commands:
 npx --yes reporook@latest setup
 ```
 
-`setup` does not install anything. Review and run only the commands for scanners that `doctor` marked as needed, then rerun `doctor`. Projects with OSV-supported dependency files may need OSV-Scanner in addition to the source, secret, Node, or Python scanners.
+`setup` does not install anything. Review and run only the commands for scanners that `doctor` marked as needed, then rerun `doctor`. Projects with OSV-supported dependency files may need OSV-Scanner; infrastructure and workflow files may need Checkov. Trivy is needed only after you explicitly list a container image.
+
+To scan a built image, add an explicit target such as `ghcr.io/example/app@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef` under `containerImages`. To inspect secrets in past commits, set `gitHistory: true`. Neither scope is inferred automatically; see [Infrastructure, container, and history scanning](INFRASTRUCTURE.md).
 
 ### 3. Connect your coding agent
 
@@ -124,7 +126,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: cisoventures/RepoRook@v0.5.0
+      - uses: cisoventures/RepoRook@v0.6.0
         with:
           fail-on: high
           mode: diff

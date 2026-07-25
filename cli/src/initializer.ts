@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { lstat, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { defaultConfig, scannerNames } from "./config.js";
+import { discoverCheckovFiles } from "./scanners/checkov.js";
 import type { InitializationResult, ProjectProfile, ProjectStack, RepoRookConfig } from "./types.js";
 
 const skippedDirectories = new Set([".git", ".reporook", ".venv", "build", "coverage", "dist", "node_modules", "target", "vendor", "venv"]);
@@ -88,11 +89,14 @@ export async function detectProject(targetInput: string): Promise<ProjectProfile
     return supported && !(isRoot(path) && (name === "package-lock.json" || name === "poetry.lock" || name === "uv.lock" || isRequirement(path)));
   });
   const code = found.files.some((path) => sourceExtensions.has(extension(path)));
+  const infrastructure = await discoverCheckovFiles(target);
+  if (infrastructure.length) stacks.push({ name: "Infrastructure / CI configuration", evidence: infrastructure.slice(0, 8) });
   const recommended = new Set<string>(["gitleaks"]);
   if (code) recommended.add("semgrep");
   if (rootPackageLock) recommended.add("npm-audit");
   if (rootPython) recommended.add("pip-audit");
   if (osv) recommended.add("osv-scanner");
+  if (infrastructure.length) recommended.add("checkov");
   return {
     target,
     stacks,
@@ -109,6 +113,10 @@ function yaml(config: RepoRookConfig): string {
     `semgrepConfig: ${config.semgrepConfig}`,
     `baseline: ${config.baselineFile}`,
     `suppressions: ${config.suppressionsFile}`,
+    `gitHistory: ${config.gitHistory}`,
+    ...(config.containerImages.length
+      ? ["containerImages:", ...config.containerImages.map((image) => `  - ${image}`)]
+      : ["containerImages: []"]),
     "pathPolicies:",
     "paths:",
     ...config.paths.map((path) => `  - ${path}`),

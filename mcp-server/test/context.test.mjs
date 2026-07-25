@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { codeContext } from "../dist/context.js";
+import { codeContext, findingContext } from "../dist/context.js";
 
 test("code context remains inside repository", async () => {
   const root = await mkdtemp(join(tmpdir(), "reporook-mcp-"));
@@ -16,4 +16,9 @@ test("code context remains inside repository", async () => {
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("external and historical findings do not pretend current source context exists", async () => {
+  const finding = { id: "rr-test", file: "container-image:example/app:1", line: 1, description: "x", remediation_hint: "y", metadata: { target_kind: "container-image" } };
+  assert.equal(await findingContext("/tmp/repository", finding), null);
 });
