@@ -142,14 +142,10 @@ export class CheckovScanner implements ScannerAdapter {
       const result = await runCommand("checkov", args, {
         cwd: temporary,
         env: {
-          BC_API_KEY: "",
-          CHECKOV_API_KEY: "",
-          CKV_API_KEY: "",
           DOWNLOAD_EXTERNAL_MODULES: "false",
-          GITHUB_PAT: "",
           LOG_LEVEL: "WARNING",
-          VCS_TOKEN: "",
         },
+        unsetEnv: ["BC_API_KEY", "CHECKOV_API_KEY", "CKV_API_KEY", "GITHUB_PAT", "VCS_TOKEN"],
       });
       if (result.missing) return unavailable(this.name, result.duration_ms, "checkov is not installed");
       try {

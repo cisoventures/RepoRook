@@ -163,6 +163,7 @@ test("Checkov and Trivy adapters treat scanner findings as completed runs", { sk
   const trivy = join(target, "trivy");
   await writeFile(checkov, `#!/bin/sh
 if [ "$1" = "--version" ]; then printf '%s\\n' '3.3.8'; exit 0; fi
+if [ "\${BC_API_KEY+x}" = "x" ]; then exit 5; fi
 printf '%s\\n' "$*" > "$REPOROOK_CHECKOV_TEST_ARGS"
 case " $* " in *" --skip-results-upload "*) exit 4 ;; esac
 printf '%s\\n' '{"check_type":"dockerfile","results":{"failed_checks":[{"check_id":"CKV_DOCKER_3","check_name":"Ensure that a user for the container has been created","file_abs_path":"${target}/Dockerfile","file_line_range":[1,2],"resource":"Dockerfile.test"}]}}'
@@ -176,7 +177,9 @@ exit 0
   await Promise.all([chmod(checkov, 0o755), chmod(trivy, 0o755), writeFile(join(target, "Dockerfile"), "FROM alpine:3.17\n")]);
   process.env.PATH = `${target}:${previousPath ?? ""}`;
   const previousCheckovArgsPath = process.env.REPOROOK_CHECKOV_TEST_ARGS;
+  const previousCheckovApiKey = process.env.BC_API_KEY;
   process.env.REPOROOK_CHECKOV_TEST_ARGS = checkovArgsPath;
+  process.env.BC_API_KEY = "must-not-reach-checkov";
   try {
     const config = structuredClone(defaultConfig);
     config.containerImages = ["example/app:1"];
@@ -194,6 +197,8 @@ exit 0
     process.env.PATH = previousPath;
     if (previousCheckovArgsPath === undefined) delete process.env.REPOROOK_CHECKOV_TEST_ARGS;
     else process.env.REPOROOK_CHECKOV_TEST_ARGS = previousCheckovArgsPath;
+    if (previousCheckovApiKey === undefined) delete process.env.BC_API_KEY;
+    else process.env.BC_API_KEY = previousCheckovApiKey;
     await rm(target, { recursive: true, force: true });
   }
 });
