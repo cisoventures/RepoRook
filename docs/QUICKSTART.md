@@ -126,7 +126,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: cisoventures/RepoRook@v0.6.0
+      - uses: cisoventures/RepoRook@v0.7.0
         with:
           fail-on: high
           mode: diff
