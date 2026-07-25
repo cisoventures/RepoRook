@@ -41,10 +41,11 @@ function reason(finding: Finding, priority: PriorityBand): string {
   return "This lower-severity finding is not the first release blocker, but it should be reviewed, documented, and fixed when the surrounding code is next changed.";
 }
 
-function relatedFindings(report: ScanReport, finding: Finding): string[] {
+function relatedFindings(report: ScanReport, finding: Finding, eligible: Set<string> | null): string[] {
   if (!dependencyScanners.has(finding.scanner) || !finding.metadata.package) return [];
   return report.findings
     .filter((candidate) => candidate.id !== finding.id
+      && (eligible === null || eligible.has(candidate.id))
       && candidate.scanner === finding.scanner
       && candidate.file === finding.file
       && candidate.metadata.package === finding.metadata.package)
@@ -53,7 +54,10 @@ function relatedFindings(report: ScanReport, finding: Finding): string[] {
 }
 
 export function prioritizeFindings(report: ScanReport): PrioritizationReport {
-  const ordered = [...report.findings].sort((left, right) =>
+  const eligible = report.policy
+    ? new Set(report.policy.findings.filter((item) => item.disposition === "actionable").map((item) => item.finding_id))
+    : null;
+  const ordered = report.findings.filter((finding) => eligible === null || eligible.has(finding.id)).sort((left, right) =>
     score(right) - score(left)
     || left.file.localeCompare(right.file)
     || left.line - right.line
@@ -72,7 +76,7 @@ export function prioritizeFindings(report: ScanReport): PrioritizationReport {
       title: finding.plain_summary,
       reason: reason(finding, priority),
       next_step: finding.remediation_hint,
-      related_finding_ids: relatedFindings(report, finding),
+      related_finding_ids: relatedFindings(report, finding, eligible),
     };
   });
   return {
@@ -80,6 +84,7 @@ export function prioritizeFindings(report: ScanReport): PrioritizationReport {
     tool: { name: "reporook", version: VERSION },
     generated_at: report.generated_at,
     coverage_status: report.coverage_status,
+    ...(report.policy ? { policy_summary: report.policy.summary } : {}),
     source_scan: report.scan_receipt,
     summary: {
       fix_now: priorities.filter((item) => item.priority === "fix-now").length,

@@ -32,4 +32,17 @@ set -e
   echo "priorities_file=$priorities"
 } >> "$GITHUB_OUTPUT"
 
+REPORT_PATH="$findings" node <<'NODE'
+const { appendFileSync, readFileSync } = require("node:fs");
+let policy = { summary: { actionable: 0, new: 0, suppressed: 0 } };
+try { policy = JSON.parse(readFileSync(process.env.REPORT_PATH, "utf8")).policy ?? policy; }
+catch { /* The scan exit code already records invalid or missing evidence. */ }
+appendFileSync(process.env.GITHUB_OUTPUT, [
+  `policy_actionable=${policy.summary?.actionable ?? 0}`,
+  `policy_new=${policy.summary?.new ?? 0}`,
+  `policy_suppressed=${policy.summary?.suppressed ?? 0}`,
+  "",
+].join("\n"));
+NODE
+
 exit 0

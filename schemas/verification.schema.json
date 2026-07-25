@@ -40,6 +40,20 @@
         "reminder": { "type": "string", "minLength": 1 }
       },
       "additionalProperties": false
+    },
+    "approval": {
+      "type": "object",
+      "required": ["status", "receipt"],
+      "properties": {
+        "status": { "enum": ["approved", "not-recorded"] },
+        "receipt": {
+          "oneOf": [
+            { "$ref": "https://reporook.dev/schemas/approval-receipt-1.0.json" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

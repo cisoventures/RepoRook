@@ -8,7 +8,7 @@ RepoRook develops in auditable vertical slices. Each milestone must keep determi
 | v0.2 Detection breadth | Complete | Complementary OSV-Scanner coverage for nested and non-Node/Python dependency ecosystems without duplicate advisory noise |
 | v0.3 Guided fixes | Complete | Project initialization, deterministic fix queue, finding-bound remediation plans, exact patch/test preview requirements, agent-host workflow, and same-scanner verification |
 | v0.4 Native agent experience | Implemented | First-class repository-local install, update, doctor, and safe uninstall plus consistent conversational workflows for Claude Code, Codex, Cursor, Copilot, Gemini, and Windsurf |
-| v0.5 Team policy | Planned | New-findings baselines, expiring suppressions with owners and reasons, path-specific policy, and durable approval evidence |
+| v0.5 Team policy | Implemented | New-findings baselines, expiring suppressions with owners and reasons, path-specific policy, and durable approval evidence |
 | v0.6 Infrastructure coverage | Planned | Terraform, Kubernetes, Docker, GitHub Actions, container, and optional Git-history secret checks through fixture-backed adapters |
 | v0.7 No-code service | Planned | Optional GitHub App, onboarding wizard, repository dashboard, approval queue, remediation pull requests, and a self-hosted deployment path |
 | v0.8 Scale and reliability | Planned | Incremental scans, caching, large-monorepo performance, retry/resume behavior, and organization policy management |

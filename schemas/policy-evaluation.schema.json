@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reporook.dev/schemas/policy-evaluation-1.0.json",
+  "title": "RepoRook Team Policy Evaluation",
+  "type": "object",
+  "required": ["evaluated_at", "policy_hash", "baseline", "suppressions", "path_policies", "summary", "findings"],
+  "properties": {
+    "evaluated_at": { "type": "string", "format": "date-time" },
+    "policy_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "baseline": {
+      "type": "object",
+      "required": ["configured", "path", "source_commit", "finding_count"],
+      "properties": {
+        "configured": { "type": "boolean" },
+        "path": { "type": "string" },
+        "source_commit": { "type": ["string", "null"] },
+        "finding_count": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "suppressions": {
+      "type": "object",
+      "required": ["configured", "path", "active", "expired"],
+      "properties": {
+        "configured": { "type": "boolean" },
+        "path": { "type": "string" },
+        "active": { "type": "integer", "minimum": 0 },
+        "expired": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "path_policies": {
+      "type": "object",
+      "additionalProperties": { "enum": ["critical", "high", "medium", "low"] }
+    },
+    "summary": {
+      "type": "object",
+      "required": ["new", "existing", "actionable", "below_threshold", "suppressed", "expired_suppressions"],
+      "properties": {
+        "new": { "type": "integer", "minimum": 0 },
+        "existing": { "type": "integer", "minimum": 0 },
+        "actionable": { "type": "integer", "minimum": 0 },
+        "below_threshold": { "type": "integer", "minimum": 0 },
+        "suppressed": { "type": "integer", "minimum": 0 },
+        "expired_suppressions": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "baseline", "disposition", "effective_fail_on", "matched_path_policy", "suppression", "expired_suppression"],
+        "properties": {
+          "finding_id": { "type": "string", "pattern": "^rr-[a-f0-9]{12}$" },
+          "baseline": { "enum": ["new", "existing", "not-configured"] },
+          "disposition": { "enum": ["actionable", "baseline", "suppressed", "below-threshold"] },
+          "effective_fail_on": { "enum": ["critical", "high", "medium", "low"] },
+          "matched_path_policy": { "type": ["string", "null"] },
+          "suppression": { "oneOf": [{ "$ref": "https://reporook.dev/schemas/suppressions-1.0.json#/properties/suppressions/items" }, { "type": "null" }] },
+          "expired_suppression": { "oneOf": [{ "$ref": "https://reporook.dev/schemas/suppressions-1.0.json#/properties/suppressions/items" }, { "type": "null" }] }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

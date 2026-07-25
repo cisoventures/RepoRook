@@ -15,6 +15,12 @@ export function renderTerminal(report: ScanReport): string {
   const lines: string[] = [];
   lines.push("RepoRook security scan");
   lines.push(`Coverage: ${report.coverage_status.toUpperCase()} | Findings: ${report.summary.total} | Commit: ${report.target.commit?.slice(0, 12) ?? "working tree"}`);
+  if (report.policy) {
+    lines.push(`Policy: ${report.policy.summary.actionable} actionable | ${report.policy.summary.new} new | ${report.policy.summary.existing} baseline | ${report.policy.summary.suppressed} suppressed`);
+    if (report.policy.summary.expired_suppressions) {
+      lines.push(`! ${report.policy.summary.expired_suppressions} suppression${report.policy.summary.expired_suppressions === 1 ? " has" : "s have"} expired; matching findings are evaluated normally.`);
+    }
+  }
   lines.push("");
   for (const scanner of report.scanners) {
     const mark = scanner.status === "ok" ? "✓" : scanner.applicable ? "!" : "-";
@@ -31,6 +37,7 @@ export function renderTerminal(report: ScanReport): string {
   }
   lines.push("");
   const ordered = sortBySeverity(report.findings);
+  const policyByFinding = new Map(report.policy?.findings.map((item) => [item.finding_id, item]) ?? []);
   const codeFindings = ordered.filter((finding) => !dependencyScanners.has(finding.scanner));
   const dependencyGroups = new Map<string, Finding[]>();
   for (const finding of ordered.filter((candidate) => dependencyScanners.has(candidate.scanner))) {
@@ -54,6 +61,8 @@ export function renderTerminal(report: ScanReport): string {
       lines.push(`  What this means: ${compact(finding.plain_summary)}`);
       lines.push(`  Where: ${finding.file}`);
       lines.push(`  Advisories: ${rules}${item.findings.length > 4 ? ` (+${item.findings.length - 4} more)` : ""}`);
+      const dispositions = [...new Set(item.findings.map((candidate) => policyByFinding.get(candidate.id)?.disposition).filter(Boolean))];
+      if (dispositions.length) lines.push(`  Policy: ${dispositions.join(", ")}`);
       lines.push(`  Next step: ${finding.remediation_hint}`);
       lines.push("");
       continue;
@@ -61,6 +70,11 @@ export function renderTerminal(report: ScanReport): string {
     lines.push(`[${labels[finding.severity]}] ${compact(finding.plain_summary)}`);
     lines.push(`  Where: ${finding.file}:${finding.line}`);
     lines.push(`  Risk ID: ${finding.id} (${finding.scanner})`);
+    const policy = policyByFinding.get(finding.id);
+    if (policy) {
+      const expiry = policy.suppression ? ` until ${policy.suppression.expires_at} (${policy.suppression.owner})` : "";
+      lines.push(`  Policy: ${policy.disposition}${expiry}`);
+    }
     lines.push(`  Scanner detail: ${compact(finding.description)}`);
     lines.push(`  Next step: ${finding.remediation_hint}`);
     lines.push("");
@@ -79,11 +93,25 @@ export function renderAgentPrompt(report: ScanReport, findingsPath = ".reporook/
   const first = priorities.priorities[0];
   const highest = first ? report.findings.find((finding) => finding.id === first.finding_id) : undefined;
   const priority = highest ? `${highest.severity} finding ${highest.id}` : "scanner coverage and the absence of findings";
+  const policyContext = report.policy
+    ? `Policy marked ${report.policy.summary.actionable} finding(s) actionable, ${report.policy.summary.existing} as baseline, and ${report.policy.summary.suppressed} as temporarily suppressed.`
+    : "No team-policy evaluation was recorded; treat findings at the configured severity threshold as actionable.";
+  if (!highest) {
+    return [
+      "Help me review this RepoRook security scan.",
+      "",
+      `Read the deterministic evidence in ${findingsPath}.`,
+      `The scan reported ${report.summary.total} finding(s) with ${report.coverage_status} coverage. ${policyContext}`,
+      "",
+      "There are no policy-actionable findings to enter the guided-fix queue. Do not modify code for baseline or suppressed findings unless I explicitly ask. Review expired suppressions and incomplete scanner coverage, if any.",
+      "Never print or repeat detected secret values.",
+    ].join("\n");
+  }
   return [
     "Help me review and safely resolve this RepoRook security scan.",
     "",
     `Read the deterministic evidence in ${findingsPath}.`,
-    `The scan reported ${report.summary.total} finding(s) with ${report.coverage_status} coverage. Start with the ${priority}.`,
+    `The scan reported ${report.summary.total} finding(s) with ${report.coverage_status} coverage. ${policyContext} Start with the ${priority}.`,
     "",
     "Work one finding at a time:",
     "1. Explain the risk and likely real-world impact in plain English.",
@@ -107,7 +135,9 @@ export function renderPrioritization(report: PrioritizationReport): string {
     lines.push("", "Coverage is incomplete. These priorities cover reported findings only; missing scanner evidence may change the order.");
   }
   if (!report.priorities.length) {
-    lines.push("", report.coverage_status === "complete" ? "No reported findings need prioritization." : "No findings were reported by the checks that completed.");
+    lines.push("", report.policy_summary
+      ? "No policy-actionable findings need prioritization. Baseline and active suppressed findings remain visible in findings.json."
+      : report.coverage_status === "complete" ? "No reported findings need prioritization." : "No findings were reported by the checks that completed.");
     return lines.join("\n");
   }
   const byId = new Map(report.priorities.map((item) => [item.finding_id, item]));
@@ -155,7 +185,7 @@ export function renderRemediationPlan(plan: RemediationPlan): string {
   ].join("\n");
 }
 
-export function renderRemediationPrompt(plan: RemediationPlan, planPath: string, findingsPath: string): string {
+export function renderRemediationPrompt(plan: RemediationPlan, planPath: string, findingsPath: string, proposalPath: string): string {
   return [
     `Help me safely resolve RepoRook finding ${plan.finding.id}.`,
     "",
@@ -167,6 +197,7 @@ export function renderRemediationPrompt(plan: RemediationPlan, planPath: string,
     "2. Explain the likely impact in plain English.",
     "3. Show the smallest exact diff, every file it changes, the behavior impact, and the focused plus relevant test commands.",
     "4. Ask me to approve that exact proposal. Do not treat approval of a different plan, file list, dependency version, or diff as permission.",
+    `   Record the final exact proposal in ${proposalPath}; approval will hash its diff and test plan.`,
     "5. If the repository changed after the source scan beyond this proposal, rescan and prepare a new plan.",
     "",
     "After approval, apply only the approved patch. Stop and ask again if scope changes. Run the approved tests, then run:",
@@ -186,6 +217,7 @@ export function renderVerification(report: VerificationReport): string {
     `RepoRook verification: ${heading}`,
     `Finding: ${report.finding_id}`,
     `Reason: ${report.reason}`,
+    `Approval evidence: ${report.approval?.status === "approved" ? `${report.approval.receipt?.approval_id} approved by ${report.approval.receipt?.approved_by}` : "not recorded"}`,
     "Functional tests: not recorded by RepoRook. Run and report the focused and relevant project tests separately.",
     report.scanner_resolution === "passed"
       ? "Scanner resolution passed, but call the fix verified only after the relevant tests also pass."

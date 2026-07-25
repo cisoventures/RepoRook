@@ -30,6 +30,10 @@ function validationQuestions(finding: Finding): string[] {
 export function createRemediationPlan(report: ScanReport, findingId: string): RemediationPlan {
   const finding = report.findings.find((candidate) => candidate.id === findingId);
   if (!finding) throw new Error(`Finding not found: ${findingId}`);
+  const policy = report.policy?.findings.find((candidate) => candidate.finding_id === findingId);
+  if (policy && policy.disposition !== "actionable") {
+    throw new Error(`Finding ${findingId} is ${policy.disposition} under team policy and is not actionable`);
+  }
   const priority = prioritizeFindings(report).priorities.find((candidate) => candidate.finding_id === findingId);
   if (!priority) throw new Error(`Priority not found for finding: ${findingId}`);
   const identity = [

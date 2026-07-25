@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline";
-import { prioritizeViaCli, remediationPlanViaCli, scanViaCli, verifyViaCli } from "./cli.js";
+import { approvalViaCli, baselineViaCli, prioritizeViaCli, remediationPlanViaCli, scanViaCli, suppressionViaCli, verifyViaCli } from "./cli.js";
 import { codeContext, findFinding, findings, readReport } from "./context.js";
 
 type JsonRecord = Record<string, unknown>;
@@ -119,6 +119,78 @@ const tools: ToolDefinition[] = [
     },
   },
   {
+    name: "get_policy_status",
+    title: "Read RepoRook team-policy status",
+    description: "Read baseline, suppression, path-policy, and actionable-finding status from an existing deterministic scan. Does not rescan or modify files.",
+    inputSchema: {
+      type: "object",
+      properties: { report_path: { type: "string", default: ".reporook/findings.json" } },
+      additionalProperties: false,
+    },
+    async handler(input) {
+      const report = await readReport(string(input, "report_path", { default: ".reporook/findings.json" }));
+      return { coverage_status: report.coverage_status, finding_summary: report.summary, policy: report.policy ?? null };
+    },
+  },
+  {
+    name: "create_findings_baseline",
+    title: "Create an approved RepoRook baseline",
+    description: "Accept every finding in an existing scan as the reviewed baseline. This changes future gating and writes a repository policy file; call only after the user explicitly approves that exact action.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        repository_path: { type: "string" },
+        report_path: { type: "string", default: ".reporook/findings.json" },
+        output_path: { type: "string", default: "reporook-baseline.json" },
+        confirmed: { type: "boolean", description: "True only after explicit user approval" },
+      },
+      required: ["repository_path", "confirmed"],
+      additionalProperties: false,
+    },
+    async handler(input) {
+      if (optionalBoolean(input, "confirmed") !== true) throw new Error("Creating a baseline requires confirmed=true after explicit user approval");
+      const repositoryPath = string(input, "repository_path");
+      return await baselineViaCli(
+        repositoryPath,
+        resolve(repositoryPath, string(input, "report_path", { default: ".reporook/findings.json" })),
+        string(input, "output_path", { default: "reporook-baseline.json" }),
+      );
+    },
+  },
+  {
+    name: "suppress_finding",
+    title: "Record an owned expiring suppression",
+    description: "Temporarily suppress one deterministic finding with an accountable owner, reason, and expiry. Writes a repository policy file and requires explicit user confirmation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        repository_path: { type: "string" },
+        finding_id: { type: "string" },
+        report_path: { type: "string", default: ".reporook/findings.json" },
+        output_path: { type: "string", default: "reporook-suppressions.json" },
+        owner: { type: "string" },
+        reason: { type: "string" },
+        expires: { type: "string", description: "Future ISO timestamp or YYYY-MM-DD" },
+        confirmed: { type: "boolean", description: "True only after explicit user approval" },
+      },
+      required: ["repository_path", "finding_id", "owner", "reason", "expires", "confirmed"],
+      additionalProperties: false,
+    },
+    async handler(input) {
+      if (optionalBoolean(input, "confirmed") !== true) throw new Error("Suppressing a finding requires confirmed=true after explicit user approval");
+      const repositoryPath = string(input, "repository_path");
+      return await suppressionViaCli(
+        repositoryPath,
+        string(input, "finding_id"),
+        resolve(repositoryPath, string(input, "report_path", { default: ".reporook/findings.json" })),
+        string(input, "output_path", { default: "reporook-suppressions.json" }),
+        string(input, "owner"),
+        string(input, "reason"),
+        string(input, "expires"),
+      );
+    },
+  },
+  {
     name: "list_findings",
     title: "List RepoRook findings",
     description: "Read an existing findings artifact and return deterministic findings plus coverage status. Does not rescan or modify code.",
@@ -153,7 +225,7 @@ const tools: ToolDefinition[] = [
   {
     name: "get_remediation_context",
     title: "Prepare safe remediation context",
-    description: "Return a focused, read-only patch brief. The host agent must explain the change, request human approval, make a minimal patch, add regression evidence, and then call verify_fix.",
+    description: "Return a focused, read-only patch brief for a policy-actionable finding. The host agent must explain the change, request human approval, make a minimal patch, add regression evidence, and then call verify_fix.",
     inputSchema: {
       type: "object",
       properties: { finding_id: { type: "string" }, report_path: { type: "string", default: ".reporook/findings.json" }, repository_path: { type: "string" } },
@@ -163,6 +235,13 @@ const tools: ToolDefinition[] = [
     async handler(input) {
       const report = await readReport(string(input, "report_path", { default: ".reporook/findings.json" }));
       const finding = findFinding(report, string(input, "finding_id"));
+      const policyRecord = report.policy === undefined ? null : object(report.policy, "report policy");
+      const policy = (policyRecord && Array.isArray(policyRecord.findings) ? policyRecord.findings : [])
+        .map((candidate) => object(candidate, "finding policy"))
+        .find((candidate) => candidate.finding_id === finding.id);
+      if (policy && policy.disposition !== "actionable") {
+        throw new Error(`Finding ${finding.id} is ${String(policy.disposition)} under team policy and is not actionable`);
+      }
       return {
         trust_status: "reporook-deterministic-finding",
         finding,
@@ -210,6 +289,34 @@ const tools: ToolDefinition[] = [
       const previousReportPath = resolve(repositoryPath, string(input, "previous_report_path", { default: ".reporook/findings.json" }));
       const requireScanners = optionalBoolean(input, "require_scanners") ?? true;
       return await verifyViaCli(repositoryPath, findingId, previousReportPath, requireScanners);
+    },
+  },
+  {
+    name: "record_remediation_approval",
+    title: "Record exact remediation approval",
+    description: "Hash the exact remediation plan, unified diff, files, and test plan into a durable approval receipt. Call only after the named approver explicitly approves that exact proposal.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        repository_path: { type: "string" },
+        finding_id: { type: "string" },
+        approved_by: { type: "string" },
+        reason: { type: "string" },
+        proposal_path: { type: "string" },
+        confirmed: { type: "boolean", description: "True only after approval of the exact proposal" },
+      },
+      required: ["repository_path", "finding_id", "approved_by", "reason", "confirmed"],
+      additionalProperties: false,
+    },
+    async handler(input) {
+      if (optionalBoolean(input, "confirmed") !== true) throw new Error("Recording approval requires confirmed=true after approval of the exact proposal");
+      return await approvalViaCli(
+        string(input, "repository_path"),
+        string(input, "finding_id"),
+        string(input, "approved_by"),
+        string(input, "reason"),
+        optionalString(input, "proposal_path"),
+      );
     },
   },
   {
@@ -261,7 +368,7 @@ async function handle(message: unknown): Promise<void> {
         protocolVersion: protocolVersions.includes(requested) ? requested : latestProtocolVersion,
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: "reporook", version: VERSION },
-        instructions: "Use RepoRook findings as deterministic evidence. State incomplete coverage, prioritize reported risk, prepare one finding-bound remediation plan, protect secrets, show the exact patch and test plan for approval, and verify with tests plus the original scanner.",
+        instructions: "Use RepoRook findings as deterministic evidence. State incomplete coverage, respect baseline and suppression policy, prioritize only actionable findings, protect secrets, show the exact patch and test plan for approval, record a durable approval receipt only after explicit approval, and verify with tests plus the original scanner.",
       });
       return;
     }
