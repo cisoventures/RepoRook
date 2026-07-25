@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reporook.dev/schemas/suppressions-1.0.json",
+  "title": "RepoRook Finding Suppressions",
+  "type": "object",
+  "required": ["schema_version", "suppressions"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "suppressions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "finding_id", "owner", "reason", "expires_at", "created_at"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^rrs-[a-f0-9]{12}$" },
+          "finding_id": { "type": "string", "pattern": "^rr-[a-f0-9]{12}$" },
+          "owner": { "type": "string", "minLength": 1 },
+          "reason": { "type": "string", "minLength": 1 },
+          "expires_at": { "type": "string", "format": "date-time" },
+          "created_at": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

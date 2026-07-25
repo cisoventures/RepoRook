@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reporook.dev/schemas/approval-receipt-1.0.json",
+  "title": "RepoRook Remediation Approval Receipt",
+  "type": "object",
+  "required": ["schema_version", "tool", "approval_id", "status", "approved_at", "approved_by", "reason", "finding_id", "plan_id", "source_scan", "bindings", "invalidation_rule"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "tool": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": { "name": { "const": "reporook" }, "version": { "type": "string" } },
+      "additionalProperties": false
+    },
+    "approval_id": { "type": "string", "pattern": "^rra-[a-f0-9]{12}$" },
+    "status": { "const": "approved" },
+    "approved_at": { "type": "string", "format": "date-time" },
+    "approved_by": { "type": "string", "minLength": 1 },
+    "reason": { "type": "string", "minLength": 1 },
+    "finding_id": { "type": "string", "pattern": "^rr-[a-f0-9]{12}$" },
+    "plan_id": { "type": "string", "pattern": "^rrp-[a-f0-9]{12}$" },
+    "source_scan": { "$ref": "https://reporook.dev/schemas/findings-1.0.json#/$defs/receipt" },
+    "bindings": {
+      "type": "object",
+      "required": ["plan_hash", "proposal_hash", "patch_hash", "test_plan_hash", "files"],
+      "properties": {
+        "plan_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "proposal_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "patch_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "test_plan_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "files": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+      },
+      "additionalProperties": false
+    },
+    "invalidation_rule": { "type": "string", "minLength": 1 }
+  },
+  "additionalProperties": false
+}

@@ -5,7 +5,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { prioritizeFindings } from "./prioritization.js";
 import { renderAgentPrompt, renderRemediationPrompt } from "./render.js";
 import { toSarif } from "./sarif.js";
-import type { PrioritizationReport, RemediationPlan, ScanReport, VerificationReport } from "./types.js";
+import type { ApprovalReceipt, FindingBaseline, PrioritizationReport, RemediationPlan, ScanReport, SuppressionFile, VerificationReport } from "./types.js";
 
 async function writeJson(path: string, value: unknown): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
@@ -84,18 +84,48 @@ export async function writePrioritizationArtifact(target: string, report: Priori
 export async function writeRemediationArtifacts(
   target: string,
   plan: RemediationPlan,
-  options: { planOutput: string; promptOutput: string; findingsReference: string },
-): Promise<{ planPath: string; promptPath: string }> {
+  options: { planOutput: string; promptOutput: string; proposalOutput: string; findingsReference: string },
+): Promise<{ planPath: string; promptPath: string; proposalPath: string }> {
   const planPath = artifactPath(target, options.planOutput);
   const promptPath = artifactPath(target, options.promptOutput);
-  if (planPath === promptPath) throw new Error("Remediation plan and prompt paths must be distinct");
+  const proposalPath = artifactPath(target, options.proposalOutput);
+  if (new Set([planPath, promptPath, proposalPath]).size !== 3) throw new Error("Remediation plan, prompt, and proposal paths must be distinct");
   await writeJson(planPath, plan);
-  await writeText(promptPath, renderRemediationPrompt(plan, options.planOutput, options.findingsReference));
-  return { planPath, promptPath };
+  await writeJson(proposalPath, {
+    schema_version: "1.0",
+    plan_id: plan.plan_id,
+    finding_id: plan.finding.id,
+    created_at: plan.generated_at,
+    risk_explanation: "REPLACE with the validated risk in plain English",
+    behavior_impact: "REPLACE with the expected behavior change and compatibility impact",
+    files: [plan.finding.file],
+    patch: "REPLACE with the exact unified diff",
+    test_plan: ["REPLACE with the focused regression test command", "REPLACE with relevant project test commands"],
+  });
+  await writeText(promptPath, renderRemediationPrompt(plan, options.planOutput, options.findingsReference, options.proposalOutput));
+  return { planPath, promptPath, proposalPath };
 }
 
 export async function writeVerificationArtifact(target: string, report: VerificationReport, output: string): Promise<string> {
   const path = artifactPath(target, output);
   await writeJson(path, report);
+  return path;
+}
+
+export async function writeFindingBaselineArtifact(target: string, baseline: FindingBaseline, output: string): Promise<string> {
+  const path = artifactPath(target, output);
+  await writeJson(path, baseline);
+  return path;
+}
+
+export async function writeSuppressionArtifact(target: string, suppressions: SuppressionFile, output: string): Promise<string> {
+  const path = artifactPath(target, output);
+  await writeJson(path, suppressions);
+  return path;
+}
+
+export async function writeApprovalArtifact(target: string, receipt: ApprovalReceipt, output: string): Promise<string> {
+  const path = artifactPath(target, output);
+  await writeJson(path, receipt);
   return path;
 }

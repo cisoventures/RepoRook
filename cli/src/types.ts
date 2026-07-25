@@ -52,6 +52,81 @@ export interface ScanReceipt {
   changed_files?: string[];
 }
 
+export interface FindingBaselineEntry {
+  finding_id: string;
+  fingerprint: string;
+  scanner: string;
+  rule: string;
+  severity: Severity;
+  file: string;
+}
+
+export interface FindingBaseline {
+  schema_version: "1.0";
+  tool: { name: "reporook"; version: string };
+  created_at: string;
+  source: {
+    commit: string | null;
+    config_hash: string;
+    generated_at: string;
+  };
+  findings: FindingBaselineEntry[];
+}
+
+export interface FindingSuppression {
+  id: string;
+  finding_id: string;
+  owner: string;
+  reason: string;
+  expires_at: string;
+  created_at: string;
+}
+
+export interface SuppressionFile {
+  schema_version: "1.0";
+  suppressions: FindingSuppression[];
+}
+
+export type BaselineDisposition = "new" | "existing" | "not-configured";
+export type PolicyDisposition = "actionable" | "baseline" | "suppressed" | "below-threshold";
+
+export interface FindingPolicyResult {
+  finding_id: string;
+  baseline: BaselineDisposition;
+  disposition: PolicyDisposition;
+  effective_fail_on: Severity;
+  matched_path_policy: string | null;
+  suppression: FindingSuppression | null;
+  expired_suppression: FindingSuppression | null;
+}
+
+export interface PolicyEvaluation {
+  evaluated_at: string;
+  policy_hash: string;
+  baseline: {
+    configured: boolean;
+    path: string;
+    source_commit: string | null;
+    finding_count: number;
+  };
+  suppressions: {
+    configured: boolean;
+    path: string;
+    active: number;
+    expired: number;
+  };
+  path_policies: Record<string, Severity>;
+  summary: {
+    new: number;
+    existing: number;
+    actionable: number;
+    below_threshold: number;
+    suppressed: number;
+    expired_suppressions: number;
+  };
+  findings: FindingPolicyResult[];
+}
+
 export interface ScanReport {
   schema_version: "1.0";
   tool: { name: "reporook"; version: string };
@@ -61,6 +136,7 @@ export interface ScanReport {
   summary: Record<Severity | "total", number>;
   scanners: ScannerStatus[];
   findings: Finding[];
+  policy?: PolicyEvaluation;
   scan_receipt: ScanReceipt;
 }
 
@@ -80,6 +156,10 @@ export interface VerificationReport {
   functional_tests: {
     status: "not-recorded";
     reminder: string;
+  };
+  approval?: {
+    status: "approved" | "not-recorded";
+    receipt: ApprovalReceipt | null;
   };
 }
 
@@ -106,6 +186,7 @@ export interface PrioritizationReport {
   tool: { name: "reporook"; version: string };
   generated_at: string;
   coverage_status: CoverageStatus;
+  policy_summary?: PolicyEvaluation["summary"];
   source_scan: ScanReceipt;
   summary: {
     fix_now: number;
@@ -152,6 +233,39 @@ export interface RemediationPlan {
   };
 }
 
+export interface RemediationProposal {
+  schema_version: "1.0";
+  plan_id: string;
+  finding_id: string;
+  created_at: string;
+  risk_explanation: string;
+  behavior_impact: string;
+  files: string[];
+  patch: string;
+  test_plan: string[];
+}
+
+export interface ApprovalReceipt {
+  schema_version: "1.0";
+  tool: { name: "reporook"; version: string };
+  approval_id: string;
+  status: "approved";
+  approved_at: string;
+  approved_by: string;
+  reason: string;
+  finding_id: string;
+  plan_id: string;
+  source_scan: ScanReceipt;
+  bindings: {
+    plan_hash: string;
+    proposal_hash: string;
+    patch_hash: string;
+    test_plan_hash: string;
+    files: string[];
+  };
+  invalidation_rule: string;
+}
+
 export interface ProjectStack {
   name: string;
   evidence: string[];
@@ -181,6 +295,9 @@ export interface RepoRookConfig {
   ignore: string[];
   requiredScanners: string[];
   scanners: Record<string, boolean>;
+  baselineFile: string;
+  suppressionsFile: string;
+  pathPolicies: Record<string, Severity>;
 }
 
 export interface ScanOptions {

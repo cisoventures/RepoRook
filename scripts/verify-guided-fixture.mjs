@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -17,6 +17,7 @@ const result = spawnSync(process.execPath, [resolve(root, "cli/dist/index.js"), 
 if (result.status !== 0) throw new Error(`Could not prepare fixture remediation plan: ${result.stderr}`);
 const directory = resolve(target, `.reporook/remediations/${first.finding_id}`);
 const plan = JSON.parse(await readFile(resolve(directory, "plan.json"), "utf8"));
+const proposalPath = resolve(directory, "proposal.json");
 const prompt = await readFile(resolve(directory, "fix-prompt.txt"), "utf8");
 if (plan.tool?.version !== packageVersion || plan.finding?.id !== first.finding_id || plan.approval?.status !== "pending") {
   throw new Error("The fixture remediation plan is not bound to the selected finding with pending approval");
@@ -27,4 +28,34 @@ if (!plan.approval.binds_to?.includes("exact-patch") || !plan.approval.binds_to?
 if (!/exact diff/i.test(prompt) || !/Do not treat approval/i.test(prompt)) {
   throw new Error("The fixture fix prompt does not enforce exact-proposal approval");
 }
-process.stdout.write(`Verified guided fix queue and approval-bound plan for ${first.finding_id}.\n`);
+const proposal = {
+  schema_version: "1.0",
+  plan_id: plan.plan_id,
+  finding_id: plan.finding.id,
+  created_at: new Date().toISOString(),
+  risk_explanation: "Fixture-only proposal proving durable approval binding.",
+  behavior_impact: "The fixture demonstration changes only its declared vulnerable file.",
+  files: [plan.finding.file],
+  patch: [
+    `diff --git a/${plan.finding.file} b/${plan.finding.file}`,
+    `--- a/${plan.finding.file}`,
+    `+++ b/${plan.finding.file}`,
+    "@@ -1 +1 @@",
+    "-fixture-vulnerable",
+    "+fixture-reviewed",
+  ].join("\n"),
+  test_plan: ["npm run fixture:verify"],
+};
+await writeFile(proposalPath, `${JSON.stringify(proposal, null, 2)}\n`);
+const approvalResult = spawnSync(process.execPath, [
+  resolve(root, "cli/dist/index.js"), "approve", first.finding_id, target,
+  "--approved-by", "fixture-reviewer",
+  "--reason", "Reviewed the exact fixture patch and verification plan.",
+  "--quiet",
+], { encoding: "utf8" });
+if (approvalResult.status !== 0) throw new Error(`Could not record fixture approval: ${approvalResult.stderr}`);
+const approval = JSON.parse(await readFile(resolve(directory, "approval.json"), "utf8"));
+if (approval.finding_id !== first.finding_id || approval.approved_by !== "fixture-reviewer" || !approval.bindings?.patch_hash) {
+  throw new Error("The fixture approval receipt is not durably bound to the proposal");
+}
+process.stdout.write(`Verified guided fix queue, exact proposal, and durable approval for ${first.finding_id}.\n`);

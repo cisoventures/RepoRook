@@ -4,13 +4,15 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs, stringFlag } from "./args.js";
-import { artifactPath, writeArtifacts, writePrioritizationArtifact, writeRemediationArtifacts, writeVerificationArtifact } from "./artifacts.js";
+import { artifactPath, writeApprovalArtifact, writeArtifacts, writeFindingBaselineArtifact, writePrioritizationArtifact, writeRemediationArtifacts, writeSuppressionArtifact, writeVerificationArtifact } from "./artifacts.js";
+import { approvalMatches, createApprovalReceipt, parseApprovalReceipt } from "./approval.js";
 import { loadConfig } from "./config.js";
 import { diagnose, renderDoctor } from "./doctor.js";
 import { requiredScannerFailure, scanExitCode, scanRepository, VERSION } from "./engine.js";
 import { initializeRepository, renderInitialization } from "./initializer.js";
 import { integrationExitCode, manageIntegrations, parseIntegrationHosts, renderIntegration, type IntegrationOperation } from "./integrations.js";
 import { prioritizeFindings } from "./prioritization.js";
+import { createFindingBaseline, createFindingSuppression, readSuppressionFile } from "./policy.js";
 import { createRemediationPlan } from "./remediation.js";
 import { renderFinding, renderPrioritization, renderRemediationPlan, renderTerminal, renderVerification } from "./render.js";
 import { toSarif } from "./sarif.js";
@@ -22,6 +24,8 @@ export { scanRepository, toSarif };
 export { VERSION };
 export { verifyFindingResolution };
 export { initializeRepository, prioritizeFindings, createRemediationPlan };
+export { createFindingBaseline, createFindingSuppression };
+export { createApprovalReceipt };
 export { manageIntegrations, parseIntegrationHosts };
 export { detectProject } from "./initializer.js";
 export * from "./types.js";
@@ -32,6 +36,9 @@ Usage:
   reporook scan [path] [--fail-on high] [--changed BASE] [--head HEAD]
   reporook init [path] [--force]
   reporook prioritize [path] [--input .reporook/findings.json]
+  reporook baseline [path] [--input .reporook/findings.json]
+  reporook suppress <finding-id> [path] --owner OWNER --reason REASON --expires DATE
+  reporook approve <finding-id> [path] --approved-by NAME --reason TEXT
   reporook plan <finding-id> [path] [--input .reporook/findings.json]
   reporook verify <finding-id> [path] [--input .reporook/findings.json]
   reporook explain <finding-id> [--input .reporook/findings.json]
@@ -56,12 +63,24 @@ Scan options:
 Verify options:
   --input PATH           Baseline findings JSON (default: .reporook/findings.json)
   --verification-output  Verification receipt output
+  --approval PATH        Validate and attach a durable approval receipt when present
 
 Guided-fix options:
   --input PATH           Baseline findings JSON
   --output PATH          Priorities or remediation-plan JSON output
   --prompt-output PATH   Remediation prompt output
+  --proposal-output PATH Exact proposal template output
   --force                Replace an existing RepoRook configuration during init
+
+Team-policy options:
+  --input PATH           Findings JSON used to create a baseline or suppression
+  --output PATH          Baseline or suppression JSON output
+  --owner OWNER          Person or team accountable for a suppression
+  --reason TEXT          Auditable reason for accepting the finding temporarily
+  --expires DATE         Future ISO timestamp or YYYY-MM-DD expiry
+  --proposal PATH        Exact remediation proposal JSON
+  --approved-by NAME     Human or accountable identity granting approval
+  --approval-output PATH Durable approval receipt output
 
 Agent integration options:
   --host HOSTS           Comma-separated hosts or all (default: all)
@@ -127,6 +146,87 @@ async function runPrioritize(parsed: ReturnType<typeof parseArgs>): Promise<numb
   return 0;
 }
 
+async function runBaseline(parsed: ReturnType<typeof parseArgs>): Promise<number> {
+  const target = resolve(parsed.positionals[0] ?? ".");
+  const loaded = await loadConfig(target, stringFlag(parsed.flags, "config"));
+  const input = stringFlag(parsed.flags, "input") ?? `${loaded.config.outputDir}/findings.json`;
+  const { report, path: inputPath } = await baselineReport(target, input);
+  if (report.coverage_status !== "complete") throw new Error("Refusing to create a baseline from incomplete scanner coverage");
+  const baseline = createFindingBaseline(report);
+  const output = stringFlag(parsed.flags, "output") ?? loaded.config.baselineFile;
+  const outputPath = artifactPath(target, output);
+  if (outputPath === inputPath) throw new Error("Baseline must not overwrite the findings artifact");
+  await writeFindingBaselineArtifact(target, baseline, output);
+  const format = stringFlag(parsed.flags, "format") ?? "terminal";
+  if (!["terminal", "json"].includes(format)) throw new Error("baseline format must be terminal or json");
+  if (parsed.flags.quiet !== true) {
+    process.stdout.write(format === "json"
+      ? `${JSON.stringify(baseline, null, 2)}\n`
+      : `RepoRook baseline created\nFindings accepted as existing: ${baseline.findings.length}\nArtifact: ${outputPath}\n`);
+  }
+  return 0;
+}
+
+async function runSuppress(parsed: ReturnType<typeof parseArgs>): Promise<number> {
+  const findingId = parsed.positionals[0];
+  if (!findingId || !/^rr-[a-f0-9]{12}$/.test(findingId)) throw new Error("suppress requires a valid finding ID such as rr-0123456789ab");
+  const target = resolve(parsed.positionals[1] ?? ".");
+  const loaded = await loadConfig(target, stringFlag(parsed.flags, "config"));
+  const input = stringFlag(parsed.flags, "input") ?? `${loaded.config.outputDir}/findings.json`;
+  const { report, path: inputPath } = await baselineReport(target, input);
+  const owner = stringFlag(parsed.flags, "owner");
+  const reason = stringFlag(parsed.flags, "reason");
+  const expires = stringFlag(parsed.flags, "expires");
+  if (!owner || !reason || !expires) throw new Error("suppress requires --owner, --reason, and --expires");
+  const suppression = createFindingSuppression(report, findingId, owner, reason, expires);
+  const output = stringFlag(parsed.flags, "output") ?? loaded.config.suppressionsFile;
+  const outputPath = artifactPath(target, output);
+  if (outputPath === inputPath) throw new Error("Suppressions must not overwrite the findings artifact");
+  const existing = await readSuppressionFile(target, output);
+  const suppressions = {
+    schema_version: "1.0" as const,
+    suppressions: [...existing.suppressions.filter((item) => item.finding_id !== findingId), suppression]
+      .sort((left, right) => left.id.localeCompare(right.id)),
+  };
+  await writeSuppressionArtifact(target, suppressions, output);
+  const format = stringFlag(parsed.flags, "format") ?? "terminal";
+  if (!["terminal", "json"].includes(format)) throw new Error("suppress format must be terminal or json");
+  if (parsed.flags.quiet !== true) {
+    process.stdout.write(format === "json"
+      ? `${JSON.stringify(suppression, null, 2)}\n`
+      : `RepoRook suppression recorded\nFinding: ${findingId}\nOwner: ${suppression.owner}\nExpires: ${suppression.expires_at}\nArtifact: ${outputPath}\n`);
+  }
+  return 0;
+}
+
+async function runApprove(parsed: ReturnType<typeof parseArgs>): Promise<number> {
+  const findingId = parsed.positionals[0];
+  if (!findingId || !/^rr-[a-f0-9]{12}$/.test(findingId)) throw new Error("approve requires a valid finding ID such as rr-0123456789ab");
+  const target = resolve(parsed.positionals[1] ?? ".");
+  const loaded = await loadConfig(target, stringFlag(parsed.flags, "config"));
+  const directory = `${loaded.config.outputDir}/remediations/${findingId}`;
+  const planPath = artifactPath(target, stringFlag(parsed.flags, "plan-input") ?? `${directory}/plan.json`);
+  const proposalPath = artifactPath(target, stringFlag(parsed.flags, "proposal") ?? `${directory}/proposal.json`);
+  const approvedBy = stringFlag(parsed.flags, "approved-by");
+  const reason = stringFlag(parsed.flags, "reason");
+  if (!approvedBy || !reason) throw new Error("approve requires --approved-by and --reason");
+  const plan = JSON.parse(await readFile(planPath, "utf8")) as unknown;
+  const proposal = JSON.parse(await readFile(proposalPath, "utf8")) as unknown;
+  const receipt = createApprovalReceipt(plan, proposal, approvedBy, reason);
+  const output = stringFlag(parsed.flags, "approval-output") ?? `${directory}/approval.json`;
+  const outputPath = artifactPath(target, output);
+  if ([planPath, proposalPath].includes(outputPath)) throw new Error("Approval receipt must not overwrite the plan or proposal");
+  await writeApprovalArtifact(target, receipt, output);
+  const format = stringFlag(parsed.flags, "format") ?? "terminal";
+  if (!["terminal", "json"].includes(format)) throw new Error("approve format must be terminal or json");
+  if (parsed.flags.quiet !== true) {
+    process.stdout.write(format === "json"
+      ? `${JSON.stringify(receipt, null, 2)}\n`
+      : `RepoRook approval recorded\nApproval: ${receipt.approval_id}\nFinding: ${findingId}\nApproved by: ${receipt.approved_by}\nArtifact: ${outputPath}\n${receipt.invalidation_rule}\n`);
+  }
+  return 0;
+}
+
 async function runPlan(parsed: ReturnType<typeof parseArgs>): Promise<number> {
   const findingId = parsed.positionals[0];
   if (!findingId || !/^rr-[a-f0-9]{12}$/.test(findingId)) throw new Error("plan requires a valid finding ID such as rr-0123456789ab");
@@ -138,13 +238,14 @@ async function runPlan(parsed: ReturnType<typeof parseArgs>): Promise<number> {
   const directory = `${loaded.config.outputDir}/remediations/${findingId}`;
   const planOutput = stringFlag(parsed.flags, "output") ?? `${directory}/plan.json`;
   const promptOutput = stringFlag(parsed.flags, "prompt-output") ?? `${directory}/fix-prompt.txt`;
-  if ([artifactPath(target, planOutput), artifactPath(target, promptOutput)].includes(inputPath)) {
+  const proposalOutput = stringFlag(parsed.flags, "proposal-output") ?? `${directory}/proposal.json`;
+  if ([artifactPath(target, planOutput), artifactPath(target, promptOutput), artifactPath(target, proposalOutput)].includes(inputPath)) {
     throw new Error("Remediation artifacts must not overwrite the baseline findings artifact");
   }
-  const artifacts = await writeRemediationArtifacts(target, plan, { planOutput, promptOutput, findingsReference: input });
+  const artifacts = await writeRemediationArtifacts(target, plan, { planOutput, promptOutput, proposalOutput, findingsReference: input });
   const format = stringFlag(parsed.flags, "format") ?? "terminal";
   if (!["terminal", "json"].includes(format)) throw new Error("plan format must be terminal or json");
-  if (parsed.flags.quiet !== true) process.stdout.write(format === "json" ? `${JSON.stringify(plan, null, 2)}\n` : `${renderRemediationPlan(plan)}\n\nArtifacts: ${artifacts.planPath}, ${artifacts.promptPath}\n`);
+  if (parsed.flags.quiet !== true) process.stdout.write(format === "json" ? `${JSON.stringify(plan, null, 2)}\n` : `${renderRemediationPlan(plan)}\n\nArtifacts: ${artifacts.planPath}, ${artifacts.promptPath}, ${artifacts.proposalPath}\n`);
   return 0;
 }
 
@@ -175,6 +276,24 @@ async function runVerify(parsed: ReturnType<typeof parseArgs>): Promise<number> 
   ];
   if (outputPaths.includes(previousPath)) throw new Error("Verification artifacts must not overwrite the baseline report");
   if (new Set(outputPaths).size !== outputPaths.length) throw new Error("Verification artifact paths must be distinct");
+
+  const remediationDir = `${loaded.config.outputDir}/remediations/${findingId}`;
+  const requestedApproval = stringFlag(parsed.flags, "approval");
+  const approvalPath = artifactPath(target, requestedApproval ?? `${remediationDir}/approval.json`);
+  let approval: VerificationReport["approval"] = { status: "not-recorded", receipt: null };
+  let approvalReceiptLoaded = false;
+  try {
+    const receipt = parseApprovalReceipt(JSON.parse(await readFile(approvalPath, "utf8")) as unknown);
+    approvalReceiptLoaded = true;
+    const planPath = artifactPath(target, stringFlag(parsed.flags, "plan-input") ?? `${remediationDir}/plan.json`);
+    const proposalPath = artifactPath(target, stringFlag(parsed.flags, "proposal") ?? `${remediationDir}/proposal.json`);
+    const plan = JSON.parse(await readFile(planPath, "utf8")) as unknown;
+    const proposal = JSON.parse(await readFile(proposalPath, "utf8")) as unknown;
+    if (!approvalMatches(receipt, plan, proposal)) throw new Error("Approval receipt no longer matches the exact plan, patch, files, and test plan");
+    approval = { status: "approved", receipt };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT" || requestedApproval || approvalReceiptLoaded) throw error;
+  }
 
   const current = await scanRepository({
     target,
@@ -208,6 +327,7 @@ async function runVerify(parsed: ReturnType<typeof parseArgs>): Promise<number> 
       status: "not-recorded",
       reminder: "Run the focused regression test and relevant project tests before calling the fix verified.",
     },
+    approval,
   };
   const verificationPath = await writeVerificationArtifact(target, report, verificationOutput);
   if (parsed.flags.quiet !== true) {
@@ -230,6 +350,9 @@ async function main(): Promise<number> {
   }
   if (parsed.command === "scan") return await runScan(parsed);
   if (parsed.command === "prioritize") return await runPrioritize(parsed);
+  if (parsed.command === "baseline") return await runBaseline(parsed);
+  if (parsed.command === "suppress") return await runSuppress(parsed);
+  if (parsed.command === "approve") return await runApprove(parsed);
   if (parsed.command === "plan") return await runPlan(parsed);
   if (parsed.command === "verify") return await runVerify(parsed);
   if (parsed.command === "doctor") {

@@ -6,7 +6,7 @@ This path takes a project from “I do not know security” to deterministic sca
 
 Paste this into Claude Code, Codex, Cursor, GitHub Copilot, or Gemini CLI from the project you want to check:
 
-> Set up RepoRook for this project with `npx --yes reporook@latest init .`. Explain the detected stack and any missing scanners; ask before installing system software. Run a complete scan, show me the fix-now/fix-next/review-later queue, and prepare a guided plan for one finding. Explain it in plain English and show me the exact diff and test plan before editing. After I approve that proposal, apply only it, run the tests, and verify the original finding. Treat incomplete coverage as inconclusive.
+> Set up RepoRook for this project with `npx --yes reporook@latest init .`. Explain the detected stack and any missing scanners; ask before installing system software. Run a complete scan, explain its team-policy status, show me the fix-now/fix-next/review-later queue, and prepare a guided plan for one actionable finding. Explain it in plain English and show me the exact diff and test plan before editing. After I approve that proposal, record the approval receipt, apply only it, run the tests, and verify the original finding. Treat incomplete coverage as inconclusive.
 
 RepoRook supplies scanner evidence; your agent supplies contextual reasoning. The agent must keep those two kinds of conclusions separate.
 
@@ -50,8 +50,8 @@ npx --yes reporook@latest scan . --require-scanners
 
 The result is deliberately simple:
 
-- Exit `0`: coverage completed and no finding met the configured threshold.
-- Exit `1`: one or more findings met the threshold. The scan worked; review the findings.
+- Exit `0`: coverage completed and no new, unsuppressed finding met its effective threshold.
+- Exit `1`: one or more policy-actionable findings met the threshold. The scan worked; review the findings.
 - Exit `2`: coverage or configuration failed. Do not treat the repository as safe.
 
 ### 5. Choose and plan one fix
@@ -76,7 +76,15 @@ Then prepare one finding-bound workflow:
 npx --yes reporook@latest plan FINDING_ID .
 ```
 
-This writes `plan.json` and `fix-prompt.txt` under `.reporook/remediations/FINDING_ID/`. Give the prompt to your coding agent. Before editing, it must show the exact diff, affected behavior, and focused plus relevant test commands. Your approval applies only to that displayed proposal; a changed file, dependency version, behavior, or test plan requires a new approval.
+This writes `plan.json`, `proposal.json`, and `fix-prompt.txt` under `.reporook/remediations/FINDING_ID/`. Give the prompt to your coding agent and have it complete the proposal template. Before editing, it must show the exact diff, affected behavior, and focused plus relevant test commands. Your approval applies only to that displayed proposal; a changed file, dependency version, behavior, or test plan requires a new approval.
+
+After approving the exact proposal, record it before editing:
+
+```bash
+npx --yes reporook@latest approve FINDING_ID . \
+  --approved-by "your-name" \
+  --reason "Reviewed the exact patch and tests"
+```
 
 To inspect one finding yourself:
 
@@ -93,6 +101,10 @@ npx --yes reporook@latest verify FINDING_ID . --require-scanners
 ```
 
 Verification exit `0` means scanner resolution passed, exit `1` means the finding remains, and exit `2` means the result is inconclusive. The baseline is preserved and the before/after receipt is written under `.reporook/verifications/FINDING_ID/`. A disappeared finding is not called fixed when its original scanner did not complete or the configuration changed, and scanner resolution does not replace functional tests.
+
+## Optional: start gating only new findings
+
+After a complete scan and deliberate review, create a committed baseline with `reporook baseline .`. Temporarily accept one finding with `reporook suppress FINDING_ID . --owner OWNER --reason REASON --expires DATE`. Suppressions always expire and never mean fixed. See [Team policy](TEAM_POLICY.md) before enabling either workflow.
 
 ## Add the pull-request gate
 
@@ -112,13 +124,13 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: cisoventures/RepoRook@v0.4.0
+      - uses: cisoventures/RepoRook@v0.5.0
         with:
           fail-on: high
           mode: diff
 ```
 
-The Action installs pinned scanners, comments with the guided fix queue, uploads SARIF, preserves scan and priority receipts, and fails closed when required coverage is unavailable.
+The Action installs pinned scanners, comments with policy dispositions and the guided fix queue, uploads SARIF, preserves scan and priority receipts, and fails closed when required coverage is unavailable.
 
 ## Safety boundaries
 

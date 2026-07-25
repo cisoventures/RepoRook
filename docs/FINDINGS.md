@@ -2,9 +2,11 @@
 
 `schemas/findings.schema.json` is the deterministic contract. It records scanner execution, coverage, normalized findings, and the exact scan receipt. Each finding contains both the scanner's detailed description and a deterministic `plain_summary` written for a non-specialist.
 
+`schemas/policy-evaluation.schema.json` is the separate deterministic team decision layer. It marks each stable finding as new, existing in the reviewed baseline, actively suppressed, or below its effective global/path threshold. `schemas/baseline.schema.json` and `schemas/suppressions.schema.json` define the committed review inputs; suppressions require an owner, reason, and expiry.
+
 `schemas/agent-review.schema.json` is the stochastic sidecar. Every review names its host, source scan, finding ID, validation status, evidence, and confidence. A host agent may reject or validate a finding but may not rewrite the original artifact or claim scanner resolution.
 
-`schemas/priorities.schema.json` is deterministic scheduling guidance derived from findings. It records fix-now, fix-next, and review-later items without changing severity or scanner evidence. `schemas/remediation-plan.schema.json` binds one selected finding to its fingerprint, source commit, configuration, starting scope, exact-preview requirements, approval boundary, and verification command.
+`schemas/priorities.schema.json` is deterministic scheduling guidance derived from policy-actionable findings. It records fix-now, fix-next, and review-later items without changing severity or scanner evidence. `schemas/remediation-plan.schema.json` binds one selected finding to its fingerprint, source commit, configuration, starting scope, exact-preview requirements, approval boundary, and verification command. `schemas/remediation-proposal.schema.json` defines the exact diff and tests; `schemas/approval-receipt.schema.json` records the hashes and named approval that bind them.
 
 `schemas/verification.schema.json` records deterministic scanner resolution for one finding. It preserves both scan receipts, configuration comparison, original scanner status, and any equivalent remaining finding. Functional tests are deliberately marked `not-recorded`; scanner resolution becomes a verified fix only when the focused and relevant project tests also pass.
 

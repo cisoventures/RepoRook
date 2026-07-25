@@ -11,6 +11,9 @@ export const defaultConfig: RepoRookConfig = {
   ignore: ["node_modules/**", "dist/**", "build/**", ".git/**", ".reporook/**"],
   requiredScanners: [],
   scanners: {},
+  baselineFile: "reporook-baseline.json",
+  suppressionsFile: "reporook-suppressions.json",
+  pathPolicies: {},
 };
 
 export const scannerNames = ["semgrep", "gitleaks", "npm-audit", "pip-audit", "osv-scanner"] as const;
@@ -18,6 +21,7 @@ const scannerNameSet = new Set<string>(scannerNames);
 const topLevelKeys = new Set([
   "failOn", "fail-on", "outputDir", "output-dir", "semgrepConfig", "semgrep-config",
   "paths", "ignore", "requiredScanners", "required-scanners", "scanners",
+  "baseline", "baselineFile", "suppressions", "suppressionsFile", "pathPolicies", "path-policies",
 ]);
 
 function scalar(value: string): string | boolean | number | null {
@@ -116,6 +120,20 @@ function scannerSettings(value: unknown): Record<string, boolean> {
   return normalized;
 }
 
+function pathPolicySettings(value: unknown): Record<string, Severity> {
+  if (value === undefined) return {};
+  const settings = configObject(value);
+  const normalized: Record<string, Severity> = {};
+  for (const [pattern, thresholdValue] of Object.entries(settings).sort(([left], [right]) => left.localeCompare(right))) {
+    if (!pattern.trim()) throw new Error("pathPolicies patterns must be non-empty");
+    if (typeof thresholdValue !== "string") throw new Error(`pathPolicies.${pattern} must be a severity string`);
+    const threshold = thresholdValue.toLowerCase() as Severity;
+    if (!severities.includes(threshold)) throw new Error(`Invalid path policy severity for ${pattern}: ${thresholdValue}`);
+    normalized[pattern] = threshold;
+  }
+  return normalized;
+}
+
 export function normalizeConfig(parsedValue: unknown): RepoRookConfig {
   const parsed = configObject(parsedValue);
   const unknown = Object.keys(parsed).filter((key) => !topLevelKeys.has(key));
@@ -138,6 +156,12 @@ export function normalizeConfig(parsedValue: unknown): RepoRookConfig {
   for (const name of requiredScanners) {
     if (scanners[name] === false) throw new Error(`Scanner ${name} cannot be both required and disabled`);
   }
+  const pathPolicies = pathPolicySettings(aliased(parsed, "pathPolicies", "path-policies"));
+  for (const [pattern, threshold] of Object.entries(pathPolicies)) {
+    if (severities.indexOf(threshold) < severities.indexOf(failOn)) {
+      throw new Error(`Path policy ${pattern} cannot weaken the global failOn threshold (${threshold} is weaker than ${failOn})`);
+    }
+  }
 
   return {
     failOn,
@@ -147,6 +171,9 @@ export function normalizeConfig(parsedValue: unknown): RepoRookConfig {
     ignore: stringList(parsed.ignore, "ignore", defaultConfig.ignore),
     requiredScanners,
     scanners,
+    baselineFile: stringValue(aliased(parsed, "baseline", "baselineFile"), "baseline", defaultConfig.baselineFile),
+    suppressionsFile: stringValue(aliased(parsed, "suppressions", "suppressionsFile"), "suppressions", defaultConfig.suppressionsFile),
+    pathPolicies,
   };
 }
 

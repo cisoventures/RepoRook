@@ -89,6 +89,12 @@ test("remediation plans are bound to the finding, scan, exact patch, and test pl
   assert.equal(first.scope.stop_if_scope_changes, true);
   assert.match(first.verification.command, new RegExp(selected.id));
   assert.throws(() => createRemediationPlan(baseline, "rr-bbbbbbbbbbbb"), /Finding not found/);
+  const baselined = structuredClone(baseline);
+  baselined.policy = {
+    findings: [{ finding_id: selected.id, disposition: "baseline" }],
+  };
+  assert.equal(prioritizeFindings(baselined).priorities.length, 0);
+  assert.throws(() => createRemediationPlan(baselined, selected.id), /baseline under team policy and is not actionable/);
 });
 
 test("init detects project stacks, writes a secure config, and remains idempotent", async () => {

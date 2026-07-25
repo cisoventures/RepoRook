@@ -11,11 +11,12 @@ npx --yes reporook@latest scan . --require-scanners
 npx --yes reporook@latest explain FINDING_ID
 npx --yes reporook@latest prioritize .
 npx --yes reporook@latest plan FINDING_ID .
+npx --yes reporook@latest approve FINDING_ID . --approved-by NAME --reason "Reviewed exact proposal"
 ```
 
-Exit code `0` means no finding met the configured threshold, `1` means findings met it, and `2` means the target/configuration failed, a required scanner failed, or no applicable scanner completed. Failed coverage is never a successful gate unless the caller explicitly supplies the unsafe diagnostic override `--allow-no-coverage`.
+Exit code `0` means no new, unsuppressed finding met its effective threshold; `1` means policy-actionable findings met it; and `2` means the target/configuration/policy failed, a required scanner failed, or no applicable scanner completed. Failed coverage is never a successful gate unless the caller explicitly supplies the unsafe diagnostic override `--allow-no-coverage`.
 
-Every finding includes `plain_summary`, a deterministic jargon-free explanation. Dependency advisories remain individually auditable in JSON and SARIF while terminal and pull-request output groups them by package. Every scan also writes `priorities.json` and `agent-prompt.txt`. The `plan` command binds one finding to its source scan, requires an exact patch and test preview, and writes a copy-ready prompt without modifying application code.
+Every finding includes `plain_summary`, a deterministic jargon-free explanation. Dependency advisories remain individually auditable in JSON and SARIF while terminal and pull-request output groups them by package. Every scan also writes a separate policy evaluation, `priorities.json`, and `agent-prompt.txt`. `baseline` records reviewed existing findings, `suppress` requires an owner/reason/expiry, and path rules can only tighten the global threshold. The `plan` command binds one actionable finding to its source scan and writes an exact proposal template; `approve` hashes that exact plan, patch, file list, and test plan into a durable receipt without modifying application code.
 
 OSV-Scanner complements the root Node and Python adapters with supported manifests for Go, Rust, Java, Ruby, PHP, .NET, Dart, Elixir, R, Haskell, C/C++, Yarn, pnpm, Bun, additional Python formats, and nested projects. RepoRook assigns overlapping root manifests to one scanner so expanded coverage does not create duplicate advisory noise.
 

@@ -39,6 +39,8 @@ const rank = { critical: 4, high: 3, medium: 2, low: 1 };
 const dependencyScanners = new Set(["npm-audit", "pip-audit", "osv-scanner"]);
 const priorityByFinding = new Map((priorities?.priorities ?? []).map((item) => [item.finding_id, item.priority]));
 const priorityLabel = { "fix-now": "Fix now", "fix-next": "Fix next", "review-later": "Review later" };
+const policyByFinding = new Map((report.policy?.findings ?? []).map((item) => [item.finding_id, item]));
+const policyLabel = { actionable: "Actionable", baseline: "Baseline", suppressed: "Suppressed", "below-threshold": "Below threshold" };
 const dependencyGroups = new Map();
 const items = [];
 for (const finding of report.findings) {
@@ -65,8 +67,12 @@ const rows = visible.map(({ severity, findings }) => {
     ? `${finding.metadata?.package ?? "Dependency"} has ${findings.length} known advisor${findings.length === 1 ? "y" : "ies"}. ${finding.plain_summary ?? finding.description}`
     : finding.plain_summary ?? finding.description;
   const id = dependency ? `${findings.length} advisories` : finding.id;
-  const priority = priorityByFinding.get(finding.id) ?? (severity === "critical" || severity === "high" ? "fix-now" : severity === "medium" ? "fix-next" : "review-later");
-  return `| ${priorityLabel[priority]} | ${icons[severity] ?? "•"} ${severity} | \`${markdown(location, 180)}\` | ${markdown(explanation, 240)} | \`${markdown(id, 80)}\` |`;
+  const policyItems = findings.map((item) => policyByFinding.get(item.id)).filter(Boolean);
+  const actionable = policyItems.find((item) => item.disposition === "actionable");
+  const selectedPolicy = actionable ?? policyItems[0];
+  const priority = priorityByFinding.get(finding.id);
+  const when = selectedPolicy ? policyLabel[selectedPolicy.disposition] : priority ? priorityLabel[priority] : "Review";
+  return `| ${when} | ${icons[severity] ?? "•"} ${severity} | \`${markdown(location, 180)}\` | ${markdown(explanation, 240)} | \`${markdown(id, 80)}\` |`;
 });
 const shownFindings = visible.reduce((total, item) => total + item.findings.length, 0);
 const omitted = Math.max(0, report.findings.length - shownFindings);
@@ -78,13 +84,17 @@ const body = [
   "## RepoRook security scan",
   "",
   `**Coverage:** ${report.coverage_status} · **Critical:** ${report.summary.critical} · **High:** ${report.summary.high} · **Medium:** ${report.summary.medium} · **Low:** ${report.summary.low}`,
+  ...(report.policy ? [`**Team policy:** ${report.policy.summary.actionable} actionable · ${report.policy.summary.new} new · ${report.policy.summary.existing} baseline · ${report.policy.summary.suppressed} suppressed`] : []),
   ...(priorities ? [`**Guided fix queue:** ${priorities.summary.fix_now} fix now · ${priorities.summary.fix_next} fix next · ${priorities.summary.review_later} review later`] : []),
   "",
   ...(report.coverage_status === "complete" ? [] : ["> ⚠️ This scan had incomplete coverage. No findings does not mean the repository is clean.", ""]),
+  ...(report.policy?.summary?.expired_suppressions ? [`> ⚠️ ${report.policy.summary.expired_suppressions} suppression(s) expired; matching findings were evaluated normally.`, ""] : []),
   ...(rows.length ? ["| When | Severity | Location | What could be wrong | ID |", "|---|---|---|---|---|", ...rows, ""] : ["No vulnerabilities were reported by the checks that completed.", ""]),
   ...(omitted ? [`_${omitted} additional findings are available in the uploaded artifact and SARIF report._`, ""] : []),
   "<details><summary>Scanner coverage</summary>", "", scannerSummary, "", "</details>", "",
-  "Ask your coding agent: **“Read the RepoRook priorities, prepare a guided plan for the first fix-now finding, and show me the exact patch and test plan. Wait for my approval before editing; then run tests and RepoRook verification.”**",
+  ...(report.policy && report.policy.summary.actionable === 0
+    ? ["No policy-actionable findings are queued. Baseline and active suppressed findings remain visible for audit; do not modify them without explicit direction."]
+    : ["Ask your coding agent: **“Read the RepoRook priorities, prepare a guided plan for the first fix-now finding, and show me the exact patch and test plan. Wait for my approval, record the approval receipt, then run tests and RepoRook verification.”**"]),
 ].join("\n");
 
 const headers = {

@@ -72,3 +72,49 @@ export async function remediationPlanViaCli(path: string, findingId: string, rep
   if (result.code !== 0) throw new Error(result.stderr.trim() || "RepoRook could not prepare the remediation plan");
   return jsonResult(result, "a remediation plan");
 }
+
+export async function baselineViaCli(path: string, reportPath: string, outputPath: string): Promise<Record<string, unknown>> {
+  const result = await runRepoRook(["baseline", path, "--input", reportPath, "--output", outputPath, "--format", "json"]);
+  if (result.code !== 0) throw new Error(result.stderr.trim() || "RepoRook could not create the findings baseline");
+  return jsonResult(result, "a findings baseline");
+}
+
+export async function suppressionViaCli(
+  path: string,
+  findingId: string,
+  reportPath: string,
+  outputPath: string,
+  owner: string,
+  reason: string,
+  expires: string,
+): Promise<Record<string, unknown>> {
+  const result = await runRepoRook([
+    "suppress", findingId, path,
+    "--input", reportPath,
+    "--output", outputPath,
+    "--owner", owner,
+    "--reason", reason,
+    "--expires", expires,
+    "--format", "json",
+  ]);
+  if (result.code !== 0) throw new Error(result.stderr.trim() || "RepoRook could not record the suppression");
+  return jsonResult(result, "a finding suppression");
+}
+
+export async function approvalViaCli(
+  path: string,
+  findingId: string,
+  approvedBy: string,
+  reason: string,
+  proposalPath?: string,
+): Promise<Record<string, unknown>> {
+  const result = await runRepoRook([
+    "approve", findingId, path,
+    "--approved-by", approvedBy,
+    "--reason", reason,
+    ...(proposalPath ? ["--proposal", proposalPath] : []),
+    "--format", "json",
+  ]);
+  if (result.code !== 0) throw new Error(result.stderr.trim() || "RepoRook could not record the approval receipt");
+  return jsonResult(result, "an approval receipt");
+}

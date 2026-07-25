@@ -4,7 +4,8 @@ RepoRook has one deterministic execution path:
 
 ```text
 host plugin → stdio MCP → RepoRook CLI → scanner subprocesses
-                         ├────────────→ priorities + remediation plans
+                         ├────────────→ team policy + priorities
+                         └────────────→ remediation plans + approval receipts
 GitHub Action ───────────┘
 ```
 
@@ -14,7 +15,7 @@ The CLI detects applicable scanners, invokes them without a shell, parses untrus
 
 Dependency ownership is explicit. Root `package-lock.json` belongs to `npm audit`; root requirements files, `poetry.lock`, and `uv.lock` belong to `pip-audit`. OSV-Scanner receives other supported manifests and supported nested-project files. This expands ecosystem and monorepo coverage without duplicate results from overlapping scanners. Generated dependency and build directories are not traversed during OSV applicability discovery.
 
-The MCP server shells out to the CLI and exposes scan, priority, remediation-plan, evidence, and verification tools. Its writes remain under `.reporook/`; it does not apply patches. The Action builds and invokes the same CLI. Neither owns scanner parsing or severity policy.
+The MCP server shells out to the CLI and exposes scan, team-policy, priority, remediation-plan, approval-receipt, evidence, and verification tools. Its local writes are limited to RepoRook evidence and explicitly confirmed repository policy files; it does not apply patches. The Action builds and invokes the same CLI. Neither owns scanner parsing.
 
 ## Coverage
 
@@ -26,6 +27,10 @@ Failed coverage exits with tool error code `2` by default in the CLI, MCP-backed
 
 Source findings hash scanner, rule, repository-relative file, and stable matched evidence. Dependency findings hash scanner, package, and advisory. Line numbers are excluded so ordinary code movement does not churn IDs.
 
+## Team policy
+
+Policy evaluation is a deterministic layer beside findings, never a mutation of scanner evidence. A committed baseline matches stable fingerprints and distinguishes existing from new findings. Suppressions bind one finding ID to an owner, reason, creation time, and expiry; malformed policy exits with tool error and expired suppressions are evaluated normally. Path-specific thresholds can only tighten the global gate. The scan receipt configuration hash includes the loaded policy hash so verification detects policy changes.
+
 ## Remediation
 
-Prioritization is deterministic and severity-led. A remediation plan binds one stable finding to the source commit and configuration, requires an exact patch preview and test plan, and keeps approval pending. Host agents may validate, explain, and patch only outside the deterministic finding artifact. They apply a change only after approval of that exact proposal and stop when scope changes. `verify_fix` checks whether the original scanner completed under the same configuration before checking the stable finding and equivalent rule/file matches. Missing scanner evidence or changed configuration produces `inconclusive`, never `passed`. Repository tests and human review establish functional confidence.
+Prioritization is deterministic, severity-led, and limited to policy-actionable findings. A remediation plan binds one stable finding to the source commit and configuration, requires an exact unified diff and test plan, and keeps approval pending. A named approver's receipt hashes the plan, proposal, patch, file list, and tests; changing any bound value invalidates it. Host agents may validate, explain, and patch only outside the deterministic finding artifact. They apply a change only after approval of that exact proposal and stop when scope changes. `verify_fix` validates an available approval receipt, then checks whether the original scanner completed under the same configuration before checking the stable finding and equivalent rule/file matches. Missing scanner evidence or changed configuration produces `inconclusive`, never `passed`. Repository tests and human review establish functional confidence.

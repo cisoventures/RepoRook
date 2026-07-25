@@ -7,7 +7,7 @@ description: Scan application code for vulnerabilities with RepoRook, explain fi
 
 Use RepoRook as the deterministic evidence layer. Use the host's reasoning for contextual validation and remediation. Never merge those trust levels silently.
 
-## Run the baseline
+## Run the scan and policy gate
 
 1. If the user asks to configure RepoRook and no configuration exists, run `reporook init .`, show what it detected, and review the generated fail-closed scanner requirements. Do not replace an existing configuration without explicit approval for `--force`.
 2. Prefer the RepoRook MCP tools when available. Otherwise run `reporook scan .` or `npx --yes reporook scan .`.
@@ -15,6 +15,14 @@ Use RepoRook as the deterministic evidence layer. Use the host's reasoning for c
 4. Read `coverage_status` and every scanner status before interpreting findings.
 5. Treat exit `2` or failed coverage as a security-gate failure. If coverage is partial, say which checks did not run. Never describe an incomplete scan as clean or safe.
 6. Never print, copy, or place a detected secret in a prompt, report, patch, test, or log.
+7. Read `policy.summary` and each finding's policy disposition. Prioritize only `actionable` findings. Keep baseline, suppressed, and below-threshold findings visible as audit evidence without treating them as permission to edit.
+
+## Manage team policy safely
+
+1. Never create or replace a findings baseline automatically. Explain that a baseline accepts every finding in the selected scan as existing debt, show the counts and source commit, and require explicit user approval before calling `create_findings_baseline` or `reporook baseline .`.
+2. Suppress one finding only when the user supplies or approves an accountable owner, a concrete reason, and a future expiry. Call `suppress_finding` or `reporook suppress FINDING_ID . --owner OWNER --reason REASON --expires DATE` only after that approval.
+3. Never create an indefinite suppression, hide an expired suppression, or describe suppression as remediation. Expired suppressions are evaluated normally and should be called out.
+4. Path-specific thresholds may tighten the global gate for sensitive paths. Do not use a path rule to weaken the global threshold; use an owned, expiring finding-specific suppression for accepted risk.
 
 ## Prioritize for a beginner
 
@@ -41,8 +49,8 @@ Treat deterministic matches as evidence, not automatic proof of exploitability. 
 1. Work on one accepted finding at a time.
 2. Call `prepare_remediation_plan` or run `reporook plan FINDING_ID .`. Read the resulting plan and fix prompt before proposing code changes. Use `get_remediation_context` for nearby source when needed.
 3. Answer the plan's validation questions and explain the intended change in plain English. Keep unsupported conclusions labeled as agent hypotheses.
-4. Before editing, show the exact diff, every affected file, behavior impact, dependency version change if any, and the focused plus relevant test commands.
-5. Ask the user to approve that exact proposal. Approval binds to the finding, source scan, displayed patch, and test plan. If any of those change, stop and ask again.
+4. Before editing, show the exact diff, every affected file, behavior impact, dependency version change if any, and the focused plus relevant test commands. Put that exact proposal into the generated `proposal.json` template.
+5. Ask the user to approve that exact proposal. After explicit approval, call `record_remediation_approval` or run `reporook approve FINDING_ID . --approved-by NAME --reason REASON` to hash the plan, patch, file list, and tests into a durable receipt. If any bound value changes, the receipt is invalid and you must stop and ask again.
 6. If the repository changed after the source scan beyond the displayed proposal, rescan and prepare a new plan before editing.
 7. Make only the approved patch. Avoid unrelated refactors and never weaken another control.
 8. Add the approved focused regression test or reproducer when feasible.
@@ -53,9 +61,10 @@ Treat deterministic matches as evidence, not automatic proof of exploitability. 
 1. Run the focused regression test or strongest safe reproducer.
 2. Run relevant repository tests.
 3. Call `verify_fix` or run `reporook verify FINDING_ID .` for the exact accepted finding.
-4. Accept scanner resolution only when `verify_fix` says `passed`. `inconclusive` means the original scanner did not complete or the configuration changed; it is not a fix.
-5. Check nearby bypasses and legitimate behavior.
-6. Report separately:
+4. Confirm verification reports the expected durable approval receipt when the change required approval. A missing receipt is a proof gap; a mismatched receipt is invalid.
+5. Accept scanner resolution only when `verify_fix` says `passed`. `inconclusive` means the original scanner did not complete or the configuration changed; it is not a fix.
+6. Check nearby bypasses and legitimate behavior.
+7. Report separately:
    - scanner resolution;
    - tests executed and results;
    - remaining proof gaps;
@@ -69,7 +78,7 @@ When asked to set up or improve the threat model, ask simple questions about acc
 
 ## Preserve provenance
 
-Keep deterministic findings in `.reporook/findings.json`. Put host-generated validation in `.reporook/agent-review.json` using the repository's agent-review schema. Do not rewrite an agent hypothesis as a RepoRook finding. CI remains the enforcement point.
+Keep deterministic findings in `.reporook/findings.json`. Keep reviewable team policy in `reporook-baseline.json` and `reporook-suppressions.json`. Keep exact proposal and approval evidence under `.reporook/remediations/FINDING_ID/`. Put host-generated validation in `.reporook/agent-review.json` using the repository's agent-review schema. Do not rewrite an agent hypothesis as a RepoRook finding. CI remains the enforcement point.
 
 ## Manage this host integration
 

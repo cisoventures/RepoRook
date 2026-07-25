@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { sha256 } from "./fingerprint.js";
 import { gitChangedFiles, gitCommit } from "./git.js";
 import { matchesAny } from "./path-utils.js";
+import { evaluatePolicy } from "./policy.js";
 import { meetsThreshold, sortBySeverity } from "./severity.js";
 import { GitleaksScanner } from "./scanners/gitleaks.js";
 import { NpmAuditScanner } from "./scanners/npm-audit.js";
@@ -82,6 +83,7 @@ export async function scanRepository(options: ScanOptions, scanners: ScannerAdap
     }
   }
   const findings = deduplicate(filterFindings(runs.flatMap((run) => run.findings), options.config.ignore, options.config.paths, changed_files));
+  const policy = await evaluatePolicy(target, findings, options.config);
   const completed_at = new Date().toISOString();
   return {
     schema_version: "1.0",
@@ -92,10 +94,11 @@ export async function scanRepository(options: ScanOptions, scanners: ScannerAdap
     summary: summary(findings),
     scanners: statuses,
     findings,
+    policy,
     scan_receipt: {
       target,
       commit,
-      config_hash: `sha256:${sha256(JSON.stringify(options.config))}`,
+      config_hash: `sha256:${sha256(JSON.stringify({ config: options.config, policy_hash: policy.policy_hash }))}`,
       scanner_versions: Object.fromEntries(statuses.map((scanner) => [scanner.name, scanner.version])),
       started_at,
       completed_at,
@@ -120,5 +123,6 @@ export function scanExitCode(
 ): 0 | 1 | 2 {
   if (!allowNoCoverage && report.coverage_status === "failed") return 2;
   if (requiredScannerFailure(report, requiredScanners, requireAllApplicable)) return 2;
+  if (report.policy) return report.policy.summary.actionable > 0 ? 1 : 0;
   return report.findings.some((finding) => meetsThreshold(finding.severity, failOn)) ? 1 : 0;
 }

@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reporook.dev/schemas/baseline-1.0.json",
+  "title": "RepoRook Findings Baseline",
+  "type": "object",
+  "required": ["schema_version", "tool", "created_at", "source", "findings"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "tool": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": { "name": { "const": "reporook" }, "version": { "type": "string" } },
+      "additionalProperties": false
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "source": {
+      "type": "object",
+      "required": ["commit", "config_hash", "generated_at"],
+      "properties": {
+        "commit": { "type": ["string", "null"] },
+        "config_hash": { "type": "string", "minLength": 1 },
+        "generated_at": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "fingerprint", "scanner", "rule", "severity", "file"],
+        "properties": {
+          "finding_id": { "type": "string", "pattern": "^rr-[a-f0-9]{12}$" },
+          "fingerprint": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+          "scanner": { "type": "string", "minLength": 1 },
+          "rule": { "type": "string", "minLength": 1 },
+          "severity": { "enum": ["critical", "high", "medium", "low"] },
+          "file": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
