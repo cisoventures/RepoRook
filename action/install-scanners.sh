@@ -65,7 +65,7 @@ esac
 
 trivy_dir="${RUNNER_TEMP:-/tmp}/reporook-trivy"
 mkdir -p "$trivy_dir"
-trivy_archive_name="trivy_${TRIVY_VERSION}_Linux_${trivy_arch}.tar.gz"
+trivy_archive_name="trivy_${TRIVY_VERSION}_Linux-${trivy_arch}.tar.gz"
 trivy_archive="$trivy_dir/$trivy_archive_name"
 trivy_checksums="$trivy_dir/trivy_${TRIVY_VERSION}_checksums.txt"
 curl --fail --silent --show-error --location \
