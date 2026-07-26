@@ -20,20 +20,52 @@ The dashboard can:
 - prepare a finding-bound remediation plan and exact proposal template;
 - show the exact patch and tests supplied in that proposal;
 - record a named approval receipt only if the proposal digest is unchanged;
-- optionally publish that exact approved patch as a draft pull request through a repository-scoped GitHub App installation token.
+- guide the user through connecting a private GitHub App to the detected repository;
+- optionally publish that exact approved patch as a draft pull request through a one-hour, single-repository installation token.
 
-It cannot install scanners or edit the local application working tree. GitHub publishing is disabled unless it is explicitly configured at startup, and publishing requires a separate confirmation after exact-proposal approval.
+It cannot install scanners or edit the local application working tree. GitHub publishing requires a separate confirmation after exact-proposal approval.
 
 ## Repository-scoped draft pull requests
 
-The optional publisher deliberately does not accept a personal access token. Provide a short-lived GitHub App installation access token through the environment and name one target repository on the command line:
+RepoRook detects `OWNER/REPOSITORY` from the local repository's `github.com` `origin`. If the project has no origin or uses a different remote, provide the target explicitly:
 
 ```bash
-export REPOROOK_GITHUB_TOKEN="SHORT_LIVED_INSTALLATION_TOKEN"
 npx --yes @reporook/service@latest --repo . --github-repo OWNER/REPOSITORY
 ```
 
-Install the App on **only the selected repository**, not every repository in an organization. The App needs repository metadata read access, contents read/write access, and pull-request read/write access. RepoRook verifies the token through GitHub's installation-repositories endpoint and rejects the operation if the selected repository is not visible. It never falls back to a broader personal token.
+Then:
+
+1. Open the private dashboard URL printed by RepoRook.
+2. Click **Connect this repository**.
+3. Review the target and three requested repository permissions, then click **Continue to GitHub**.
+4. GitHub creates a private App owned by the signed-in user. Accept its generated name.
+5. On the installation screen, choose **Only select repositories** and select the one repository displayed by RepoRook.
+6. GitHub returns to the loopback dashboard. A green **connected** status confirms that RepoRook independently verified the installation against the target repository.
+
+The manifest requests repository metadata read access, contents read/write access, and pull-request read/write access. It requests no account permissions, organization permissions, user OAuth authorization, webhook events, workflow-file permission, or public App listing. Even if the App is accidentally installed on additional repositories, every generated installation token is explicitly narrowed to the displayed repository and those three permissions. Select only the target repository anyway so GitHub's durable installation grant is narrow too.
+
+GitHub documents that the `installation_id` in a setup callback can be spoofed. RepoRook does not trust it: the callback is tied to random, expiring in-memory state, and RepoRook signs an App JWT and asks GitHub which App installation owns the exact repository. A mismatch is rejected before the App key is stored or an installation token is minted.
+
+The generated private key is stored outside the scanned repository so the connection survives a restart:
+
+- macOS: `~/Library/Application Support/RepoRook/github-HASH.json`
+- Linux: `$XDG_CONFIG_HOME/reporook/github-HASH.json`, or `~/.config/reporook/...`
+- Windows: `%APPDATA%\RepoRook\github-HASH.json`
+
+On POSIX systems the directory is mode `0700` and the credential file is mode `0600`; symbolic-link credential files are rejected. The file contains the App ID, installation ID, App slug, and private key. It never contains an installation token, webhook secret, client secret, repository content, finding, or patch. Installation tokens remain in process memory, are narrowed to one repository, and expire after one hour. **Disconnect local key** deletes this local file; uninstall the private App in GitHub settings as a separate cleanup step.
+
+Workflow-file changes are intentionally outside the default permission set. If an exact proposal touches `.github/workflows`, GitHub may reject publication and the change must use a separately reviewed workflow with the additional GitHub Workflows permission.
+
+### Advanced existing-token mode
+
+Automation can still supply a short-lived GitHub App installation token and explicit repository. This bypasses the guided connection but not any publishing checks:
+
+```bash
+REPOROOK_GITHUB_TOKEN="SHORT_LIVED_INSTALLATION_TOKEN" \
+  npx --yes @reporook/service@latest --repo . --github-repo OWNER/REPOSITORY
+```
+
+RepoRook verifies it through GitHub's installation-repositories endpoint and rejects the operation if the selected repository is not visible. A personal access token fails this installation-only check; there is no fallback to a broader credential.
 
 Before any GitHub write, RepoRook:
 
@@ -58,11 +90,13 @@ The v0.7 local service:
 - does not return raw scanner metadata, matched source, or secret material;
 - never treats scanner exit code `2` as a completed scan;
 - hashes the exact proposal file and rejects stale approvals;
-- keeps the GitHub token server-side and accepts only an installation token authorized for the selected repository;
+- keeps GitHub App keys and tokens server-side, outside RepoRook artifacts and browser responses;
+- uses random, expiring manifest state and validates the setup installation against the exact target repository;
+- asks GitHub to mint installation tokens for the selected repository and reduced permissions only;
 - refuses draft-PR publication when the default branch moved after the approved scan;
 - applies approved text patches only in a disposable staging directory, never the local working tree.
 
-Treat the printed private URL and installation token as credentials for the running process. Stop the service with Ctrl+C when finished. Do not expose this preview through a public tunnel or reverse proxy. Hosted access and a friendly App installation flow belong behind a future authenticated, TLS-protected deployment boundary.
+Treat the printed private URL and locally stored App key as credentials. Stop the service with Ctrl+C when finished. Do not expose this loopback service through a public tunnel or reverse proxy. A remote multi-user service requires a separate authenticated, TLS-protected deployment boundary.
 
 ## Development
 
