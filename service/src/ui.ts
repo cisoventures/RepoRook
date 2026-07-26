@@ -97,6 +97,19 @@ function render() {
   approvals.replaceChildren();
   if (!snapshot.approvals.length) approvals.append(element("p", { class: "muted" }, "Prepared remediation proposals will appear here for exact review."));
   for (const item of snapshot.approvals) approvals.append(renderApproval(item));
+  renderPublishing(snapshot.publishing);
+}
+function renderPublishing(publishing) {
+  const enabled = Boolean(publishing?.enabled);
+  $("github-status").replaceChildren(statusBadge(enabled ? "connected" : "not connected"));
+  $("github-target").textContent = publishing?.repository || "No GitHub origin detected";
+  $("github-detail").textContent = enabled
+    ? "Draft PR credentials are generated for one repository and expire after one hour."
+    : publishing?.connectable
+      ? "Create a private GitHub App, then select only this repository on GitHub."
+      : "Restart with --github-repo OWNER/REPOSITORY if this project has no github.com origin.";
+  $("github-connect").classList.toggle("hidden", enabled || !publishing?.connectable);
+  $("github-disconnect").classList.toggle("hidden", !enabled || !publishing?.connectable);
 }
 function renderApproval(item) {
   const wrapper = element("article", { class: "approval" });
@@ -157,6 +170,10 @@ async function authenticate() {
     await api("/api/session", { method: "POST", body: JSON.stringify({ token }) });
   }
   await refresh();
+  if (new URLSearchParams(location.search).get("github") === "connected") {
+    history.replaceState(null, "", location.pathname);
+    showMessage("GitHub is connected to this repository only. RepoRook can now open exact approved patches as draft pull requests.");
+  }
 }
 $("onboard-button").addEventListener("click", async () => {
   try { await api("/api/onboard", { method: "POST", body: JSON.stringify({ confirmation: "initialize RepoRook" }) }); showMessage("RepoRook configuration created. Review the recommended scanners, then scan."); await refresh(); }
@@ -165,6 +182,15 @@ $("onboard-button").addEventListener("click", async () => {
 $("scan-button").addEventListener("click", async () => {
   try { state.job = await api("/api/scan", { method: "POST", body: "{}" }); renderJob(); showMessage("Scan started. The dashboard will update when deterministic evidence is ready."); }
   catch (error) { showMessage(error.message, true); }
+});
+$("github-connect").addEventListener("click", () => { location.assign("/github/connect"); });
+$("github-disconnect").addEventListener("click", async () => {
+  if (!confirm("Remove RepoRook's local GitHub App key for this repository? This does not uninstall the App on GitHub.")) return;
+  try {
+    await api("/api/github/disconnect", { method: "POST", body: JSON.stringify({ confirmation: "disconnect repository-only GitHub App" }) });
+    showMessage("Local GitHub App credentials removed. You can also uninstall the private App in GitHub settings.");
+    await refresh();
+  } catch (error) { showMessage(error.message, true); }
 });
 authenticate().catch((error) => { showMessage(error.message + ". Reopen the private dashboard URL printed by reporook-service.", true); });
 `;
@@ -180,8 +206,9 @@ export function dashboardHtml(): string {
   <article class="card wide"><h2 id="repo-name">Repository</h2><p id="repo-path" class="muted"></p><p><span id="configured" class="status"></span></p><p id="stacks"></p></article>
   <article class="card summary"><h2>Coverage</h2><div id="coverage"></div><p id="scan-time" class="muted"></p></article>
   <article class="card summary"><h2>Findings</h2><div id="finding-count" class="metric">0</div><p class="muted">Scanner evidence remains separate from agent reasoning.</p></article>
+  <article class="card"><h2>GitHub draft pull requests</h2><div id="github-status"></div><p id="github-target"></p><p id="github-detail" class="muted"></p><div class="actions"><button id="github-connect" type="button" class="hidden">Connect this repository</button><button id="github-disconnect" type="button" class="secondary hidden">Disconnect local key</button></div></article>
   <article class="card wide"><h2>Prioritized vulnerability queue</h2><div id="findings" class="queue"></div></article>
-  <article class="card"><h2>Approval queue</h2><p class="muted">Approval binds a named person to the exact patch and test plan. The service never changes local application files. When a repository-scoped GitHub App token is configured, a separate confirmation can publish the approved patch as a draft PR.</p><div id="approvals"></div></article>
+  <article class="card"><h2>Approval queue</h2><p class="muted">Approval binds a named person to the exact patch and test plan. The service never changes local application files. After the repository-only GitHub App is connected, a separate confirmation can publish the approved patch as a draft PR.</p><div id="approvals"></div></article>
 </section>
 <footer>Loopback-only dashboard · no telemetry · local working tree remains unchanged</footer>
 </main><script src="/assets/app.js" defer></script></body></html>`;

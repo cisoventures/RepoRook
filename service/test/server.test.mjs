@@ -240,3 +240,64 @@ test("draft PR publishing requires a separate confirmation and a current exact a
     await rm(repository, { recursive: true, force: true });
   }
 });
+
+test("guided GitHub App callbacks use one repository and restore the local session", async (context) => {
+  const { repository } = await fixture();
+  let connected = false;
+  let disconnected = false;
+  const githubApp = {
+    repository: "cisoventures/RepoRook",
+    status: () => ({ enabled: connected, connectable: true, repository: "cisoventures/RepoRook", mode: "guided-app", app: connected ? "reporook-test" : null }),
+    beginManifest: (origin) => ({
+      action: "https://github.com/settings/apps/new?state=state-value",
+      manifest: JSON.stringify({ redirect_url: `${origin}/github/manifest/callback`, default_permissions: { metadata: "read", contents: "write", pull_requests: "write" } }),
+    }),
+    completeManifest: async (code, state) => {
+      assert.equal(code, "manifest-code-value");
+      assert.equal(state, "state-value");
+      return "https://github.com/apps/reporook-test/installations/new?state=state-value";
+    },
+    completeInstallation: async (installationId, state) => {
+      assert.equal(installationId, "12345");
+      assert.equal(state, "state-value");
+      connected = true;
+    },
+    disconnect: async () => { connected = false; disconnected = true; },
+    publish: async () => { throw new Error("not used"); },
+  };
+  const dashboard = await startOrSkip(context, { repository, port: 0, bootstrapToken: "bootstrap-test-token", sessionToken: "session-test-token", githubApp, cliRunner: async () => ({ code: 0, stdout: "{}", stderr: "" }) });
+  if (!dashboard) { await rm(repository, { recursive: true, force: true }); return; }
+  try {
+    const cookie = await session(dashboard);
+    const status = await (await fetch(`${dashboard.origin}/api/status`, { headers: { cookie } })).json();
+    assert.deepEqual(status.publishing, { enabled: false, connectable: true, repository: "cisoventures/RepoRook", mode: "guided-app", app: null });
+
+    const connect = await fetch(`${dashboard.origin}/github/connect`, { headers: { cookie } });
+    assert.equal(connect.status, 200);
+    assert.match(connect.headers.get("content-security-policy"), /form-action https:\/\/github\.com/);
+    const connectHtml = await connect.text();
+    assert.match(connectHtml, /Connect only cisoventures\/RepoRook/);
+    assert.match(connectHtml, /name="manifest"/);
+    assert.doesNotMatch(connectHtml, /organization-wide/);
+
+    const manifestCallback = await fetch(`${dashboard.origin}/github/manifest/callback?code=manifest-code-value&state=state-value`, { redirect: "manual" });
+    assert.equal(manifestCallback.status, 303);
+    assert.equal(manifestCallback.headers.get("location"), "https://github.com/apps/reporook-test/installations/new?state=state-value");
+
+    const installCallback = await fetch(`${dashboard.origin}/github/install/callback?installation_id=12345&state=state-value`, { redirect: "manual" });
+    assert.equal(installCallback.status, 303);
+    assert.equal(installCallback.headers.get("location"), "/?github=connected");
+    assert.match(installCallback.headers.get("set-cookie"), /HttpOnly; SameSite=Strict/);
+
+    const disconnect = await fetch(`${dashboard.origin}/api/github/disconnect`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: dashboard.origin, cookie },
+      body: JSON.stringify({ confirmation: "disconnect repository-only GitHub App" }),
+    });
+    assert.equal(disconnect.status, 200);
+    assert.equal(disconnected, true);
+  } finally {
+    await dashboard.close();
+    await rm(repository, { recursive: true, force: true });
+  }
+});
