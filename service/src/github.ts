@@ -103,7 +103,7 @@ function validatePatch(proposal: RemediationProposal): string[] {
 
 async function runGit(args: string[], cwd: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    execFile("git", args, { cwd, encoding: "utf8", maxBuffer: 2 * 1024 * 1024 }, (error, _stdout, stderr) => {
+    execFile("git", ["-c", "core.autocrlf=false", "-c", "core.eol=lf", ...args], { cwd, encoding: "utf8", maxBuffer: 2 * 1024 * 1024 }, (error, _stdout, stderr) => {
       if (!error) return resolve();
       reject(new Error((stderr || error.message).trim().slice(0, 2_000)));
     });
