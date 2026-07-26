@@ -29,6 +29,16 @@ async function trustStoreEnvironment(): Promise<NodeJS.ProcessEnv> {
   return {};
 }
 
+async function semgrepEnvironment(temporary: string): Promise<NodeJS.ProcessEnv> {
+  return {
+    ...await trustStoreEnvironment(),
+    XDG_CACHE_HOME: temporary,
+    XDG_CONFIG_HOME: temporary,
+    SEMGREP_LOG_FILE: join(temporary, "semgrep.log"),
+    SEMGREP_SETTINGS_FILE: join(temporary, "settings.yml"),
+  };
+}
+
 async function containsCode(directory: string, depth = 0): Promise<boolean> {
   if (depth > 4) return false;
   let entries;
@@ -96,18 +106,27 @@ export class SemgrepScanner implements ScannerAdapter {
     return (await containsCode(target)) ? { applicable: true } : { applicable: false, reason: "no supported source files detected" };
   }
 
+  async version(): Promise<string | null> {
+    const temporary = await mkdtemp(join(tmpdir(), "reporook-semgrep-version-"));
+    try {
+      return await scannerVersion(
+        "semgrep",
+        { env: await semgrepEnvironment(temporary), timeoutMs: 60_000 },
+        ["--version", "--disable-version-check"],
+      );
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  }
+
   async run(context: ScannerContext): Promise<ScannerResult> {
     const started = Date.now();
     const temporary = await mkdtemp(join(tmpdir(), "reporook-semgrep-"));
-    const env = {
-      ...await trustStoreEnvironment(),
-      XDG_CACHE_HOME: temporary,
-      XDG_CONFIG_HOME: temporary,
-      SEMGREP_LOG_FILE: join(temporary, "semgrep.log"),
-      SEMGREP_SETTINGS_FILE: join(temporary, "settings.yml"),
-    };
+    const env = await semgrepEnvironment(temporary);
     try {
-      const version = await scannerVersion("semgrep", { env, timeoutMs: 60_000 }, ["--version", "--disable-version-check"]);
+      const version = context.scannerVersion !== undefined
+        ? context.scannerVersion
+        : await scannerVersion("semgrep", { env, timeoutMs: 60_000 }, ["--version", "--disable-version-check"]);
       if (!version) return unavailable(this.name, Date.now() - started, "semgrep is not installed or could not start; run `reporook setup`");
       const args = [
         "scan",

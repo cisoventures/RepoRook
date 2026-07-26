@@ -16,6 +16,9 @@ export const defaultConfig: RepoRookConfig = {
   pathPolicies: {},
   containerImages: [],
   gitHistory: false,
+  cacheEnabled: true,
+  cacheTtlMinutes: 15,
+  scannerRetries: 1,
 };
 
 export const scannerNames = ["semgrep", "gitleaks", "npm-audit", "pip-audit", "osv-scanner", "checkov", "trivy-image"] as const;
@@ -25,6 +28,7 @@ const topLevelKeys = new Set([
   "paths", "ignore", "requiredScanners", "required-scanners", "scanners",
   "baseline", "baselineFile", "suppressions", "suppressionsFile", "pathPolicies", "path-policies",
   "containerImages", "container-images", "gitHistory", "git-history",
+  "cacheEnabled", "cache-enabled", "cacheTtlMinutes", "cache-ttl-minutes", "scannerRetries", "scanner-retries",
 ]);
 
 function scalar(value: string): string | boolean | number | null {
@@ -117,6 +121,14 @@ function booleanValue(value: unknown, name: string, fallback: boolean): boolean 
   return value;
 }
 
+function boundedInteger(value: unknown, name: string, fallback: number, minimum: number, maximum: number): number {
+  if (value === undefined) return fallback;
+  if (!Number.isInteger(value) || Number(value) < minimum || Number(value) > maximum) {
+    throw new Error(`${name} must be an integer between ${minimum} and ${maximum}`);
+  }
+  return Number(value);
+}
+
 function containerImageList(value: unknown): string[] {
   const images = stringList(value, "containerImages", defaultConfig.containerImages);
   if (images.length > 20) throw new Error("containerImages supports at most 20 explicit image references");
@@ -207,6 +219,9 @@ export function normalizeConfig(parsedValue: unknown): RepoRookConfig {
     pathPolicies,
     containerImages,
     gitHistory: booleanValue(aliased(parsed, "gitHistory", "git-history"), "gitHistory", defaultConfig.gitHistory),
+    cacheEnabled: booleanValue(aliased(parsed, "cacheEnabled", "cache-enabled"), "cacheEnabled", defaultConfig.cacheEnabled),
+    cacheTtlMinutes: boundedInteger(aliased(parsed, "cacheTtlMinutes", "cache-ttl-minutes"), "cacheTtlMinutes", defaultConfig.cacheTtlMinutes, 1, 1_440),
+    scannerRetries: boundedInteger(aliased(parsed, "scannerRetries", "scanner-retries"), "scannerRetries", defaultConfig.scannerRetries, 0, 3),
   };
 }
 

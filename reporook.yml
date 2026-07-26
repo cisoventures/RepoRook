@@ -2,6 +2,9 @@ failOn: high
 outputDir: .reporook
 semgrepConfig: p/default
 gitHistory: false
+cacheEnabled: true
+cacheTtlMinutes: 15
+scannerRetries: 1
 containerImages: []
 paths:
   - .

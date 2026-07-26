@@ -22,6 +22,8 @@ OSV-Scanner complements the root Node and Python adapters with supported manifes
 
 Checkov automatically covers detected Terraform, Kubernetes, Helm, Kustomize, Dockerfile, and GitHub Actions files using local built-in policies with uploads and external downloads disabled. Add explicit `containerImages` entries to enable Trivy image scanning. Set `gitHistory: true` only when you intend Gitleaks to inspect past commits; normalized evidence remains redacted.
 
+On a clean Git commit, successful per-scanner evidence is cached for 15 minutes by default and keyed by the commit, RepoRook and scanner versions, complete normalized configuration, and changed-file scope. Failed or unavailable scanners are never cached. Relevant working-tree changes disable cache reads and writes; `--refresh-cache` forces replacement, `--no-cache` disables it for one scan, and verification always runs fresh.
+
 After an approved patch and the relevant tests, run `npx --yes reporook@latest verify FINDING_ID . --require-scanners`. RepoRook preserves the baseline scan and writes a separate receipt under `.reporook/verifications/FINDING_ID/`. Exit `0` means scanner resolution passed, `1` means the finding remains, and `2` means verification is inconclusive. Scanner resolution does not replace functional tests.
 
 The project is MIT licensed. See the [five-minute onboarding guide](https://github.com/cisoventures/RepoRook/blob/main/docs/QUICKSTART.md) for the beginner workflow and the [agent setup guide](https://github.com/cisoventures/RepoRook/blob/main/docs/AGENT_SETUP.md) for managed Claude Code, Codex, Cursor, Copilot, Gemini, and Windsurf installation.

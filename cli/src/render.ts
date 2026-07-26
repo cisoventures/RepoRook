@@ -24,7 +24,7 @@ export function renderTerminal(report: ScanReport): string {
   lines.push("");
   for (const scanner of report.scanners) {
     const mark = scanner.status === "ok" ? "✓" : scanner.applicable ? "!" : "-";
-    lines.push(`${mark} ${scanner.name}: ${scanner.status}${scanner.status === "ok" ? ` (${scanner.finding_count} findings)` : scanner.reason ? ` — ${scanner.reason}` : ""}`);
+    lines.push(`${mark} ${scanner.name}: ${scanner.status}${scanner.status === "ok" ? ` (${scanner.finding_count} findings${scanner.reason ? `; ${scanner.reason}` : ""})` : scanner.reason ? ` — ${scanner.reason}` : ""}`);
   }
   if (report.coverage_status !== "complete") {
     lines.push("");

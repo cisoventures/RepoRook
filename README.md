@@ -100,6 +100,9 @@ outputDir: .reporook
 semgrepConfig: p/default # or a pinned local Semgrep rules file
 gitHistory: false # opt in only when you intend to scan past commits
 containerImages: [] # explicit refs only; RepoRook never guesses or builds images
+cacheEnabled: true # successful scanner checkpoints only
+cacheTtlMinutes: 15 # short freshness window for changing advisories and rules
+scannerRetries: 1 # retry scanner errors once; unavailable scanners are not retried
 paths:
   - .
 ignore:
@@ -123,6 +126,8 @@ pathPolicies:
 Configuration is validated strictly: unknown scanner names, invalid value types, unknown keys, a scanner that is both required and disabled, and a path rule that weakens the global threshold are errors rather than silent fallbacks. Baseline and suppression files are repository-relative, reviewable JSON. Missing policy files fail safe by making findings actionable rather than hiding them.
 
 Checkov runs with uploads and external downloads disabled and ignores repository-supplied Checkov configuration. Trivy runs only when `containerImages` contains an explicit target; tags work, but immutable digest references are safer. Git-history scanning is off by default because it expands scope and runtime. See [Infrastructure, container, and history scanning](docs/INFRASTRUCTURE.md).
+
+Successful per-scanner results are checkpointed under `.reporook/cache/` only for a clean Git commit and reused for at most 15 minutes by default. The key binds the commit, RepoRook and scanner versions, normalized configuration, and changed-file scope. Dirty relevant files, configuration or version changes, stale or malformed records, `--refresh-cache`, and `verify` all force a fresh scanner run. Errors and unavailable scanners are never cached. Use `--no-cache` for a cache-free scan or `--cache-ttl MINUTES` for a bounded one-run freshness override.
 
 ## Outputs
 

@@ -59,9 +59,10 @@ export class PipAuditScanner implements ScannerAdapter {
     const locked = await exists(join(target, "poetry.lock")) || await exists(join(target, "uv.lock"));
     return requirements.length || locked ? { applicable: true } : { applicable: false, reason: "no supported Python dependency file detected" };
   }
+  async version() { return scannerVersion("pip-audit"); }
 
   async run(context: ScannerContext): Promise<ScannerResult> {
-    const version = await scannerVersion("pip-audit");
+    const version = context.scannerVersion !== undefined ? context.scannerVersion : await scannerVersion("pip-audit");
     if (!version) return unavailable(this.name, 0, "pip-audit is not installed; run `reporook setup`");
     const requirements = await requirementFiles(context.target);
     const invocations: Array<{ args: string[]; source: string }> = requirements.map((file) => ({ args: ["-r", file, "-f", "json"], source: basename(file) }));

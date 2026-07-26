@@ -114,6 +114,9 @@ function yaml(config: RepoRookConfig): string {
     `baseline: ${config.baselineFile}`,
     `suppressions: ${config.suppressionsFile}`,
     `gitHistory: ${config.gitHistory}`,
+    `cacheEnabled: ${config.cacheEnabled}`,
+    `cacheTtlMinutes: ${config.cacheTtlMinutes}`,
+    `scannerRetries: ${config.scannerRetries}`,
     ...(config.containerImages.length
       ? ["containerImages:", ...config.containerImages.map((image) => `  - ${image}`)]
       : ["containerImages: []"]),

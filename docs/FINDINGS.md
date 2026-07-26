@@ -10,6 +10,8 @@
 
 `schemas/verification.schema.json` records deterministic scanner resolution for one finding. It preserves both scan receipts, configuration comparison, original scanner status, and any equivalent remaining finding. Functional tests are deliberately marked `not-recorded`; scanner resolution becomes a verified fix only when the focused and relevant project tests also pass.
 
+Scanner status remains explicit when a successful per-scanner checkpoint is reused: the status reason identifies cached evidence and its age while the scan receipt retains the bound commit, configuration hash, and scanner version. Cache data is an execution optimization, not a second evidence contract, and verification never reads it.
+
 SARIF is a projection for code-scanning interfaces. Keep the JSON report and receipt when auditability matters because SARIF cannot express every RepoRook coverage detail as a first-class field.
 
 Dependency advisories remain one finding per advisory in JSON and SARIF. Human-facing terminal and pull-request reports group those findings by package so repeated advisories do not bury code-level risks.

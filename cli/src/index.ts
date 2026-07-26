@@ -57,6 +57,9 @@ Scan options:
   --changed [BASE]       Keep findings in files changed since BASE (default HEAD~1)
   --head REVISION        Changed-mode head (default HEAD)
   --require-scanners     Treat unavailable applicable scanners as a tool error
+  --no-cache             Disable scanner cache reads and writes for this scan
+  --refresh-cache        Run every scanner and replace successful cache entries
+  --cache-ttl MINUTES    Override cache freshness (1-1440 minutes)
   --allow-no-coverage    Allow exit 0 when no applicable scanner completes (unsafe; explicit opt-in)
   --no-sarif             Do not write SARIF
   --quiet                Suppress terminal summary
@@ -88,6 +91,15 @@ Agent integration options:
   --apply                Apply the displayed install, update, or uninstall plan
 `;
 
+function boundedIntegerFlag(parsed: ReturnType<typeof parseArgs>, name: string, minimum: number, maximum: number): number | undefined {
+  const raw = parsed.flags[name];
+  if (raw === undefined) return undefined;
+  if (typeof raw !== "string" || !/^\d+$/.test(raw)) throw new Error(`--${name} requires an integer from ${minimum} to ${maximum}`);
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) throw new Error(`--${name} requires an integer from ${minimum} to ${maximum}`);
+  return value;
+}
+
 async function runScan(parsed: ReturnType<typeof parseArgs>): Promise<number> {
   const target = resolve(parsed.positionals[0] ?? ".");
   const loaded = await loadConfig(target, stringFlag(parsed.flags, "config"));
@@ -96,12 +108,16 @@ async function runScan(parsed: ReturnType<typeof parseArgs>): Promise<number> {
   if (failOnValue) loaded.config.failOn = failOnValue;
   const changedRequested = Object.hasOwn(parsed.flags, "changed");
   const changedValue = parsed.flags.changed;
+  const cacheTtlMinutes = boundedIntegerFlag(parsed, "cache-ttl", 1, 1_440);
   const report = await scanRepository({
     target,
     config: loaded.config,
     ...(changedRequested ? { changedBase: typeof changedValue === "string" ? changedValue : "" } : {}),
     changedHead: stringFlag(parsed.flags, "head"),
     requireScanners: parsed.flags["require-scanners"] === true,
+    ...(parsed.flags.cache === false ? { cacheEnabled: false } : {}),
+    refreshCache: parsed.flags["refresh-cache"] === true,
+    ...(cacheTtlMinutes !== undefined ? { cacheTtlMs: cacheTtlMinutes * 60_000 } : {}),
   });
   const artifacts = await writeArtifacts(target, report, {
     output: stringFlag(parsed.flags, "output") ?? `${loaded.config.outputDir}/findings.json`,
@@ -300,6 +316,7 @@ async function runVerify(parsed: ReturnType<typeof parseArgs>): Promise<number> 
     target,
     config: loaded.config,
     requireScanners: parsed.flags["require-scanners"] === true,
+    refreshCache: true,
   });
   const verification = verifyFindingResolution(previous, current, findingId, requiredScannerFailure(
     current,

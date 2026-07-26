@@ -68,10 +68,11 @@ export class TrivyImageScanner implements ScannerAdapter {
       ? { applicable: true }
       : { applicable: false, reason: "no explicit containerImages targets configured; RepoRook never guesses or builds images" };
   }
+  async version() { return scannerVersion("trivy"); }
 
   async run(context: ScannerContext): Promise<ScannerResult> {
     const started = Date.now();
-    const version = await scannerVersion("trivy");
+    const version = context.scannerVersion !== undefined ? context.scannerVersion : await scannerVersion("trivy");
     if (!version) return unavailable(this.name, Date.now() - started, "trivy is not installed; run `reporook setup`");
     const temporary = await mkdtemp(join(tmpdir(), "reporook-trivy-"));
     const configPath = join(temporary, "trivy.yaml");

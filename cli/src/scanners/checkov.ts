@@ -121,10 +121,11 @@ export class CheckovScanner implements ScannerAdapter {
       ? { applicable: true }
       : { applicable: false, reason: "no Terraform, Kubernetes, Dockerfile, Helm, Kustomize, or GitHub Actions files detected" };
   }
+  async version() { return scannerVersion("checkov", {}, ["--version"]); }
 
   async run(context: ScannerContext): Promise<ScannerResult> {
     const started = Date.now();
-    const version = await scannerVersion("checkov", {}, ["--version"]);
+    const version = context.scannerVersion !== undefined ? context.scannerVersion : await scannerVersion("checkov", {}, ["--version"]);
     if (!version) return unavailable(this.name, Date.now() - started, "checkov is not installed; run `reporook setup`");
     const temporary = await mkdtemp(join(tmpdir(), "reporook-checkov-"));
     const configPath = join(temporary, "checkov.yml");

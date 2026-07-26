@@ -1,5 +1,6 @@
 import { stat } from "node:fs/promises";
 import { resolve } from "node:path";
+import { cacheEligible, readScannerCache, scannerCacheKey, writeScannerCache } from "./cache.js";
 import { sha256 } from "./fingerprint.js";
 import { gitChangedFiles, gitCommit } from "./git.js";
 import { matchesAny } from "./path-utils.js";
@@ -13,7 +14,7 @@ import { PipAuditScanner } from "./scanners/pip-audit.js";
 import { SemgrepScanner } from "./scanners/semgrep.js";
 import { TrivyImageScanner } from "./scanners/trivy-image.js";
 import { status } from "./scanners/shared.js";
-import type { Finding, ScanOptions, ScanReport, ScannerAdapter, ScannerStatus, Severity } from "./types.js";
+import type { Finding, ScanOptions, ScanReport, ScannerAdapter, ScannerResult, ScannerStatus, Severity } from "./types.js";
 import { VERSION } from "./version.js";
 
 export { VERSION };
@@ -68,6 +69,9 @@ export async function scanRepository(options: ScanOptions, scanners: ScannerAdap
   if (!targetStats?.isDirectory()) throw new Error(`Target is not a directory: ${target}`);
   const commit = await gitCommit(target);
   const changed_files = options.changedBase !== undefined ? await gitChangedFiles(target, options.changedBase || undefined, options.changedHead) : undefined;
+  const useCache = options.cacheEnabled ?? options.config.cacheEnabled;
+  const canCache = useCache && await cacheEligible(target, commit, options.config);
+  const cacheTtlMs = options.cacheTtlMs ?? options.config.cacheTtlMinutes * 60_000;
 
   const runs = await Promise.all(scanners.map(async (scanner) => {
     if (options.config.scanners[scanner.name] === false) {
@@ -77,7 +81,45 @@ export async function scanRepository(options: ScanOptions, scanners: ScannerAdap
     if (!applicability.applicable) {
       return { status: status(scanner.name, { applicable: false, available: false, status: "skipped", reason: applicability.reason ?? "not applicable" }), findings: [] };
     }
-    return await scanner.run({ target, config: options.config });
+    const context = { target, config: options.config };
+    const scannerVersion = canCache && scanner.version
+      ? await scanner.version(context).catch(() => undefined)
+      : undefined;
+    const key = canCache && commit && scannerVersion
+      ? scannerCacheKey({ commit, scanner: scanner.name, scannerVersion, config: options.config, ...(changed_files ? { changedFiles: changed_files } : {}) })
+      : null;
+    if (key && scannerVersion && !options.refreshCache) {
+      const cached = await readScannerCache({ target, scanner: scanner.name, version: scannerVersion, key, ttlMs: cacheTtlMs }).catch(() => null);
+      if (cached) return cached;
+    }
+    const execute = async (): Promise<ScannerResult> => {
+      try {
+        return await scanner.run({ ...context, ...(scannerVersion !== undefined ? { scannerVersion } : {}) });
+      } catch (error) {
+        const reason = (error instanceof Error ? error.message : String(error)).replace(/\s+/g, " ").slice(0, 500);
+        return { status: status(scanner.name, { applicable: true, available: scannerVersion !== null, version: scannerVersion ?? null, status: "error", reason }), findings: [] };
+      }
+    };
+    let run = await execute();
+    let attempts = 1;
+    let duration = run.status.duration_ms;
+    while (run.status.status === "error" && attempts <= options.config.scannerRetries) {
+      run = await execute();
+      duration += run.status.duration_ms;
+      attempts += 1;
+    }
+    run.status.duration_ms = duration;
+    if (attempts > 1) {
+      const retries = attempts - 1;
+      const retrySummary = run.status.status === "ok"
+        ? `completed after ${retries} ${retries === 1 ? "retry" : "retries"}`
+        : `failed after ${attempts} attempts`;
+      run.status.reason = `${run.status.reason ? `${run.status.reason}; ` : ""}${retrySummary}`;
+    }
+    if (key && scannerVersion && run.status.status === "ok") {
+      await writeScannerCache({ target, scanner: scanner.name, version: scannerVersion, key, result: run }).catch(() => undefined);
+    }
+    return run;
   }));
 
   const statuses = runs.map((run) => run.status);
