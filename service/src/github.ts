@@ -6,7 +6,7 @@ import { approvalMatches, type ApprovalReceipt, type RemediationPlan, type Remed
 
 const maxPatchBytes = 512 * 1024;
 const maxFileBytes = 2 * 1024 * 1024;
-const githubVersion = "2022-11-28";
+const githubVersion = "2026-03-10";
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -31,9 +31,10 @@ export interface RemediationPublisher {
   publish(publication: RemediationPublication): Promise<PublishedPullRequest>;
 }
 
-interface GitHubPublisherOptions {
+export interface GitHubPublisherOptions {
   repository: string;
-  token: string;
+  token?: string;
+  tokenProvider?: () => Promise<string>;
   fetch?: FetchLike;
   apiBase?: string;
 }
@@ -150,14 +151,20 @@ async function materializePatch(proposal: RemediationProposal, sources: Map<stri
 
 export class GitHubPublisher implements RemediationPublisher {
   readonly repository: string;
-  private readonly token: string;
+  private readonly tokenProvider: () => Promise<string>;
   private readonly fetcher: FetchLike;
   private readonly apiBase: string;
 
   constructor(options: GitHubPublisherOptions) {
     this.repository = safeRepository(options.repository);
-    this.token = options.token.trim();
-    if (this.token.length < 20 || /\s/.test(this.token)) throw new Error("REPOROOK_GITHUB_TOKEN is missing or invalid");
+    if (Boolean(options.token) === Boolean(options.tokenProvider)) throw new Error("Configure exactly one GitHub installation token source");
+    if (options.token) {
+      const token = options.token.trim();
+      if (token.length < 20 || /\s/.test(token)) throw new Error("REPOROOK_GITHUB_TOKEN is missing or invalid");
+      this.tokenProvider = async () => token;
+    } else {
+      this.tokenProvider = options.tokenProvider as () => Promise<string>;
+    }
     this.fetcher = options.fetch ?? fetch;
     this.apiBase = (options.apiBase ?? "https://api.github.com").replace(/\/$/, "");
     const api = new URL(this.apiBase);
@@ -167,11 +174,13 @@ export class GitHubPublisher implements RemediationPublisher {
   }
 
   private async request(path: string, init: RequestInit = {}, allowNotFound = false): Promise<Record<string, unknown> | null> {
+    const token = (await this.tokenProvider()).trim();
+    if (token.length < 20 || /\s/.test(token)) throw new Error("GitHub App returned an invalid installation token");
     const response = await this.fetcher(`${this.apiBase}${path}`, {
       ...init,
       headers: {
         accept: "application/vnd.github+json",
-        authorization: `Bearer ${this.token}`,
+        authorization: `Bearer ${token}`,
         "x-github-api-version": githubVersion,
         "user-agent": "RepoRook-Service",
         ...(init.body ? { "content-type": "application/json" } : {}),
