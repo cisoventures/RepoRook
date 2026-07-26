@@ -2,6 +2,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { isIP } from "node:net";
 import { URL } from "node:url";
+import type { GitHubAppIntegration } from "./github-app.js";
 import type { RemediationPublisher } from "./github.js";
 import { RepositoryStore } from "./repository.js";
 import { runRepoRook, type CliRunner } from "./runner.js";
@@ -18,6 +19,7 @@ export interface DashboardServerOptions {
   bootstrapToken?: string;
   sessionToken?: string;
   publisher?: RemediationPublisher;
+  githubApp?: GitHubAppIntegration;
 }
 
 export interface ScanJob {
@@ -51,13 +53,35 @@ function text(response: ServerResponse, code: number, type: string, value: strin
   response.end(value);
 }
 
-function securityHeaders(response: ServerResponse): void {
-  response.setHeader("content-security-policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+function securityHeaders(response: ServerResponse, formAction = "'none'"): void {
+  response.setHeader("content-security-policy", `default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action ${formAction}; frame-ancestors 'none'`);
   response.setHeader("x-content-type-options", "nosniff");
   response.setHeader("x-frame-options", "DENY");
   response.setHeader("referrer-policy", "no-referrer");
   response.setHeader("permissions-policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()");
   response.setHeader("cross-origin-resource-policy", "same-origin");
+}
+
+function escapeHtml(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+}
+
+function manifestForm(response: ServerResponse, action: string, manifest: string, repository: string): void {
+  const formOrigin = new URL(action).origin;
+  securityHeaders(response, formOrigin);
+  response.statusCode = 200;
+  response.setHeader("content-type", "text/html; charset=utf-8");
+  response.setHeader("cache-control", "no-store");
+  response.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect RepoRook to GitHub</title><link rel="stylesheet" href="/assets/app.css"></head><body><main class="shell"><section class="card"><h1>Connect only ${escapeHtml(repository)}</h1><p>GitHub will create a private App and ask where to install it. Choose <strong>Only select repositories</strong>, then select <strong>${escapeHtml(repository)}</strong>.</p><p class="muted">Requested repository permissions: metadata read, contents write, pull requests write. No organization, account, workflow, webhook, or user authorization is requested.</p><form action="${escapeHtml(action)}" method="post"><input type="hidden" name="manifest" value="${escapeHtml(manifest)}"><button type="submit">Continue to GitHub</button></form></section></main></body></html>`);
+}
+
+function redirect(response: ServerResponse, location: string, sessionToken?: string): void {
+  securityHeaders(response);
+  response.statusCode = 303;
+  response.setHeader("location", location);
+  response.setHeader("cache-control", "no-store");
+  if (sessionToken) response.setHeader("set-cookie", `${sessionCookie}=${sessionToken}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200`);
+  response.end();
 }
 
 async function body(request: IncomingMessage): Promise<Record<string, unknown>> {
@@ -114,7 +138,9 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
   const cli = options.cliRunner ?? runRepoRook;
   const bootstrapToken = options.bootstrapToken ?? randomBytes(32).toString("base64url");
   const sessionToken = options.sessionToken ?? randomBytes(32).toString("base64url");
+  if (options.publisher && options.githubApp) throw new Error("Configure either a static GitHub publisher or guided GitHub App onboarding, not both");
   const publisher = options.publisher;
+  const githubApp = options.githubApp;
   const publishingFindings = new Set<string>();
   let origin = "";
   let job: ScanJob = { status: "idle", started_at: null, finished_at: null, exit_code: null, message: "Ready" };
@@ -140,11 +166,32 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
         response.setHeader("set-cookie", `${sessionCookie}=${sessionToken}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200`);
         return json(response, 200, { authenticated: true });
       }
+      if (method === "GET" && url.pathname === "/github/manifest/callback") {
+        if (!githubApp) throw new HttpError(404, "Guided GitHub App onboarding is not available");
+        const installationUrl = await githubApp.completeManifest(url.searchParams.get("code") ?? "", url.searchParams.get("state") ?? "");
+        return redirect(response, installationUrl);
+      }
+      if (method === "GET" && url.pathname === "/github/install/callback") {
+        if (!githubApp) throw new HttpError(404, "Guided GitHub App onboarding is not available");
+        await githubApp.completeInstallation(url.searchParams.get("installation_id") ?? "", url.searchParams.get("state") ?? "");
+        return redirect(response, "/?github=connected", sessionToken);
+      }
       if (!hasSession) throw new HttpError(401, "Dashboard session required");
+      if (method === "GET" && url.pathname === "/github/connect") {
+        if (!githubApp) throw new HttpError(404, "No GitHub repository was detected; restart with --github-repo OWNER/REPOSITORY");
+        if (githubApp.status().enabled) return redirect(response, "/?github=connected");
+        const request = githubApp.beginManifest(origin);
+        return manifestForm(response, request.action, request.manifest, githubApp.repository);
+      }
       if (method === "GET" && url.pathname === "/api/status") {
+        const publishing = githubApp
+          ? githubApp.status()
+          : publisher
+            ? { enabled: true, connectable: false, repository: publisher.repository, mode: "installation-token", app: null }
+            : { enabled: false, connectable: false, repository: null, mode: null, app: null };
         return json(response, 200, {
           ...(await store.snapshot()),
-          publishing: publisher ? { enabled: true, repository: publisher.repository } : { enabled: false, repository: null },
+          publishing,
         });
       }
       if (method === "GET" && url.pathname === "/api/job") return json(response, 200, job);
@@ -196,7 +243,8 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
         return json(response, 200, JSON.parse(result.stdout) as unknown);
       }
       if (method === "POST" && url.pathname === "/api/publish") {
-        if (!publisher) throw new HttpError(409, "GitHub publishing is not configured for this dashboard");
+        const activePublisher = githubApp?.status().enabled ? githubApp : publisher;
+        if (!activePublisher) throw new HttpError(409, "Connect the repository-only GitHub App before publishing");
         const input = await body(request);
         if (input.confirmation !== "open approved draft pull request") throw new HttpError(400, "Draft pull request confirmation did not match");
         const findingId = stringValue(input.finding_id, "finding_id", 15, 15);
@@ -207,12 +255,19 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
         publishingFindings.add(findingId);
         try {
           const publication = await store.publication(findingId, digest);
-          return json(response, 201, await publisher.publish(publication));
+          return json(response, 201, await activePublisher.publish(publication));
         } catch (error) {
           throw new HttpError(422, error instanceof Error ? error.message : "RepoRook could not open the draft pull request");
         } finally {
           publishingFindings.delete(findingId);
         }
+      }
+      if (method === "POST" && url.pathname === "/api/github/disconnect") {
+        if (!githubApp) throw new HttpError(409, "Guided GitHub App onboarding is not configured");
+        const input = await body(request);
+        if (input.confirmation !== "disconnect repository-only GitHub App") throw new HttpError(400, "GitHub disconnect confirmation did not match");
+        await githubApp.disconnect();
+        return json(response, 200, { disconnected: true, repository: githubApp.repository });
       }
       throw new HttpError(404, "Not found");
     } catch (error) {
