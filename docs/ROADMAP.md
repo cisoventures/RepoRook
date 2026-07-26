@@ -10,7 +10,7 @@ RepoRook develops in auditable vertical slices. Each milestone must keep determi
 | v0.4 Native agent experience | Implemented | First-class repository-local install, update, doctor, and safe uninstall plus consistent conversational workflows for Claude Code, Codex, Cursor, Copilot, Gemini, and Windsurf |
 | v0.5 Team policy | Implemented | New-findings baselines, expiring suppressions with owners and reasons, path-specific policy, and durable approval evidence |
 | v0.6 Infrastructure coverage | Implemented | Terraform, Kubernetes, Docker, GitHub Actions, explicit container-image, and optional redacted Git-history secret checks through fixture-backed adapters |
-| v0.7 No-code service | Planned | Optional GitHub App, onboarding wizard, repository dashboard, approval queue, remediation pull requests, and a self-hosted deployment path |
+| v0.7 No-code service | In progress | Local self-hosted onboarding, repository dashboard, scan control, and exact-proposal approval queue implemented; optional GitHub App authentication and remediation pull requests remain |
 | v0.8 Scale and reliability | Planned | Incremental scans, caching, large-monorepo performance, retry/resume behavior, and organization policy management |
 | v0.9 Hardening | Planned | Threat model, parser fuzzing, hostile-repository testing, sandbox review, external audit, and security response readiness |
 | v1.0 Stable platform | Planned | Stable CLI, MCP, and schema contracts with compatibility guarantees, migrations, governance, and long-term release policy |

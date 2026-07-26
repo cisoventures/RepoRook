@@ -1,37 +1,40 @@
 {
-  "name": "reporook",
+  "name": "@reporook/service",
   "version": "0.7.0",
-  "description": "Free, deterministic, agent-agnostic security scanner for repositories.",
+  "description": "Local no-code dashboard for RepoRook onboarding, scans, findings, and approval-bound remediation.",
   "license": "MIT",
   "homepage": "https://github.com/cisoventures/RepoRook#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/cisoventures/RepoRook.git",
-    "directory": "cli"
+    "directory": "service"
   },
   "bugs": {
     "url": "https://github.com/cisoventures/RepoRook/issues"
   },
   "type": "module",
   "bin": {
-    "reporook": "dist/index.js"
+    "reporook-service": "dist/index.js"
   },
   "main": "dist/index.js",
   "exports": {
-    ".": "./dist/index.js",
-    "./schema": "./dist/types.js"
+    ".": "./dist/server.js"
   },
   "files": [
     "dist",
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && node ../scripts/build-cli-assets.mjs && node -e \"require('fs').chmodSync('dist/index.js',0o755)\"",
+    "build": "tsc -p tsconfig.json && node -e \"require('fs').chmodSync('dist/index.js',0o755)\"",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "pretypecheck": "npm run build --workspace reporook",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "reporook": "0.7.0"
   }
 }

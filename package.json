@@ -1,6 +1,6 @@
 {
   "name": "reporook-monorepo",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "Agent-agnostic security scanning for code before it ships.",
   "license": "MIT",
@@ -15,7 +15,8 @@
   "type": "module",
   "workspaces": [
     "cli",
-    "mcp-server"
+    "mcp-server",
+    "service"
   ],
   "scripts": {
     "sync:adapters": "node scripts/sync-adapters.mjs",

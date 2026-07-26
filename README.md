@@ -2,7 +2,7 @@
 
 RepoRook is a free, open-source security gate for code written by people or coding agents. It combines deterministic source, secret, dependency, infrastructure, workflow, and explicitly configured container-image scans with new-finding baselines, owned expiring suppressions, path-specific policy, and exact approval receipts behind one CLI, one findings contract, one GitHub check, and thin integrations for Claude Code, Codex, Cursor, GitHub Copilot, Gemini CLI, and Windsurf.
 
-**MIT licensed · no hosted service · no telemetry · no maintainer-funded inference.** RepoRook scans the repository and only the container targets you explicitly configure, not the agents, skills, plugins, or MCP servers that produced them.
+**MIT licensed · no mandatory hosted service · no telemetry · no maintainer-funded inference.** RepoRook scans the repository and only the container targets you explicitly configure, not the agents, skills, plugins, or MCP servers that produced them.
 
 ## The beginner experience
 
@@ -39,6 +39,16 @@ Exit codes are stable for CI:
 Scanner absence never masquerades as safety. Every report says whether coverage was `complete`, `partial`, or `failed`.
 Failed coverage exits `2` by default. `--allow-no-coverage` exists only for explicit diagnostic workflows where a successful process exit is more important than a security gate.
 
+## No-code local dashboard
+
+People who do not want to operate the CLI can run the optional self-hosted service:
+
+```bash
+npx --yes @reporook/service@latest --repo .
+```
+
+Open the private loopback URL printed in the terminal. The dashboard walks through repository setup, runs the same deterministic scanner path, explains findings in plain English, prepares finding-bound remediation plans, and records approval of an exact proposal. It binds only to `127.0.0.1`, uses a private fragment token to establish an HTTP-only session, and never applies an application-code patch. See the [service guide](docs/SERVICE.md).
+
 ## GitHub Action
 
 ```yaml
@@ -57,7 +67,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: cisoventures/RepoRook@v0.6.0
+      - uses: cisoventures/RepoRook@v0.7.0
         with:
           fail-on: high
           mode: diff
@@ -197,8 +207,8 @@ npm run fixture:prepare
 node cli/dist/index.js scan test-fixtures/vulnerable-app --require-scanners
 ```
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/TEAM_POLICY.md`](docs/TEAM_POLICY.md), [`docs/ADAPTERS.md`](docs/ADAPTERS.md), [`docs/AGENT_SETUP.md`](docs/AGENT_SETUP.md), the [`roadmap`](docs/ROADMAP.md), and [`CONTRIBUTING.md`](CONTRIBUTING.md).
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/SERVICE.md`](docs/SERVICE.md), [`docs/TEAM_POLICY.md`](docs/TEAM_POLICY.md), [`docs/ADAPTERS.md`](docs/ADAPTERS.md), [`docs/AGENT_SETUP.md`](docs/AGENT_SETUP.md), the [`roadmap`](docs/ROADMAP.md), and [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Project status
 
-The repository contains the v0.6 infrastructure-coverage implementation on top of the v0.5 team-policy architecture. Scanner accuracy, policy contracts, and host packaging remain pre-1.0 and should expand only through fixture-backed, reviewable contributions.
+The repository contains the first v0.7 no-code-service slice on top of the v0.6 infrastructure-coverage architecture. The local dashboard is intentionally not yet a GitHub App and cannot apply patches or open pull requests. Scanner accuracy, policy contracts, service boundaries, and host packaging remain pre-1.0 and should expand only through fixture-backed, reviewable contributions.

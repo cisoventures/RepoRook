@@ -13,16 +13,20 @@ try {
     await mkdir(distributions, { recursive: true });
     execFileSync(npm, ["pack", "--workspace", "reporook", "--pack-destination", distributions], { stdio: "inherit" });
     execFileSync(npm, ["pack", "--workspace", "@reporook/mcp-server", "--pack-destination", distributions], { stdio: "inherit" });
+    execFileSync(npm, ["pack", "--workspace", "@reporook/service", "--pack-destination", distributions], { stdio: "inherit" });
   }
   const cliPackage = JSON.parse(await readFile("cli/package.json", "utf8"));
   const mcpPackage = JSON.parse(await readFile("mcp-server/package.json", "utf8"));
+  const servicePackage = JSON.parse(await readFile("service/package.json", "utf8"));
   const cliTarball = join(distributions, `reporook-${cliPackage.version}.tgz`);
   const mcpTarball = join(distributions, `reporook-mcp-server-${mcpPackage.version}.tgz`);
+  const serviceTarball = join(distributions, `reporook-service-${servicePackage.version}.tgz`);
   const installation = join(temporary, "installation");
   await mkdir(installation, { recursive: true });
   execFileSync(npm, ["init", "--yes"], { cwd: installation, stdio: "ignore" });
   execFileSync(npm, ["install", "--offline", "--ignore-scripts", "--package-lock=false", cliTarball], { cwd: installation, stdio: "inherit" });
   execFileSync(npm, ["install", "--offline", "--ignore-scripts", "--package-lock=false", mcpTarball], { cwd: installation, stdio: "inherit" });
+  execFileSync(npm, ["install", "--offline", "--ignore-scripts", "--package-lock=false", serviceTarball], { cwd: installation, stdio: "inherit" });
 
   const cliEntry = join(installation, "node_modules", "reporook", "dist", "index.js");
   const version = execFileSync(process.execPath, [cliEntry, "--version"], { encoding: "utf8" }).trim();
@@ -50,7 +54,12 @@ try {
   if (!["prioritize_findings", "prepare_remediation_plan", "verify_fix"].every((name) => toolNames.has(name))) {
     throw new Error("Packed MCP server did not expose the guided-fix and verification tools");
   }
-  process.stdout.write(`Packed RepoRook ${version} and MCP server passed clean-install smoke tests.\n`);
+  const serviceEntry = join(installation, "node_modules", "@reporook", "service", "dist", "index.js");
+  const serviceVersion = execFileSync(process.execPath, [serviceEntry, "--version"], { encoding: "utf8" }).trim();
+  if (serviceVersion !== servicePackage.version) throw new Error(`Packed service returned ${serviceVersion}, expected ${servicePackage.version}`);
+  const serviceHelp = execFileSync(process.execPath, [serviceEntry, "--help"], { encoding: "utf8" });
+  if (!/loopback/i.test(serviceHelp) || !/never applies application-code patches/i.test(serviceHelp)) throw new Error("Packed service did not disclose its security boundary");
+  process.stdout.write(`Packed RepoRook ${version}, MCP server, and no-code service passed clean-install smoke tests.\n`);
 } finally {
   await rm(temporary, { recursive: true, force: true });
 }

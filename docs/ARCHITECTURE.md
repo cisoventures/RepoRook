@@ -7,6 +7,7 @@ host plugin → stdio MCP → RepoRook CLI → scanner subprocesses
                          ├────────────→ team policy + priorities
                          └────────────→ remediation plans + approval receipts
 GitHub Action ───────────┘
+Local dashboard ─────────┘
 ```
 
 ## Core boundary
@@ -20,6 +21,8 @@ Checkov receives only local Terraform, Kubernetes, Helm, Kustomize, Dockerfile, 
 Trivy image scanning is a separate external-target adapter. It receives at most 20 validated image references from `containerImages`; RepoRook never guesses an image, builds one, or broadens the target from a Dockerfile. Tags are supported, but digests provide reproducible identity. Gitleaks scans the working tree by default and switches to redacted Git-history mode only when `gitHistory` is true. Historical and image findings retain safe provenance, bypass changed-file/path filtering that only makes sense for current repository files, and do not create misleading SARIF or MCP source locations.
 
 The MCP server shells out to the CLI and exposes scan, team-policy, priority, remediation-plan, approval-receipt, evidence, and verification tools. Its local writes are limited to RepoRook evidence and explicitly confirmed repository policy files; it does not apply patches. The Action builds and invokes the same CLI. Neither owns scanner parsing.
+
+The optional local dashboard is another thin CLI client. It binds only to a literal loopback address, establishes a private session from a random URL-fragment token, validates Host and Origin on state-changing requests, caps request and artifact sizes, rejects symbolic-link artifact paths, and returns a deliberately reduced finding view. It can initialize RepoRook, start scans, prepare plans, and record approval receipts. It cannot apply application-code patches, install scanners, contact GitHub, or create pull requests. Those capabilities require a later, separately reviewed GitHub App boundary.
 
 ## Coverage
 
