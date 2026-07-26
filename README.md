@@ -47,7 +47,7 @@ People who do not want to operate the CLI can run the optional self-hosted servi
 npx --yes @reporook/service@latest --repo .
 ```
 
-Open the private loopback URL printed in the terminal. The dashboard walks through repository setup, runs the same deterministic scanner path, explains findings in plain English, prepares finding-bound remediation plans, and records approval of an exact proposal. It binds only to `127.0.0.1`, uses a private fragment token to establish an HTTP-only session, and never applies an application-code patch. See the [service guide](docs/SERVICE.md).
+Open the private loopback URL printed in the terminal. The dashboard walks through repository setup, runs the same deterministic scanner path, explains findings in plain English, prepares finding-bound remediation plans, and records approval of an exact proposal. It binds only to `127.0.0.1`, uses a private fragment token to establish an HTTP-only session, and never changes local application files. An optional GitHub App installation token can publish an exact approved proposal to one explicitly selected repository as a draft PR; personal access tokens and organization-wide fallback are rejected. See the [service guide](docs/SERVICE.md).
 
 ## GitHub Action
 
@@ -211,4 +211,4 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/SERVICE.md`](docs/SER
 
 ## Project status
 
-The repository contains the first v0.7 no-code-service slice on top of the v0.6 infrastructure-coverage architecture. The local dashboard is intentionally not yet a GitHub App and cannot apply patches or open pull requests. Scanner accuracy, policy contracts, service boundaries, and host packaging remain pre-1.0 and should expand only through fixture-backed, reviewable contributions.
+The repository contains the local v0.7 no-code service and its first repository-scoped GitHub publishing boundary on top of the v0.6 infrastructure-coverage architecture. The dashboard can create a draft PR only from an unchanged, exact approved proposal and a short-lived GitHub App installation token; hosted App installation and remote service operation remain future work. Scanner accuracy, policy contracts, service boundaries, and host packaging remain pre-1.0 and should expand only through fixture-backed, reviewable contributions.

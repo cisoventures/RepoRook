@@ -105,6 +105,7 @@ function renderApproval(item) {
   wrapper.append(element("p", { class: "muted" }, item.behavior_impact));
   wrapper.append(element("pre", {}, item.patch));
   wrapper.append(element("p", { class: "muted" }, "Tests: " + item.test_plan.join(" · ")));
+  if (item.approved && item.approval_id) wrapper.append(element("p", { class: "muted" }, "Approval receipt: " + item.approval_id));
   if (!item.approved) {
     const form = element("div", { class: "approval-grid" });
     const name = element("input", { placeholder: "Approver name", maxlength: "100" });
@@ -121,6 +122,18 @@ function renderApproval(item) {
     });
     form.append(name, reason, button);
     wrapper.append(form);
+  } else if (state.snapshot.publishing?.enabled) {
+    const button = element("button", { type: "button" }, "Open draft PR in " + state.snapshot.publishing.repository);
+    button.addEventListener("click", async () => {
+      if (!confirm("Open a draft pull request containing only this exact approved patch? RepoRook will not modify your local files.")) return;
+      button.disabled = true;
+      try {
+        const pull = await api("/api/publish", { method: "POST", body: JSON.stringify({ finding_id: item.finding_id, proposal_digest: item.proposal_digest, confirmation: "open approved draft pull request" }) });
+        showMessage("Draft pull request #" + pull.number + " created: " + pull.url);
+      } catch (error) { showMessage(error.message, true); }
+      finally { button.disabled = false; }
+    });
+    wrapper.append(button);
   }
   return wrapper;
 }
@@ -168,8 +181,8 @@ export function dashboardHtml(): string {
   <article class="card summary"><h2>Coverage</h2><div id="coverage"></div><p id="scan-time" class="muted"></p></article>
   <article class="card summary"><h2>Findings</h2><div id="finding-count" class="metric">0</div><p class="muted">Scanner evidence remains separate from agent reasoning.</p></article>
   <article class="card wide"><h2>Prioritized vulnerability queue</h2><div id="findings" class="queue"></div></article>
-  <article class="card"><h2>Approval queue</h2><p class="muted">Approval binds a named person to the exact patch and test plan. The service records evidence only; it does not apply the patch.</p><div id="approvals"></div></article>
+  <article class="card"><h2>Approval queue</h2><p class="muted">Approval binds a named person to the exact patch and test plan. The service never changes local application files. When a repository-scoped GitHub App token is configured, a separate confirmation can publish the approved patch as a draft PR.</p><div id="approvals"></div></article>
 </section>
-<footer>Loopback-only preview · no telemetry · no result uploads · no application-code writes</footer>
+<footer>Loopback-only dashboard · no telemetry · local working tree remains unchanged</footer>
 </main><script src="/assets/app.js" defer></script></body></html>`;
 }

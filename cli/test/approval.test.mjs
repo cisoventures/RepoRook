@@ -80,6 +80,9 @@ test("approval receipts bind the exact plan, diff, files, and tests", () => {
   assert.equal(approvalMatches(receipt, plan, proposed), true);
   assert.equal(approvalMatches(receipt, plan, { ...proposed, test_plan: ["npm test"] }), false);
   assert.equal(approvalMatches(receipt, plan, { ...proposed, patch: `${proposed.patch}\n` }), false);
+  const changedSource = structuredClone(receipt);
+  changedSource.source_scan.commit = "def456";
+  assert.equal(approvalMatches(changedSource, plan, proposed), false);
   assert.throws(() => parseRemediationProposal({ ...proposed, files: ["../outside.ts"] }), /repository-relative/);
   assert.throws(() => parseRemediationProposal({ ...proposed, files: ["src/other.ts"] }), /exactly match/);
 });

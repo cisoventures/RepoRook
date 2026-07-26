@@ -148,6 +148,7 @@ export function createApprovalReceipt(
   const actor = nonEmpty(approvedBy, "approved-by");
   const approvalReason = nonEmpty(reason, "reason");
   const approvedAt = now.toISOString();
+  const sourceScan = parseScanReceipt(plan.source_scan, "Remediation plan source_scan");
   const bindings = {
     plan_hash: digest(plan),
     proposal_hash: digest(proposal),
@@ -166,7 +167,7 @@ export function createApprovalReceipt(
     reason: approvalReason,
     finding_id: plan.finding.id,
     plan_id: plan.plan_id,
-    source_scan: plan.source_scan,
+    source_scan: sourceScan,
     bindings,
     invalidation_rule: "This approval is invalid if the plan, exact patch, file list, or test plan changes.",
   };
@@ -219,6 +220,7 @@ export function parseApprovalReceipt(value: unknown): ApprovalReceipt {
 export function approvalMatches(receipt: ApprovalReceipt, planValue: unknown, proposalValue: unknown): boolean {
   const plan = validateRemediationPlan(planValue);
   const proposal = parseRemediationProposal(proposalValue);
+  const sourceScan = parseScanReceipt(plan.source_scan, "Remediation plan source_scan");
   return receipt.status === "approved"
     && receipt.plan_id === plan.plan_id
     && receipt.finding_id === plan.finding.id
@@ -226,5 +228,6 @@ export function approvalMatches(receipt: ApprovalReceipt, planValue: unknown, pr
     && receipt.bindings.proposal_hash === digest(proposal)
     && receipt.bindings.patch_hash === digest(proposal.patch)
     && receipt.bindings.test_plan_hash === digest(proposal.test_plan)
-    && JSON.stringify(receipt.bindings.files) === JSON.stringify(proposal.files);
+    && JSON.stringify(receipt.bindings.files) === JSON.stringify(proposal.files)
+    && JSON.stringify(receipt.source_scan) === JSON.stringify(sourceScan);
 }

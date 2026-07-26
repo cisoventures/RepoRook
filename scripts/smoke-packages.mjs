@@ -58,7 +58,7 @@ try {
   const serviceVersion = execFileSync(process.execPath, [serviceEntry, "--version"], { encoding: "utf8" }).trim();
   if (serviceVersion !== servicePackage.version) throw new Error(`Packed service returned ${serviceVersion}, expected ${servicePackage.version}`);
   const serviceHelp = execFileSync(process.execPath, [serviceEntry, "--help"], { encoding: "utf8" });
-  if (!/loopback/i.test(serviceHelp) || !/never applies application-code patches/i.test(serviceHelp)) throw new Error("Packed service did not disclose its security boundary");
+  if (!/loopback/i.test(serviceHelp) || !/never\s+modifies local application code/i.test(serviceHelp) || !/installation token/i.test(serviceHelp)) throw new Error("Packed service did not disclose its security boundary");
   process.stdout.write(`Packed RepoRook ${version}, MCP server, and no-code service passed clean-install smoke tests.\n`);
 } finally {
   await rm(temporary, { recursive: true, force: true });

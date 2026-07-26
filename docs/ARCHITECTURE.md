@@ -8,6 +8,7 @@ host plugin → stdio MCP → RepoRook CLI → scanner subprocesses
                          └────────────→ remediation plans + approval receipts
 GitHub Action ───────────┘
 Local dashboard ─────────┘
+       └─ exact approval + selected-repository App token → draft pull request
 ```
 
 ## Core boundary
@@ -22,7 +23,7 @@ Trivy image scanning is a separate external-target adapter. It receives at most 
 
 The MCP server shells out to the CLI and exposes scan, team-policy, priority, remediation-plan, approval-receipt, evidence, and verification tools. Its local writes are limited to RepoRook evidence and explicitly confirmed repository policy files; it does not apply patches. The Action builds and invokes the same CLI. Neither owns scanner parsing.
 
-The optional local dashboard is another thin CLI client. It binds only to a literal loopback address, establishes a private session from a random URL-fragment token, validates Host and Origin on state-changing requests, caps request and artifact sizes, rejects symbolic-link artifact paths, and returns a deliberately reduced finding view. It can initialize RepoRook, start scans, prepare plans, and record approval receipts. It cannot apply application-code patches, install scanners, contact GitHub, or create pull requests. Those capabilities require a later, separately reviewed GitHub App boundary.
+The optional local dashboard is another thin CLI client. It binds only to a literal loopback address, establishes a private session from a random URL-fragment token, validates Host and Origin on state-changing requests, caps request and artifact sizes, rejects symbolic-link artifact paths, and returns a deliberately reduced finding view. It can initialize RepoRook, start scans, prepare plans, and record approval receipts without editing local application files. An optional, separately configured GitHub provider accepts only an installation token, verifies access to one selected repository, requires the remote default branch to equal the approved scan commit, materializes the exact text patch in a disposable directory, and creates a draft pull request. Hosted App installation and remote dashboard access remain outside the local-service boundary.
 
 ## Coverage
 

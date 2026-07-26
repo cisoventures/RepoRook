@@ -1,7 +1,18 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile, readdir, realpath, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { detectProject, type Finding, type PrioritizationReport, type ProjectProfile, type ScanReport } from "reporook";
+import {
+  approvalMatches,
+  detectProject,
+  parseApprovalReceipt,
+  parseRemediationProposal,
+  type Finding,
+  type PrioritizationReport,
+  type ProjectProfile,
+  type RemediationPlan,
+  type ScanReport,
+} from "reporook";
+import type { RemediationPublication } from "./github.js";
 
 const configCandidates = ["reporook.yml", "reporook.yaml", ".reporook.yml", ".reporook.json"];
 const maxArtifactBytes = 10 * 1024 * 1024;
@@ -28,6 +39,7 @@ export interface ApprovalItem {
   patch: string;
   test_plan: string[];
   approved: boolean;
+  approval_id: string | null;
 }
 
 export interface DashboardSnapshot {
@@ -101,6 +113,26 @@ export class RepositoryStore {
     return createHash("sha256").update(proposal.raw).digest("hex");
   }
 
+  async publication(findingId: string, expectedProposalDigest: string): Promise<RemediationPublication> {
+    if (!/^rr-[a-f0-9]{12}$/.test(findingId)) throw new Error("Invalid finding ID");
+    const planArtifact = await this.readArtifact(`.reporook/remediations/${findingId}/plan.json`);
+    const proposalArtifact = await this.readArtifact(`.reporook/remediations/${findingId}/proposal.json`);
+    const approvalArtifact = await this.readArtifact(`.reporook/remediations/${findingId}/approval.json`);
+    if (!planArtifact || !proposalArtifact || !approvalArtifact) {
+      throw new Error("An exact plan, proposal, and approval receipt are required before opening a pull request");
+    }
+    const proposalDigest = createHash("sha256").update(proposalArtifact.raw).digest("hex");
+    if (proposalDigest !== expectedProposalDigest) throw new Error("The proposal changed after it was displayed; review and approve the new exact patch");
+    const plan = planArtifact.value as RemediationPlan;
+    const proposal = parseRemediationProposal(proposalArtifact.value);
+    const approval = parseApprovalReceipt(approvalArtifact.value);
+    if (!approvalMatches(approval, plan, proposal)) {
+      throw new Error("The approval receipt no longer matches the exact plan, patch, files, and tests");
+    }
+    if (proposal.finding_id !== findingId) throw new Error("The proposal does not match the requested finding");
+    return { plan, proposal, approval, proposal_digest: proposalDigest };
+  }
+
   private async approvalItems(priorities: PrioritizationReport | null): Promise<ApprovalItem[]> {
     if (!priorities) return [];
     const output: ApprovalItem[] = [];
@@ -111,6 +143,17 @@ export class RepositoryStore {
       if (!proposal || proposal.value === null || typeof proposal.value !== "object" || Array.isArray(proposal.value)) continue;
       const value = proposal.value as Record<string, unknown>;
       const approval = await this.readArtifact(`.reporook/remediations/${findingId}/approval.json`);
+      const plan = await this.readArtifact(`.reporook/remediations/${findingId}/plan.json`);
+      let approvalId: string | null = null;
+      if (approval && plan) {
+        try {
+          const parsedProposal = parseRemediationProposal(proposal.value);
+          const parsedApproval = parseApprovalReceipt(approval.value);
+          if (approvalMatches(parsedApproval, plan.value, parsedProposal)) approvalId = parsedApproval.approval_id;
+        } catch {
+          approvalId = null;
+        }
+      }
       output.push({
         finding_id: findingId,
         proposal_digest: createHash("sha256").update(proposal.raw).digest("hex"),
@@ -119,7 +162,8 @@ export class RepositoryStore {
         files: stringList(value.files, 100),
         patch: cleanText(value.patch, 200_000),
         test_plan: stringList(value.test_plan, 100),
-        approved: approval !== null,
+        approved: approvalId !== null,
+        approval_id: approvalId,
       });
     }
     return output;

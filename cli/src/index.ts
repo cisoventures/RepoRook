@@ -25,7 +25,8 @@ export { VERSION };
 export { verifyFindingResolution };
 export { initializeRepository, prioritizeFindings, createRemediationPlan };
 export { createFindingBaseline, createFindingSuppression };
-export { createApprovalReceipt };
+export { approvalMatches, createApprovalReceipt, parseApprovalReceipt };
+export { parseRemediationProposal } from "./approval.js";
 export { manageIntegrations, parseIntegrationHosts };
 export { detectProject } from "./initializer.js";
 export * from "./types.js";
@@ -356,7 +357,7 @@ async function main(): Promise<number> {
   if (parsed.command === "plan") return await runPlan(parsed);
   if (parsed.command === "verify") return await runVerify(parsed);
   if (parsed.command === "doctor") {
-    const checks = await diagnose(parsed.positionals[0] ?? ".");
+    const checks = await diagnose(parsed.positionals[0] ?? ".", stringFlag(parsed.flags, "config"));
     process.stdout.write(`${renderDoctor(checks)}\n`);
     return checks.some((check) => check.needed && !check.available) ? 1 : 0;
   }
