@@ -2,6 +2,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { isIP } from "node:net";
 import { URL } from "node:url";
+import type { RemediationPublisher } from "./github.js";
 import { RepositoryStore } from "./repository.js";
 import { runRepoRook, type CliRunner } from "./runner.js";
 import { dashboardCss, dashboardHtml, dashboardJs } from "./ui.js";
@@ -16,6 +17,7 @@ export interface DashboardServerOptions {
   cliRunner?: CliRunner;
   bootstrapToken?: string;
   sessionToken?: string;
+  publisher?: RemediationPublisher;
 }
 
 export interface ScanJob {
@@ -112,6 +114,8 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
   const cli = options.cliRunner ?? runRepoRook;
   const bootstrapToken = options.bootstrapToken ?? randomBytes(32).toString("base64url");
   const sessionToken = options.sessionToken ?? randomBytes(32).toString("base64url");
+  const publisher = options.publisher;
+  const publishingFindings = new Set<string>();
   let origin = "";
   let job: ScanJob = { status: "idle", started_at: null, finished_at: null, exit_code: null, message: "Ready" };
 
@@ -137,7 +141,12 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
         return json(response, 200, { authenticated: true });
       }
       if (!hasSession) throw new HttpError(401, "Dashboard session required");
-      if (method === "GET" && url.pathname === "/api/status") return json(response, 200, await store.snapshot());
+      if (method === "GET" && url.pathname === "/api/status") {
+        return json(response, 200, {
+          ...(await store.snapshot()),
+          publishing: publisher ? { enabled: true, repository: publisher.repository } : { enabled: false, repository: null },
+        });
+      }
       if (method === "GET" && url.pathname === "/api/job") return json(response, 200, job);
       if (method === "POST" && url.pathname === "/api/onboard") {
         const input = await body(request);
@@ -185,6 +194,25 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
         const result = await cli(["approve", findingId, store.target, "--approved-by", approvedBy, "--reason", reason, "--format", "json"]);
         if (result.code !== 0) throw new HttpError(422, result.stderr.trim() || "RepoRook could not record the approval");
         return json(response, 200, JSON.parse(result.stdout) as unknown);
+      }
+      if (method === "POST" && url.pathname === "/api/publish") {
+        if (!publisher) throw new HttpError(409, "GitHub publishing is not configured for this dashboard");
+        const input = await body(request);
+        if (input.confirmation !== "open approved draft pull request") throw new HttpError(400, "Draft pull request confirmation did not match");
+        const findingId = stringValue(input.finding_id, "finding_id", 15, 15);
+        if (!/^rr-[a-f0-9]{12}$/.test(findingId)) throw new HttpError(400, "Invalid finding ID");
+        const digest = stringValue(input.proposal_digest, "proposal_digest", 64, 64);
+        if (!/^[a-f0-9]{64}$/.test(digest)) throw new HttpError(400, "Invalid proposal digest");
+        if (publishingFindings.has(findingId)) throw new HttpError(409, "A draft pull request is already being prepared for this finding");
+        publishingFindings.add(findingId);
+        try {
+          const publication = await store.publication(findingId, digest);
+          return json(response, 201, await publisher.publish(publication));
+        } catch (error) {
+          throw new HttpError(422, error instanceof Error ? error.message : "RepoRook could not open the draft pull request");
+        } finally {
+          publishingFindings.delete(findingId);
+        }
       }
       throw new HttpError(404, "Not found");
     } catch (error) {
