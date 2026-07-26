@@ -1,7 +1,7 @@
 {
   "name": "@reporook/service",
   "version": "0.7.0",
-  "description": "Local no-code RepoRook dashboard with approval-bound, repository-scoped draft pull requests.",
+  "description": "Local no-code security dashboard with guided repository-only GitHub App publishing.",
   "license": "MIT",
   "homepage": "https://github.com/cisoventures/RepoRook#readme",
   "repository": {
