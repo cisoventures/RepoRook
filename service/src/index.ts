@@ -2,6 +2,7 @@
 import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { detectGitHubRepository, GitHubAppIntegration } from "./github-app.js";
 import { GitHubPublisher } from "./github.js";
 import { startDashboardServer } from "./server.js";
 
@@ -15,14 +16,15 @@ Options:
   --repo PATH   Repository to manage (default: current directory)
   --port PORT   Loopback port (default: 7377; use 0 for an ephemeral port)
   --github-repo OWNER/REPO
-                Enable approval-bound draft PRs for one selected repository;
-                requires REPOROOK_GITHUB_TOKEN to contain an installation token
+                Override the repository detected from the github.com origin
   --version     Print the service version
   --help        Show this help
 
 The service binds only to 127.0.0.1 and prints a private dashboard URL. It never
 modifies local application code. Optional GitHub publishing accepts only an App
-installation token and creates a draft PR from an exact approved proposal.
+installation restricted to the detected repository and creates a draft PR from
+an exact approved proposal. A legacy installation token may be supplied through
+REPOROOK_GITHUB_TOKEN; personal access tokens are rejected.
 `;
 
 function value(args: string[], name: string): string | undefined {
@@ -37,13 +39,13 @@ async function main(): Promise<void> {
   const repository = resolve(value(args, "--repo") ?? ".");
   const rawPort = value(args, "--port") ?? "7377";
   if (!/^\d{1,5}$/.test(rawPort)) throw new Error("--port must be an integer between 0 and 65535");
-  const githubRepository = value(args, "--github-repo");
+  const githubRepository = value(args, "--github-repo") ?? await detectGitHubRepository(repository).catch(() => undefined);
   const githubToken = process.env.REPOROOK_GITHUB_TOKEN;
-  if (githubRepository && !githubToken) throw new Error("--github-repo requires REPOROOK_GITHUB_TOKEN to contain a GitHub App installation token");
-  if (githubToken && !githubRepository) throw new Error("REPOROOK_GITHUB_TOKEN is set but --github-repo was not provided");
+  if (githubToken && !githubRepository) throw new Error("REPOROOK_GITHUB_TOKEN is set but no github.com repository was detected; provide --github-repo OWNER/REPOSITORY");
   const publisher = githubRepository && githubToken ? new GitHubPublisher({ repository: githubRepository, token: githubToken }) : undefined;
-  const dashboard = await startDashboardServer({ repository, port: Number(rawPort), ...(publisher ? { publisher } : {}) });
-  process.stdout.write(`RepoRook dashboard\nRepository: ${repository}\nPrivate URL: ${dashboard.bootstrap_url}\n\nKeep this URL private; it authorizes local dashboard access. Press Ctrl+C to stop.\n`);
+  const githubApp = githubRepository && !githubToken ? await GitHubAppIntegration.open({ repository: githubRepository }) : undefined;
+  const dashboard = await startDashboardServer({ repository, port: Number(rawPort), ...(publisher ? { publisher } : {}), ...(githubApp ? { githubApp } : {}) });
+  process.stdout.write(`RepoRook dashboard\nRepository: ${repository}\nGitHub target: ${githubRepository ?? "not detected"}\nPrivate URL: ${dashboard.bootstrap_url}\n\nKeep this URL private; it authorizes local dashboard access. Press Ctrl+C to stop.\n`);
   const stop = (): void => { void dashboard.close().finally(() => process.exit(0)); };
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
@@ -58,5 +60,6 @@ function isEntryPoint(): boolean {
 if (isEntryPoint()) main().catch((error: Error) => { process.stderr.write(`RepoRook service error: ${error.message}\n`); process.exitCode = 2; });
 
 export { startDashboardServer } from "./server.js";
+export { detectGitHubRepository, GitHubAppIntegration, parseGitHubRemote } from "./github-app.js";
 export { GitHubPublisher } from "./github.js";
 export type { PublishedPullRequest, RemediationPublication, RemediationPublisher } from "./github.js";
