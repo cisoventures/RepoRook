@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createApprovalReceipt } from "reporook";
 import { startDashboardServer } from "../dist/server.js";
 import { RepositoryStore } from "../dist/repository.js";
 
@@ -56,6 +57,46 @@ async function session(dashboard) {
   });
   assert.equal(response.status, 200);
   return response.headers.get("set-cookie").split(";", 1)[0];
+}
+
+async function approvedPublicationFixture() {
+  const { repository } = await fixture();
+  const report = JSON.parse(await readFile(join(repository, ".reporook", "findings.json"), "utf8"));
+  const sourceScan = {
+    target: repository,
+    commit: report.target.commit,
+    config_hash: `sha256:${"c".repeat(64)}`,
+    scanner_versions: { semgrep: "1" },
+    started_at: "2026-07-25T00:00:00.000Z",
+    completed_at: report.generated_at,
+  };
+  const plan = {
+    schema_version: "1.0",
+    tool: { name: "reporook", version: "0.7.0" },
+    plan_id: "rrp-0123456789ab",
+    status: "awaiting-proposal",
+    generated_at: report.generated_at,
+    finding: report.findings[0],
+    source_scan: sourceScan,
+  };
+  const proposal = {
+    schema_version: "1.0",
+    plan_id: plan.plan_id,
+    finding_id: findingId,
+    created_at: report.generated_at,
+    risk_explanation: "An attacker could execute a command.",
+    behavior_impact: "Invalid commands will be rejected.",
+    files: ["app.js"],
+    patch: "--- a/app.js\n+++ b/app.js\n@@ -1 +1 @@\n-export const ready = true;\n+export const ready = false;\n",
+    test_plan: ["npm test"],
+  };
+  const approval = createApprovalReceipt(plan, proposal, "Security owner", "Reviewed the exact patch and tests", new Date("2026-07-25T00:01:00.000Z"));
+  const directory = join(repository, ".reporook", "remediations", findingId);
+  await writeFile(join(directory, "plan.json"), `${JSON.stringify(plan, null, 2)}\n`);
+  await writeFile(join(directory, "proposal.json"), `${JSON.stringify(proposal, null, 2)}\n`);
+  await writeFile(join(directory, "approval.json"), `${JSON.stringify(approval, null, 2)}\n`);
+  const proposalRaw = await readFile(join(directory, "proposal.json"), "utf8");
+  return { repository, proposal, digest: createHash("sha256").update(proposalRaw).digest("hex") };
 }
 
 async function startOrSkip(context, options) {
@@ -160,6 +201,40 @@ test("scan execution is single-flight and preserves RepoRook exit semantics", as
     assert.equal(job.status, "completed");
     assert.equal(job.exit_code, 1);
     assert.match(job.message, /actionable findings/);
+  } finally {
+    await dashboard.close();
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("draft PR publishing requires a separate confirmation and a current exact approval", async (context) => {
+  const { repository, digest } = await approvedPublicationFixture();
+  const calls = [];
+  const publisher = {
+    repository: "cisoventures/RepoRook",
+    publish: async (publication) => {
+      calls.push(publication);
+      return { repository: "cisoventures/RepoRook", number: 21, url: "https://github.com/cisoventures/RepoRook/pull/21", branch: "reporook/fix", commit: "d".repeat(40), draft: true };
+    },
+  };
+  const dashboard = await startOrSkip(context, { repository, port: 0, bootstrapToken: "bootstrap-test-token", sessionToken: "session-test-token", publisher, cliRunner: async () => ({ code: 0, stdout: "{}", stderr: "" }) });
+  if (!dashboard) { await rm(repository, { recursive: true, force: true }); return; }
+  try {
+    const cookie = await session(dashboard);
+    const send = async (confirmation, proposalDigest = digest) => await fetch(`${dashboard.origin}/api/publish`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: dashboard.origin, cookie },
+      body: JSON.stringify({ finding_id: findingId, proposal_digest: proposalDigest, confirmation }),
+    });
+    assert.equal((await send("yes")).status, 400);
+    assert.equal(calls.length, 0);
+    const published = await send("open approved draft pull request");
+    assert.equal(published.status, 201);
+    assert.equal((await published.json()).draft, true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].approval.finding_id, findingId);
+    assert.equal((await send("open approved draft pull request", "0".repeat(64))).status, 422);
+    assert.equal(calls.length, 1);
   } finally {
     await dashboard.close();
     await rm(repository, { recursive: true, force: true });
