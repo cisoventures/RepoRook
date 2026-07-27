@@ -34,6 +34,13 @@ test("configuration rejects values that can silently weaken coverage", () => {
   assert.throws(() => normalizeConfig({ containerImages: ["--input"] }), /Invalid container image reference/);
   assert.throws(() => normalizeConfig({ requiredScanners: ["trivy-image"] }), /cannot be required without/);
   assert.throws(() => normalizeConfig({ requireScanners: ["gitleaks"] }), /Unknown RepoRook configuration key/);
+  assert.deepEqual(
+    normalizeConfig({ "cache-enabled": false, "cache-ttl-minutes": 30, "scanner-retries": 2 }),
+    { ...structuredClone(defaultConfig), cacheEnabled: false, cacheTtlMinutes: 30, scannerRetries: 2 },
+  );
+  assert.throws(() => normalizeConfig({ cacheEnabled: "yes" }), /must be true or false/);
+  assert.throws(() => normalizeConfig({ cacheTtlMinutes: 0 }), /integer between 1 and 1440/);
+  assert.throws(() => normalizeConfig({ scannerRetries: 4 }), /integer between 0 and 3/);
   assert.throws(() => normalizeConfig(parseSimpleYaml("paths: [false]\n")), /list of non-empty strings/);
   assert.throws(() => parseSimpleYaml("failOn: high\nfailOn: low\n"), /Duplicate configuration key/);
 });

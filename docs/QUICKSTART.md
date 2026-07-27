@@ -50,6 +50,8 @@ This installs repository-local support for Claude Code, Codex, Cursor, GitHub Co
 npx --yes reporook@latest scan . --require-scanners
 ```
 
+RepoRook resumes successful scanner work for a clean, unchanged commit for up to 15 minutes. Scanner failures are retried once and never cached. Use `--refresh-cache` when you want every scanner rerun immediately or `--no-cache` for a cache-free diagnostic scan. Relevant uncommitted files automatically disable reuse.
+
 The result is deliberately simple:
 
 - Exit `0`: coverage completed and no new, unsuppressed finding met its effective threshold.
@@ -103,6 +105,8 @@ npx --yes reporook@latest verify FINDING_ID . --require-scanners
 ```
 
 Verification exit `0` means scanner resolution passed, exit `1` means the finding remains, and exit `2` means the result is inconclusive. The baseline is preserved and the before/after receipt is written under `.reporook/verifications/FINDING_ID/`. A disappeared finding is not called fixed when its original scanner did not complete or the configuration changed, and scanner resolution does not replace functional tests.
+
+Verification always reruns applicable scanners; it never accepts cached evidence as proof that an approved fix worked.
 
 ## Optional: start gating only new findings
 

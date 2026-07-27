@@ -74,9 +74,10 @@ export class NpmAuditScanner implements ScannerAdapter {
       ? { applicable: true }
       : { applicable: false, reason: "no package-lock.json detected" };
   }
+  async version() { return scannerVersion("npm"); }
 
   async run(context: ScannerContext): Promise<ScannerResult> {
-    const version = await scannerVersion("npm");
+    const version = context.scannerVersion !== undefined ? context.scannerVersion : await scannerVersion("npm");
     if (!version) return unavailable(this.name, 0, "npm is not installed");
     const result = await runCommand("npm", ["audit", "--json"], { cwd: context.target });
     if (result.missing) return unavailable(this.name, result.duration_ms, "npm is not installed");

@@ -303,6 +303,9 @@ export interface RepoRookConfig {
   pathPolicies: Record<string, Severity>;
   containerImages: string[];
   gitHistory: boolean;
+  cacheEnabled: boolean;
+  cacheTtlMinutes: number;
+  scannerRetries: number;
 }
 
 export interface ScanOptions {
@@ -311,11 +314,15 @@ export interface ScanOptions {
   changedBase?: string;
   changedHead?: string;
   requireScanners?: boolean;
+  cacheEnabled?: boolean;
+  refreshCache?: boolean;
+  cacheTtlMs?: number;
 }
 
 export interface ScannerContext {
   target: string;
   config: RepoRookConfig;
+  scannerVersion?: string | null;
 }
 
 export interface ScannerResult {
@@ -326,5 +333,6 @@ export interface ScannerResult {
 export interface ScannerAdapter {
   name: string;
   isApplicable(target: string, config?: RepoRookConfig): Promise<{ applicable: boolean; reason?: string }>;
+  version?(context: ScannerContext): Promise<string | null>;
   run(context: ScannerContext): Promise<ScannerResult>;
 }

@@ -23,11 +23,18 @@ test("CLI executes its entry point through the platform's package launch form", 
       : await execute(binary, ["--help"]);
     assert.match(help.stdout, /verify <finding-id>/);
     assert.match(help.stdout, /integrate <install\|update\|doctor\|uninstall>/);
+    assert.match(help.stdout, /--refresh-cache/);
     await assert.rejects(
       process.platform === "win32"
         ? execute(process.execPath, [entry, "verify"])
         : execute(binary, ["verify"]),
       (error) => error.code === 2 && /verify requires a valid finding ID/.test(error.stderr),
+    );
+    await assert.rejects(
+      process.platform === "win32"
+        ? execute(process.execPath, [entry, "scan", directory, "--cache-ttl", "0"])
+        : execute(binary, ["scan", directory, "--cache-ttl", "0"]),
+      (error) => error.code === 2 && /--cache-ttl requires an integer from 1 to 1440/.test(error.stderr),
     );
   } finally {
     await rm(directory, { recursive: true, force: true });

@@ -45,10 +45,11 @@ export function parseGitleaks(raw: unknown, target: string, history = false): Fi
 export class GitleaksScanner implements ScannerAdapter {
   name = "gitleaks";
   async isApplicable() { return { applicable: true }; }
+  async version() { return scannerVersion("gitleaks"); }
 
   async run(context: ScannerContext): Promise<ScannerResult> {
     const started = Date.now();
-    const version = await scannerVersion("gitleaks");
+    const version = context.scannerVersion !== undefined ? context.scannerVersion : await scannerVersion("gitleaks");
     if (!version) return unavailable(this.name, Date.now() - started, "gitleaks is not installed; run `reporook setup`");
     const temporary = await mkdtemp(join(tmpdir(), "reporook-gitleaks-"));
     const reportPath = join(temporary, "report.json");
