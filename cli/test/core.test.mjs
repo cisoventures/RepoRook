@@ -47,6 +47,8 @@ test("configuration rejects values that can silently weaken coverage", () => {
   assert.throws(() => normalizeConfig({ scannerRetries: 4 }), /integer between 0 and 3/);
   assert.throws(() => normalizeConfig(parseSimpleYaml("paths: [false]\n")), /list of non-empty strings/);
   assert.throws(() => parseSimpleYaml("failOn: high\nfailOn: low\n"), /Duplicate configuration key/);
+  assert.throws(() => parseSimpleYaml("__proto__:\n  polluted: true\n"), /unsafe mapping key/);
+  assert.throws(() => normalizeConfig(JSON.parse('{"pathPolicies":{"__proto__":"low"}}')), /unsafe mapping key/);
 });
 
 test("default configuration disables Semgrep telemetry while selecting explicit rules", () => {

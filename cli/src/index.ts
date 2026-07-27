@@ -48,7 +48,7 @@ Usage:
   reporook integrate <install|update|doctor|uninstall> [path] [--host all] [--apply]
 
 Scan options:
-  --config PATH          Configuration file (default: reporook.yml when present)
+  --config PATH          Repository-local configuration file (default: reporook.yml when present)
   --version, -v          Print the RepoRook version
   --fail-on SEVERITY     critical, high, medium, or low
   --output PATH          Findings JSON output

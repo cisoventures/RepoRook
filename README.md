@@ -124,7 +124,7 @@ pathPolicies:
   src/payments/**: medium
 ```
 
-Configuration is validated strictly: unknown scanner names, invalid value types, unknown keys, a scanner that is both required and disabled, and a path rule that weakens the global threshold are errors rather than silent fallbacks. Baseline and suppression files are repository-relative, reviewable JSON. Missing policy files fail safe by making findings actionable rather than hiding them.
+Configuration is validated strictly: unknown scanner names, invalid value types, unknown keys, a scanner that is both required and disabled, and a path rule that weakens the global threshold are errors rather than silent fallbacks. Configuration files must be regular, non-symbolic-link files inside the repository and are capped at 1 MiB; an explicitly requested missing file is an error rather than a fallback to defaults. Baseline and suppression files are repository-relative, reviewable JSON. Missing policy files fail safe by making findings actionable rather than hiding them.
 
 An optional organization policy is a committed, repository-relative YAML or JSON profile. It sets a minimum global threshold, required scanners, and sensitive-path thresholds. Repository configuration may tighten those values but cannot weaken them or disable a profile-required scanner. RepoRook validates the file without following symbolic links and binds its content hash into policy evidence and the scan receipt. See [team policy](docs/TEAM_POLICY.md).
 
@@ -217,8 +217,8 @@ npm run fixture:prepare
 node cli/dist/index.js scan test-fixtures/vulnerable-app --require-scanners
 ```
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/SERVICE.md`](docs/SERVICE.md), [`docs/TEAM_POLICY.md`](docs/TEAM_POLICY.md), [`docs/ADAPTERS.md`](docs/ADAPTERS.md), [`docs/AGENT_SETUP.md`](docs/AGENT_SETUP.md), the [`roadmap`](docs/ROADMAP.md), and [`CONTRIBUTING.md`](CONTRIBUTING.md).
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/HARDENING.md`](docs/HARDENING.md), [`docs/SERVICE.md`](docs/SERVICE.md), [`docs/TEAM_POLICY.md`](docs/TEAM_POLICY.md), [`docs/ADAPTERS.md`](docs/ADAPTERS.md), [`docs/AGENT_SETUP.md`](docs/AGENT_SETUP.md), the [`roadmap`](docs/ROADMAP.md), and [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Project status
 
-The repository contains the v0.8 scale-and-reliability architecture: bounded scanner checkpoints and retries, workspace-aware changed-file scans with explicit scope receipts, and hash-bound organization policy profiles that repositories may tighten but not weaken. It builds on the local no-code service and its one-repository GitHub App boundary. Remote multi-user service operation remains future work. Scanner accuracy, policy contracts, service boundaries, and host packaging remain pre-1.0 and should expand only through fixture-backed, reviewable contributions.
+The repository contains the v0.8 scale-and-reliability architecture: bounded scanner checkpoints and retries, workspace-aware changed-file scans with explicit scope receipts, and hash-bound organization policy profiles that repositories may tighten but not weaken. v0.9 hardening is underway from the authoritative `SECURITY.md` threat model, beginning with hostile configuration boundaries and deterministic parser fuzzing. It builds on the local no-code service and its one-repository GitHub App boundary. Remote multi-user service operation remains future work. Scanner accuracy, policy contracts, service boundaries, and host packaging remain pre-1.0 and should expand only through fixture-backed, reviewable contributions.
