@@ -19,7 +19,7 @@ function publication() {
   };
   const plan = {
     schema_version: "1.0",
-    tool: { name: "reporook", version: "0.9.0" },
+    tool: { name: "reporook", version: "0.9.1" },
     plan_id: planId,
     status: "awaiting-proposal",
     generated_at: source_scan.completed_at,
