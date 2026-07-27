@@ -1,6 +1,7 @@
 import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { findingFingerprint } from "../fingerprint.js";
+import { scopedChangedFiles } from "../incremental.js";
 import { plainSummary } from "../knowledge.js";
 import { runCommand } from "../process.js";
 import { normalizeSeverity } from "../severity.js";
@@ -73,6 +74,15 @@ export class NpmAuditScanner implements ScannerAdapter {
     return await exists(join(target, "package-lock.json"))
       ? { applicable: true }
       : { applicable: false, reason: "no package-lock.json detected" };
+  }
+  async incremental(context: ScannerContext) {
+    if (!await exists(join(context.target, "package-lock.json"))) {
+      return { applicable: false, scope: "changed-files" as const, reason: "no package-lock.json detected" };
+    }
+    const scanFiles = await scopedChangedFiles(context, (path) => path === "package-lock.json");
+    return scanFiles.length
+      ? { applicable: true, scope: "changed-files" as const, scanFiles }
+      : { applicable: false, scope: "changed-files" as const, reason: "root package-lock.json is unchanged" };
   }
   async version() { return scannerVersion("npm"); }
 

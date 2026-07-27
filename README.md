@@ -67,7 +67,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: cisoventures/RepoRook@v0.7.0
+      - uses: cisoventures/RepoRook@v0.8.0
         with:
           fail-on: high
           mode: diff
@@ -103,6 +103,7 @@ containerImages: [] # explicit refs only; RepoRook never guesses or builds image
 cacheEnabled: true # successful scanner checkpoints only
 cacheTtlMinutes: 15 # short freshness window for changing advisories and rules
 scannerRetries: 1 # retry scanner errors once; unavailable scanners are not retried
+organizationPolicy: security/reporook-organization.yml # optional committed minimum policy
 paths:
   - .
 ignore:
@@ -125,9 +126,13 @@ pathPolicies:
 
 Configuration is validated strictly: unknown scanner names, invalid value types, unknown keys, a scanner that is both required and disabled, and a path rule that weakens the global threshold are errors rather than silent fallbacks. Baseline and suppression files are repository-relative, reviewable JSON. Missing policy files fail safe by making findings actionable rather than hiding them.
 
+An optional organization policy is a committed, repository-relative YAML or JSON profile. It sets a minimum global threshold, required scanners, and sensitive-path thresholds. Repository configuration may tighten those values but cannot weaken them or disable a profile-required scanner. RepoRook validates the file without following symbolic links and binds its content hash into policy evidence and the scan receipt. See [team policy](docs/TEAM_POLICY.md).
+
 Checkov runs with uploads and external downloads disabled and ignores repository-supplied Checkov configuration. Trivy runs only when `containerImages` contains an explicit target; tags work, but immutable digest references are safer. Git-history scanning is off by default because it expands scope and runtime. See [Infrastructure, container, and history scanning](docs/INFRASTRUCTURE.md).
 
 Successful per-scanner results are checkpointed under `.reporook/cache/` only for a clean Git commit and reused for at most 15 minutes by default. The key binds the commit, RepoRook and scanner versions, normalized configuration, and changed-file scope. Dirty relevant files, configuration or version changes, stale or malformed records, `--refresh-cache`, and `verify` all force a fresh scanner run. Errors and unavailable scanners are never cached. Use `--no-cache` for a cache-free scan or `--cache-ttl MINUTES` for a bounded one-run freshness override.
+
+Changed-file scans plan work per adapter. Semgrep, OSV-Scanner, `npm audit`, `pip-audit`, and Checkov receive only relevant changed files or manifests; unrelated adapters are explicitly marked `not-applicable`. Gitleaks deliberately retains repository scope so a changed secret is not missed, and Trivy retains its explicit external-image scope. The receipt records every scanner scope, making faster monorepo scans auditable rather than silently narrower.
 
 ## Outputs
 
@@ -216,4 +221,4 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/SERVICE.md`](docs/SER
 
 ## Project status
 
-The repository contains the local v0.7 no-code service and its repository-scoped GitHub App onboarding and publishing boundary on top of the v0.6 infrastructure-coverage architecture. The dashboard can create a draft PR only from an unchanged, exact approved proposal and a one-hour installation token narrowed to the detected repository. Remote multi-user service operation remains future work. Scanner accuracy, policy contracts, service boundaries, and host packaging remain pre-1.0 and should expand only through fixture-backed, reviewable contributions.
+The repository contains the v0.8 scale-and-reliability architecture: bounded scanner checkpoints and retries, workspace-aware changed-file scans with explicit scope receipts, and hash-bound organization policy profiles that repositories may tighten but not weaken. It builds on the local no-code service and its one-repository GitHub App boundary. Remote multi-user service operation remains future work. Scanner accuracy, policy contracts, service boundaries, and host packaging remain pre-1.0 and should expand only through fixture-backed, reviewable contributions.

@@ -33,6 +33,16 @@
       "type": "object",
       "additionalProperties": { "enum": ["critical", "high", "medium", "low"] }
     },
+    "organization_policy": {
+      "type": "object",
+      "required": ["name", "path", "hash"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+      },
+      "additionalProperties": false
+    },
     "summary": {
       "type": "object",
       "required": ["new", "existing", "actionable", "below_threshold", "suppressed", "expired_suppressions"],

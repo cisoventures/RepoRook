@@ -1,6 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { basename, join, relative } from "node:path";
 import { findingFingerprint } from "../fingerprint.js";
+import { scopedChangedFiles } from "../incremental.js";
 import { plainSummary } from "../knowledge.js";
 import { repoRelative } from "../path-utils.js";
 import { runCommand } from "../process.js";
@@ -223,13 +224,21 @@ export class OsvScanner implements ScannerAdapter {
       ? { applicable: true }
       : { applicable: false, reason: "no complementary OSV-supported dependency files detected" };
   }
+  async incremental(context: ScannerContext) {
+    const scanFiles = await scopedChangedFiles(context, (path) => isSupportedLockfile(path) && !handledByNativeRootScanner(path));
+    return scanFiles.length
+      ? { applicable: true, scope: "changed-files" as const, scanFiles }
+      : { applicable: false, scope: "changed-files" as const, reason: "complementary dependency manifests are unchanged" };
+  }
   async version() { return scannerVersion("osv-scanner"); }
 
   async run(context: ScannerContext): Promise<ScannerResult> {
     const started = Date.now();
     const version = context.scannerVersion !== undefined ? context.scannerVersion : await scannerVersion("osv-scanner");
     if (!version) return unavailable(this.name, Date.now() - started, "osv-scanner is not installed; run `reporook setup`");
-    const lockfiles = await discoverOsvLockfiles(context.target);
+    const lockfiles = context.scanFiles?.length
+      ? context.scanFiles.map((path) => join(context.target, path))
+      : await discoverOsvLockfiles(context.target);
     if (!lockfiles.length) return errored(this.name, version, Date.now() - started, "OSV-supported dependency files disappeared before the scan started");
     const args = ["scan", "source", "--format=json", "--verbosity=error"];
     for (const lockfile of lockfiles) args.push("--lockfile", lockfile);

@@ -8,7 +8,7 @@ export interface CommandResult {
   missing: boolean;
 }
 
-export interface CommandOptions { cwd?: string; env?: NodeJS.ProcessEnv; unsetEnv?: string[]; timeoutMs?: number }
+export interface CommandOptions { cwd?: string; env?: NodeJS.ProcessEnv; unsetEnv?: string[]; timeoutMs?: number; maxOutputBytes?: number }
 
 export async function runCommand(
   command: string,
@@ -20,6 +20,11 @@ export async function runCommand(
     let stdout = "";
     let stderr = "";
     let settled = false;
+    let outputExceeded = false;
+    let timedOut = false;
+    let outputBytes = 0;
+    let killTimer: NodeJS.Timeout | null = null;
+    const maxOutputBytes = options.maxOutputBytes ?? 50 * 1024 * 1024;
     const env = { ...process.env, ...options.env };
     for (const name of options.unsetEnv ?? []) delete env[name];
     const child = spawn(command, args, {
@@ -29,6 +34,14 @@ export async function runCommand(
       shell: false,
     });
 
+    const terminate = () => {
+      child.kill("SIGTERM");
+      if (!killTimer) {
+        killTimer = setTimeout(() => child.kill("SIGKILL"), 1_000);
+        killTimer.unref();
+      }
+    };
+
     const finish = (result: Omit<CommandResult, "duration_ms">) => {
       if (settled) return;
       settled = true;
@@ -37,20 +50,37 @@ export async function runCommand(
 
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => (stdout += chunk));
-    child.stderr.on("data", (chunk: string) => (stderr += chunk));
+    const append = (stream: "stdout" | "stderr", chunk: string) => {
+      if (outputExceeded) return;
+      const chunkBytes = Buffer.byteLength(chunk, "utf8");
+      if (outputBytes + chunkBytes > maxOutputBytes) {
+        outputExceeded = true;
+        stderr += `\nCommand output exceeded ${maxOutputBytes} bytes`;
+        terminate();
+        return;
+      }
+      outputBytes += chunkBytes;
+      if (stream === "stdout") stdout += chunk;
+      else stderr += chunk;
+    };
+    child.stdout.on("data", (chunk: string) => append("stdout", chunk));
+    child.stderr.on("data", (chunk: string) => append("stderr", chunk));
     child.on("error", (error: NodeJS.ErrnoException) => {
       finish({ code: 127, stdout, stderr: `${stderr}${error.message}`, missing: error.code === "ENOENT" });
     });
-    child.on("close", (code) => finish({ code: code ?? 2, stdout, stderr, missing: false }));
+    child.on("close", (code) => finish({ code: outputExceeded || timedOut ? 2 : code ?? 2, stdout, stderr, missing: false }));
 
     const timeout = options.timeoutMs ?? 10 * 60_000;
     const timer = setTimeout(() => {
-      child.kill("SIGTERM");
+      timedOut = true;
+      terminate();
       stderr += `\nCommand timed out after ${timeout}ms`;
     }, timeout);
     timer.unref();
-    child.on("close", () => clearTimeout(timer));
+    child.on("close", () => {
+      clearTimeout(timer);
+      if (killTimer) clearTimeout(killTimer);
+    });
   });
 }
 

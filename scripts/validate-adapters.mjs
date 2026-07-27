@@ -51,6 +51,7 @@ const schemas = [
   "schemas/baseline.schema.json",
   "schemas/suppressions.schema.json",
   "schemas/policy-evaluation.schema.json",
+  "schemas/organization-policy.schema.json",
   "schemas/remediation-proposal.schema.json",
   "schemas/approval-receipt.schema.json",
 ];

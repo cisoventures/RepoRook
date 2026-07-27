@@ -45,6 +45,7 @@ export function parseGitleaks(raw: unknown, target: string, history = false): Fi
 export class GitleaksScanner implements ScannerAdapter {
   name = "gitleaks";
   async isApplicable() { return { applicable: true }; }
+  async incremental() { return { applicable: true, scope: "repository" as const, reason: "repository scan required for changed-secret coverage" }; }
   async version() { return scannerVersion("gitleaks"); }
 
   async run(context: ScannerContext): Promise<ScannerResult> {

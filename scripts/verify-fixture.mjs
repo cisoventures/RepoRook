@@ -6,6 +6,17 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const target = resolve(root, "test-fixtures/vulnerable-app");
 const baselinePath = resolve(target, ".reporook/findings.json");
+const scan = spawnSync(process.execPath, [
+  resolve(root, "cli/dist/index.js"),
+  "scan",
+  target,
+  "--no-cache",
+  "--no-sarif",
+  "--quiet",
+], { encoding: "utf8" });
+if (scan.status !== 0 && scan.status !== 1) {
+  throw new Error(`The vulnerable fixture could not produce current scan evidence, received ${scan.status}: ${scan.stderr}`);
+}
 const before = await readFile(baselinePath, "utf8");
 const baseline = JSON.parse(before);
 const finding = baseline.findings.find((candidate) => candidate.scanner === "gitleaks") ?? baseline.findings[0];

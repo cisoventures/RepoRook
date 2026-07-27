@@ -12,6 +12,7 @@ import { toSarif } from "../dist/sarif.js";
 import { gitChangedFiles } from "../dist/git.js";
 import { plainSummary } from "../dist/knowledge.js";
 import { matchesAny } from "../dist/path-utils.js";
+import { runCommand } from "../dist/process.js";
 
 test("simple YAML parser supports lists and scanner flags", () => {
   const parsed = parseSimpleYaml("failOn: medium\nignore:\n  - vendor/**\nscanners:\n  semgrep: false\n");
@@ -20,6 +21,9 @@ test("simple YAML parser supports lists and scanner flags", () => {
   assert.deepEqual(parsed.scanners, { semgrep: false });
   assert.equal(normalizeConfig(parsed).scanners.semgrep, false);
   assert.deepEqual(parseSimpleYaml("requiredScanners: []\n").requiredScanners, []);
+  assert.equal(parseSimpleYaml("organizationPolicy: security/policy.yml # committed minimum\n").organizationPolicy, "security/policy.yml");
+  assert.equal(parseSimpleYaml("schemaVersion: \"1.0\" # schema identity\n").schemaVersion, "1.0");
+  assert.equal(parseSimpleYaml("name: team#one\n").name, "team#one");
 });
 
 test("configuration rejects values that can silently weaken coverage", () => {
@@ -47,6 +51,20 @@ test("configuration rejects values that can silently weaken coverage", () => {
 
 test("default configuration disables Semgrep telemetry while selecting explicit rules", () => {
   assert.equal(defaultConfig.semgrepConfig, "p/default");
+});
+
+test("subprocess output is bounded before scanner parsers receive it", async () => {
+  const result = await runCommand(process.execPath, ["-e", "process.stdout.write('x'.repeat(2048))"], { maxOutputBytes: 1024 });
+  assert.equal(result.code, 2);
+  assert.equal(result.missing, false);
+  assert.match(result.stderr, /Command output exceeded 1024 bytes/);
+  assert.ok(Buffer.byteLength(result.stdout, "utf8") <= 1024);
+});
+
+test("subprocess timeouts cannot be reported as successful exits", async () => {
+  const result = await runCommand(process.execPath, ["-e", "process.on('SIGTERM', () => process.exit(0)); setInterval(() => {}, 1000)"], { timeoutMs: 25 });
+  assert.equal(result.code, 2);
+  assert.match(result.stderr, /Command timed out after 25ms/);
 });
 
 test("artifact paths stay in the worktree while supporting monorepo scan targets", async () => {

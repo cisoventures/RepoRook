@@ -52,6 +52,8 @@ npx --yes reporook@latest scan . --require-scanners
 
 RepoRook resumes successful scanner work for a clean, unchanged commit for up to 15 minutes. Scanner failures are retried once and never cached. Use `--refresh-cache` when you want every scanner rerun immediately or `--no-cache` for a cache-free diagnostic scan. Relevant uncommitted files automatically disable reuse.
 
+The GitHub Action's `mode: diff` plans work per scanner for large repositories and monorepos. Source, dependency, and infrastructure scanners receive only relevant changed files or manifests; Gitleaks retains repository scope so changed secrets are not missed. `.reporook/scan-receipt.json` records every resulting scanner scope.
+
 The result is deliberately simple:
 
 - Exit `0`: coverage completed and no new, unsuppressed finding met its effective threshold.
@@ -112,6 +114,8 @@ Verification always reruns applicable scanners; it never accepts cached evidence
 
 After a complete scan and deliberate review, create a committed baseline with `reporook baseline .`. Temporarily accept one finding with `reporook suppress FINDING_ID . --owner OWNER --reason REASON --expires DATE`. Suppressions always expire and never mean fixed. See [Team policy](TEAM_POLICY.md) before enabling either workflow.
 
+Organizations can also commit a minimum profile and reference it with `organizationPolicy: security/reporook-organization.yml`. A repository may tighten but never weaken its threshold, required scanners, or sensitive-path rules. The profile hash is recorded with the scan evidence; see [Team policy](TEAM_POLICY.md#enforce-an-organization-minimum).
+
 ## Add the pull-request gate
 
 ```yaml
@@ -130,7 +134,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: cisoventures/RepoRook@v0.7.0
+      - uses: cisoventures/RepoRook@v0.8.0
         with:
           fail-on: high
           mode: diff

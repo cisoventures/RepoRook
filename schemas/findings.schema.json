@@ -107,7 +107,11 @@
         "scanner_versions": { "type": "object", "additionalProperties": { "type": ["string", "null"] } },
         "started_at": { "type": "string", "format": "date-time" },
         "completed_at": { "type": "string", "format": "date-time" },
-        "changed_files": { "type": "array", "items": { "type": "string" } }
+        "changed_files": { "type": "array", "items": { "type": "string" } },
+        "scanner_scopes": {
+          "type": "object",
+          "additionalProperties": { "enum": ["repository", "changed-files", "external-targets", "not-applicable"] }
+        }
       },
       "additionalProperties": false
     }
