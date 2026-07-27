@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
-import { lstat, readFile, realpath, stat } from "node:fs/promises";
+import { lstat, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { sha256 } from "./fingerprint.js";
+import { readBoundedTextFile } from "./input.js";
 import { severities, type RepoRookConfig, type Severity } from "./types.js";
 
 export const defaultConfig: RepoRookConfig = {
@@ -311,8 +312,7 @@ async function organizationPolicyPath(target: string, requested: string): Promis
 async function applyOrganizationPolicy(target: string, config: RepoRookConfig): Promise<RepoRookConfig> {
   if (!config.organizationPolicyFile) return config;
   const path = await organizationPolicyPath(target, config.organizationPolicyFile);
-  const contents = await readFile(path, "utf8");
-  if (Buffer.byteLength(contents, "utf8") > maximumOrganizationPolicyBytes) throw new Error("Organization policy file exceeds 256 KiB");
+  const contents = await readBoundedTextFile(path, "Organization policy file", maximumOrganizationPolicyBytes);
   const raw = path.endsWith(".json") ? configObject(JSON.parse(contents)) : parseSimpleYaml(contents);
   const profile = parseOrganizationPolicy(raw);
   if (severities.indexOf(config.failOn) < severities.indexOf(profile.failOn)) {
@@ -403,8 +403,7 @@ export async function loadConfig(target: string, requestedPath?: string): Promis
   for (const candidate of candidates) {
     loadedPath = await configurationPath(target, candidate, requestedPath !== undefined);
     if (!loadedPath) continue;
-    const text = await readFile(loadedPath, "utf8");
-    if (Buffer.byteLength(text, "utf8") > maximumConfigurationBytes) throw new Error("Configuration file exceeds 1 MiB");
+    const text = await readBoundedTextFile(loadedPath, "Configuration file", maximumConfigurationBytes);
     parsed = loadedPath.endsWith(".json") ? configObject(JSON.parse(text)) : parseSimpleYaml(text);
     break;
   }

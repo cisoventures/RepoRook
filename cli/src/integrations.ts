@@ -4,6 +4,7 @@ import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { VERSION } from "./engine.js";
+import { readBoundedJsonFile, readBoundedTextFile } from "./input.js";
 
 export const integrationHosts = ["claude", "codex", "cursor", "copilot", "gemini", "windsurf"] as const;
 export type IntegrationHost = (typeof integrationHosts)[number];
@@ -65,6 +66,8 @@ export interface IntegrationResult {
 }
 
 const receiptName = ".reporook/integrations.json";
+const maximumIntegrationBytes = 2 * 1024 * 1024;
+const maximumReceiptBytes = 1024 * 1024;
 const mcpValue = { command: "npx", args: ["--yes", "@reporook/mcp-server"] };
 const copilotMcpValue = { type: "local", command: "npx", args: ["--yes", "@reporook/mcp-server"], tools: ["*"] };
 const codexMarketplaceEntry = {
@@ -222,7 +225,7 @@ async function readReceipt(root: string): Promise<IntegrationReceipt> {
   const stats = await lstat(path).catch(() => null);
   if (!stats) return { schema_version: "1.0", tool: { name: "reporook", version: VERSION }, hosts: {} };
   if (!stats.isFile() || stats.isSymbolicLink()) throw new Error("RepoRook integration receipt is not a regular file");
-  const parsed = JSON.parse(await readFile(path, "utf8")) as unknown;
+  const parsed = await readBoundedJsonFile(path, "RepoRook integration receipt", maximumReceiptBytes);
   if (!isRecord(parsed) || parsed.schema_version !== "1.0" || !isRecord(parsed.tool) || parsed.tool.name !== "reporook" || !isRecord(parsed.hosts)) {
     throw new Error("RepoRook integration receipt is invalid");
   }
@@ -258,8 +261,8 @@ async function currentEntry(root: string, entry: Pick<ReceiptEntry, "kind" | "pa
   const stats = await lstat(absolute).catch(() => null);
   if (!stats) return { exists: false, containerExists: false };
   if (!stats.isFile()) throw new Error(`Integration destination is not a regular file: ${entry.path}`);
-  if (entry.kind === "file") return { exists: true, containerExists: true, value: await readFile(absolute, "utf8") };
-  const parsed = JSON.parse(await readFile(absolute, "utf8")) as unknown;
+  if (entry.kind === "file") return { exists: true, containerExists: true, value: await readBoundedTextFile(absolute, "Integration destination", maximumIntegrationBytes) };
+  const parsed = await readBoundedJsonFile(absolute, "Integration JSON", maximumIntegrationBytes);
   if (!isRecord(parsed)) throw new Error(`Integration JSON must contain an object: ${entry.path}`);
   const selected = getPath(parsed, entry.json_path ?? []);
   if (entry.kind === "json-member") return { exists: selected !== undefined, containerExists: true, value: selected };
@@ -311,7 +314,7 @@ async function writeSpec(root: string, spec: FileSpec, expected: string | unknow
     return;
   }
   const stats = await lstat(absolute).catch(() => null);
-  const object = stats ? JSON.parse(await readFile(absolute, "utf8")) as unknown : {};
+  const object = stats ? await readBoundedJsonFile(absolute, "Integration JSON", maximumIntegrationBytes) : {};
   if (!isRecord(object)) throw new Error(`Integration JSON must contain an object: ${spec.path}`);
   if (spec.kind === "json-member") setPath(object, spec.jsonPath ?? [], expected);
   else {
@@ -339,7 +342,7 @@ async function removeEntry(root: string, entry: ReceiptEntry): Promise<void> {
     await rm(absolute, { force: true });
     return;
   }
-  const parsed = JSON.parse(await readFile(absolute, "utf8")) as unknown;
+  const parsed = await readBoundedJsonFile(absolute, "Integration JSON", maximumIntegrationBytes);
   if (!isRecord(parsed)) throw new Error(`Integration JSON must contain an object: ${entry.path}`);
   if (entry.kind === "json-member") deletePath(parsed, entry.json_path ?? []);
   else {

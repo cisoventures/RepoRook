@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { integrationExitCode, manageIntegrations, parseIntegrationHosts } from "../dist/integrations.js";
@@ -107,6 +107,31 @@ test("malformed host JSON is rejected without rewriting it", async () => {
     await assert.rejects(() => stat(join(target, ".claude", "skills", "reporook-security", "SKILL.md")));
   } finally {
     await rm(target, { recursive: true, force: true });
+  }
+});
+
+test("oversized and linked host configuration is rejected before integration writes", async () => {
+  const target = await repository();
+  const outside = join(tmpdir(), `reporook-integration-outside-${process.pid}.json`);
+  try {
+    await writeFile(join(target, ".mcp.json"), `{\"mcpServers\":{},\"padding\":\"${"x".repeat(2 * 1024 * 1024)}\"}\n`);
+    await assert.rejects(
+      () => manageIntegrations({ target, operation: "install", hosts: parseIntegrationHosts("claude"), apply: true }),
+      /exceeds the 2 MiB limit/,
+    );
+    await rm(join(target, ".mcp.json"));
+    if (process.platform !== "win32") {
+      await writeFile(outside, "{\"mcpServers\":{}}\n");
+      await symlink(outside, join(target, ".mcp.json"));
+      await assert.rejects(
+        () => manageIntegrations({ target, operation: "install", hosts: parseIntegrationHosts("claude"), apply: true }),
+        /symbolic link/,
+      );
+    }
+    await assert.rejects(() => stat(join(target, ".claude", "skills", "reporook-security", "SKILL.md")));
+  } finally {
+    await rm(target, { recursive: true, force: true });
+    await rm(outside, { force: true });
   }
 });
 

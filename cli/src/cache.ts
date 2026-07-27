@@ -1,8 +1,9 @@
 import { randomBytes } from "node:crypto";
-import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { artifactPath } from "./artifacts.js";
 import { sha256 } from "./fingerprint.js";
+import { maximumEvidenceBytes, readBoundedJsonFile } from "./input.js";
 import { matchesAny } from "./path-utils.js";
 import { runCommand } from "./process.js";
 import type { Finding, FindingMetadata, RepoRookConfig, ScannerResult, ScannerStatus, Severity } from "./types.js";
@@ -219,7 +220,7 @@ export async function readScannerCache(options: {
   const metadata = await lstat(path).catch(() => null);
   if (!metadata || !metadata.isFile() || metadata.isSymbolicLink() || metadata.size > maxCacheBytes) return null;
   let value: unknown;
-  try { value = JSON.parse(await readFile(path, "utf8")) as unknown; }
+  try { value = await readBoundedJsonFile(path, "Scanner cache", maximumEvidenceBytes); }
   catch { return null; }
   const record = object(value);
   const createdAt = Date.parse(typeof record?.created_at === "string" ? record.created_at : "");

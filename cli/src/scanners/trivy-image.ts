@@ -84,6 +84,7 @@ export class TrivyImageScanner implements ScannerAdapter {
       for (const image of context.config.containerImages) {
         const result = await runCommand("trivy", [
           "--config", configPath,
+          "--cache-dir", join(temporary, "cache"),
           "image",
           "--format", "json",
           "--quiet",

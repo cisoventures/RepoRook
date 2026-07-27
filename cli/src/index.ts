@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs, stringFlag } from "./args.js";
@@ -10,6 +9,7 @@ import { loadConfig } from "./config.js";
 import { diagnose, renderDoctor } from "./doctor.js";
 import { requiredScannerFailure, scanExitCode, scanRepository, VERSION } from "./engine.js";
 import { initializeRepository, renderInitialization } from "./initializer.js";
+import { readBoundedJsonFile } from "./input.js";
 import { integrationExitCode, manageIntegrations, parseIntegrationHosts, renderIntegration, type IntegrationOperation } from "./integrations.js";
 import { prioritizeFindings } from "./prioritization.js";
 import { createFindingBaseline, createFindingSuppression, readSuppressionFile } from "./policy.js";
@@ -141,7 +141,7 @@ async function runScan(parsed: ReturnType<typeof parseArgs>): Promise<number> {
 
 async function baselineReport(target: string, input: string): Promise<{ report: ScanReport; path: string }> {
   const path = artifactPath(target, input);
-  const report = JSON.parse(await readFile(path, "utf8")) as ScanReport;
+  const report = await readBoundedJsonFile(path, "Findings artifact") as ScanReport;
   if (resolve(report.scan_receipt?.target ?? "") !== target) throw new Error("The baseline report belongs to a different repository path");
   if (!Array.isArray(report.findings) || !report.scan_receipt?.config_hash) throw new Error("The baseline report is not a valid RepoRook findings artifact");
   return { report, path };
@@ -227,8 +227,8 @@ async function runApprove(parsed: ReturnType<typeof parseArgs>): Promise<number>
   const approvedBy = stringFlag(parsed.flags, "approved-by");
   const reason = stringFlag(parsed.flags, "reason");
   if (!approvedBy || !reason) throw new Error("approve requires --approved-by and --reason");
-  const plan = JSON.parse(await readFile(planPath, "utf8")) as unknown;
-  const proposal = JSON.parse(await readFile(proposalPath, "utf8")) as unknown;
+  const plan = await readBoundedJsonFile(planPath, "Remediation plan");
+  const proposal = await readBoundedJsonFile(proposalPath, "Remediation proposal");
   const receipt = createApprovalReceipt(plan, proposal, approvedBy, reason);
   const output = stringFlag(parsed.flags, "approval-output") ?? `${directory}/approval.json`;
   const outputPath = artifactPath(target, output);
@@ -272,7 +272,7 @@ async function runVerify(parsed: ReturnType<typeof parseArgs>): Promise<number> 
   const target = resolve(parsed.positionals[1] ?? ".");
   const loaded = await loadConfig(target, stringFlag(parsed.flags, "config"));
   const previousPath = artifactPath(target, stringFlag(parsed.flags, "input") ?? `${loaded.config.outputDir}/findings.json`);
-  const previous = JSON.parse(await readFile(previousPath, "utf8")) as ScanReport;
+  const previous = await readBoundedJsonFile(previousPath, "Baseline findings artifact") as ScanReport;
   if (resolve(previous.scan_receipt.target) !== target) throw new Error("The baseline report belongs to a different repository path");
   const original = previous.findings.find((finding) => finding.id === findingId);
   if (!original) throw new Error(`Finding not found: ${findingId}`);
@@ -300,12 +300,12 @@ async function runVerify(parsed: ReturnType<typeof parseArgs>): Promise<number> 
   let approval: VerificationReport["approval"] = { status: "not-recorded", receipt: null };
   let approvalReceiptLoaded = false;
   try {
-    const receipt = parseApprovalReceipt(JSON.parse(await readFile(approvalPath, "utf8")) as unknown);
+    const receipt = parseApprovalReceipt(await readBoundedJsonFile(approvalPath, "Approval receipt"));
     approvalReceiptLoaded = true;
     const planPath = artifactPath(target, stringFlag(parsed.flags, "plan-input") ?? `${remediationDir}/plan.json`);
     const proposalPath = artifactPath(target, stringFlag(parsed.flags, "proposal") ?? `${remediationDir}/proposal.json`);
-    const plan = JSON.parse(await readFile(planPath, "utf8")) as unknown;
-    const proposal = JSON.parse(await readFile(proposalPath, "utf8")) as unknown;
+    const plan = await readBoundedJsonFile(planPath, "Remediation plan");
+    const proposal = await readBoundedJsonFile(proposalPath, "Remediation proposal");
     if (!approvalMatches(receipt, plan, proposal)) throw new Error("Approval receipt no longer matches the exact plan, patch, files, and test plan");
     approval = { status: "approved", receipt };
   } catch (error) {
@@ -397,8 +397,8 @@ async function main(): Promise<number> {
   if (parsed.command === "explain") {
     const id = parsed.positionals[0];
     if (!id) throw new Error("explain requires a finding ID");
-    const input = resolve(stringFlag(parsed.flags, "input") ?? ".reporook/findings.json");
-    const report = JSON.parse(await readFile(input, "utf8")) as ScanReport;
+    const input = artifactPath(resolve("."), stringFlag(parsed.flags, "input") ?? ".reporook/findings.json");
+    const report = await readBoundedJsonFile(input, "Findings artifact") as ScanReport;
     const finding = report.findings.find((item) => item.id === id);
     if (!finding) throw new Error(`Finding not found: ${id}`);
     process.stdout.write(`${renderFinding(finding)}\n`);

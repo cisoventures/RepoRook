@@ -1,5 +1,9 @@
-import { readFile } from "node:fs/promises";
-import { isAbsolute, relative, resolve } from "node:path";
+import { constants } from "node:fs";
+import { lstat, open, realpath, stat } from "node:fs/promises";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
+
+const maximumReportBytes = 10 * 1024 * 1024;
+const maximumSourceBytes = 1024 * 1024;
 
 export interface FindingRecord extends Record<string, unknown> {
   id: string;
@@ -12,8 +16,56 @@ export interface FindingRecord extends Record<string, unknown> {
   remediation_hint: string;
 }
 
-export async function readReport(path: string): Promise<Record<string, unknown>> {
-  return JSON.parse(await readFile(resolve(path), "utf8")) as Record<string, unknown>;
+async function repositoryFile(target: string, requested: string, label: string): Promise<string> {
+  const root = await realpath(resolve(target));
+  if (!(await stat(root)).isDirectory()) throw new Error("Repository path must be a directory");
+  const file = isAbsolute(requested) ? resolve(requested) : resolve(root, requested);
+  const traversal = relative(root, file);
+  if (traversal === ".." || traversal.startsWith(`..${sep}`) || isAbsolute(traversal)) {
+    throw new Error(`${label} resolves outside the repository`);
+  }
+  let current = root;
+  for (const segment of traversal.split(sep).filter(Boolean)) {
+    current = join(current, segment);
+    const metadata = await lstat(current);
+    if (metadata.isSymbolicLink()) throw new Error(`${label} path contains a symbolic link`);
+  }
+  return file;
+}
+
+async function boundedText(path: string, label: string, maximumBytes: number): Promise<string> {
+  const before = await lstat(path);
+  if (before.isSymbolicLink()) throw new Error(`${label} must not be a symbolic link`);
+  if (!before.isFile()) throw new Error(`${label} must be a regular file`);
+  if (before.size > maximumBytes) throw new Error(`${label} exceeds its ${maximumBytes / (1024 * 1024)} MiB limit`);
+  const noFollow = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0;
+  const handle = await open(path, constants.O_RDONLY | noFollow);
+  try {
+    const opened = await handle.stat();
+    if (!opened.isFile()) throw new Error(`${label} must be a regular file`);
+    if (opened.size > maximumBytes) throw new Error(`${label} exceeds its ${maximumBytes / (1024 * 1024)} MiB limit`);
+    const chunks: Buffer[] = [];
+    let total = 0;
+    while (total <= maximumBytes) {
+      const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, maximumBytes + 1 - total));
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, null);
+      if (bytesRead === 0) break;
+      chunks.push(buffer.subarray(0, bytesRead));
+      total += bytesRead;
+    }
+    if (total > maximumBytes) throw new Error(`${label} exceeds its ${maximumBytes / (1024 * 1024)} MiB limit`);
+    try { return new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks, total)); }
+    catch { throw new Error(`${label} must contain valid UTF-8 text`); }
+  } finally {
+    await handle.close();
+  }
+}
+
+export async function readReport(target: string, requested: string): Promise<Record<string, unknown>> {
+  const path = await repositoryFile(target, requested, "Findings artifact");
+  const parsed = JSON.parse(await boundedText(path, "Findings artifact", maximumReportBytes)) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("Findings artifact must contain a JSON object");
+  return parsed as Record<string, unknown>;
 }
 
 export function findings(report: Record<string, unknown>): FindingRecord[] {
@@ -27,11 +79,8 @@ export function findFinding(report: Record<string, unknown>, id: string): Findin
 }
 
 export async function codeContext(target: string, finding: FindingRecord, radius = 8): Promise<{ start_line: number; end_line: number; code: string }> {
-  const root = resolve(target);
-  const file = isAbsolute(finding.file) ? resolve(finding.file) : resolve(root, finding.file);
-  const traversal = relative(root, file);
-  if (traversal.startsWith("..") || isAbsolute(traversal)) throw new Error("Finding path resolves outside the repository");
-  const source = await readFile(file, "utf8");
+  const file = await repositoryFile(target, finding.file, "Finding path");
+  const source = await boundedText(file, "Finding source", maximumSourceBytes);
   const lines = source.split(/\r?\n/);
   const start = Math.max(1, Number(finding.line || 1) - radius);
   const end = Math.min(lines.length, Number(finding.line || 1) + radius);

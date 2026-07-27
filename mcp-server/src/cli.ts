@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 
 export interface CliResult { code: number; stdout: string; stderr: string; }
+export interface CliOptions { maxOutputBytes?: number; timeoutMs?: number; }
 
 function resolveCli(): { command: string; prefix: string[] } {
   const override = process.env.REPOROOK_CLI;
@@ -15,18 +16,54 @@ function resolveCli(): { command: string; prefix: string[] } {
   }
 }
 
-export async function runRepoRook(args: string[]): Promise<CliResult> {
+export async function runRepoRook(args: string[], options: CliOptions = {}): Promise<CliResult> {
   const cli = resolveCli();
   return await new Promise((resolve, reject) => {
     const child = spawn(cli.command, [...cli.prefix, ...args], { stdio: ["ignore", "pipe", "pipe"], shell: false });
     let stdout = "";
     let stderr = "";
+    let outputBytes = 0;
+    let outputExceeded = false;
+    let timedOut = false;
+    let killTimer: NodeJS.Timeout | null = null;
+    const maximum = options.maxOutputBytes ?? 50 * 1024 * 1024;
+    const timeoutMs = options.timeoutMs ?? 15 * 60_000;
+    const terminate = () => {
+      child.kill("SIGTERM");
+      if (!killTimer) {
+        killTimer = setTimeout(() => child.kill("SIGKILL"), 1_000);
+        killTimer.unref();
+      }
+    };
+    const append = (stream: "stdout" | "stderr", chunk: string) => {
+      if (outputExceeded) return;
+      const bytes = Buffer.byteLength(chunk, "utf8");
+      if (outputBytes + bytes > maximum) {
+        outputExceeded = true;
+        stderr += `\nRepoRook CLI output exceeded ${maximum} bytes`;
+        terminate();
+        return;
+      }
+      outputBytes += bytes;
+      if (stream === "stdout") stdout += chunk;
+      else stderr += chunk;
+    };
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => (stdout += chunk));
-    child.stderr.on("data", (chunk: string) => (stderr += chunk));
+    child.stdout.on("data", (chunk: string) => append("stdout", chunk));
+    child.stderr.on("data", (chunk: string) => append("stderr", chunk));
     child.on("error", reject);
-    child.on("close", (code) => resolve({ code: code ?? 2, stdout, stderr }));
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      stderr += `\nRepoRook CLI timed out after ${timeoutMs}ms`;
+      terminate();
+    }, timeoutMs);
+    timeout.unref();
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      if (killTimer) clearTimeout(killTimer);
+      resolve({ code: outputExceeded || timedOut ? 2 : code ?? 2, stdout, stderr });
+    });
   });
 }
 
