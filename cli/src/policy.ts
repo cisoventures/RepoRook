@@ -272,6 +272,7 @@ export async function evaluatePolicy(
     baseline,
     suppressions: suppressionFile,
     path_policies: config.pathPolicies,
+    organization_policy: config.organizationPolicy,
   };
   return {
     evaluated_at: evaluatedAt,
@@ -289,6 +290,7 @@ export async function evaluatePolicy(
       expired,
     },
     path_policies: { ...config.pathPolicies },
+    ...(config.organizationPolicy ? { organization_policy: { ...config.organizationPolicy } } : {}),
     summary: {
       new: results.filter((item) => item.baseline === "new").length,
       existing: results.filter((item) => item.baseline === "existing").length,

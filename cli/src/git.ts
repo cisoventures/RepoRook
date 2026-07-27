@@ -24,10 +24,14 @@ export async function gitChangedFiles(target: string, base?: string, head = "HEA
     resolveRevision(target, effectiveBase),
     resolveRevision(target, head),
   ]);
-  const result = await runCommand("git", ["diff", "--name-only", "--diff-filter=ACMR", `${baseCommit}...${headCommit}`, "--"], {
+  const result = await runCommand("git", ["diff", "--name-only", "-z", "--diff-filter=ACMR", `${baseCommit}...${headCommit}`, "--"], {
     cwd: target,
     timeoutMs: 30_000,
+    maxOutputBytes: 10 * 1024 * 1024,
   });
   if (result.code !== 0) throw new Error(`Could not determine changed files: ${result.stderr.trim()}`);
-  return result.stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const files = result.stdout.split("\0").filter(Boolean);
+  if (files.length > 50_000) throw new Error("Changed-file scan supports at most 50,000 files");
+  if (files.some((path) => path.length > 10_000)) throw new Error("Changed-file scan encountered an invalid path longer than 10,000 characters");
+  return files;
 }

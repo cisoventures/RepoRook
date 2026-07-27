@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reporook.dev/schemas/organization-policy-1.0.json",
+  "title": "RepoRook Organization Policy",
+  "type": "object",
+  "required": ["schemaVersion", "name", "failOn", "requiredScanners", "pathPolicies"],
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "name": { "type": "string", "minLength": 1 },
+    "failOn": { "enum": ["critical", "high", "medium", "low"] },
+    "requiredScanners": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["semgrep", "gitleaks", "npm-audit", "pip-audit", "osv-scanner", "checkov", "trivy-image"] }
+    },
+    "pathPolicies": {
+      "type": "object",
+      "additionalProperties": { "enum": ["critical", "high", "medium", "low"] }
+    }
+  },
+  "additionalProperties": false
+}

@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: cisoventures/RepoRook@v0.7.0
+      - uses: cisoventures/RepoRook@v0.8.0
         with:
           fail-on: high
           mode: diff
@@ -27,4 +27,6 @@ The Action runs the same deterministic CLI used locally, updates one pull-reques
 
 `require-scanners` defaults to `true`, and failed coverage exits with a tool error even if configuration makes every scanner non-applicable. The Action installs exact Semgrep, Gitleaks, pip-audit, OSV-Scanner, Checkov, and Trivy versions; verifies downloaded binary checksums; and pins third-party Actions by commit SHA. `npm audit` uses the npm executable bundled with Node.js. Trivy runs only for explicit `containerImages` targets, and Git-history scanning remains opt-in through `gitHistory: true`.
 
-Commit `reporook-baseline.json` and `reporook-suppressions.json` when using team policy. Malformed policy fails with exit `2`; expired suppressions are displayed and evaluated normally.
+Commit `reporook-baseline.json` and `reporook-suppressions.json` when using team policy. An optional repository-relative `organizationPolicy` profile can enforce minimum thresholds and required scanners; local settings may tighten it but cannot weaken it, and its content hash is preserved in evidence. Malformed policy fails with exit `2`; expired suppressions are displayed and evaluated normally.
+
+In `mode: diff`, each adapter receives only its relevant changed files or records that no work applies. Gitleaks deliberately keeps repository scope and Trivy keeps explicit external-image scope. The exact scope for every scanner is preserved in `scan_receipt.scanner_scopes`.

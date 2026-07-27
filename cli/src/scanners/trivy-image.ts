@@ -68,6 +68,7 @@ export class TrivyImageScanner implements ScannerAdapter {
       ? { applicable: true }
       : { applicable: false, reason: "no explicit containerImages targets configured; RepoRook never guesses or builds images" };
   }
+  async incremental(_context: ScannerContext) { return { applicable: true, scope: "external-targets" as const }; }
   async version() { return scannerVersion("trivy"); }
 
   async run(context: ScannerContext): Promise<ScannerResult> {

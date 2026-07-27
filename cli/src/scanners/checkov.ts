@@ -2,6 +2,7 @@ import { mkdtemp, open, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, relative } from "node:path";
 import { findingFingerprint } from "../fingerprint.js";
+import { scopedChangedFiles } from "../incremental.js";
 import { repoRelative } from "../path-utils.js";
 import { runCommand } from "../process.js";
 import { normalizeSeverity } from "../severity.js";
@@ -121,6 +122,16 @@ export class CheckovScanner implements ScannerAdapter {
       ? { applicable: true }
       : { applicable: false, reason: "no Terraform, Kubernetes, Dockerfile, Helm, Kustomize, or GitHub Actions files detected" };
   }
+  async incremental(context: ScannerContext) {
+    const candidates = await scopedChangedFiles(context, (path) => obviousInfrastructureFile(path) || /\.ya?ml$/i.test(path));
+    const scanFiles: string[] = [];
+    for (const path of candidates) {
+      if (obviousInfrastructureFile(path) || await looksLikeKubernetesYaml(join(context.target, path))) scanFiles.push(path);
+    }
+    return scanFiles.length
+      ? { applicable: true, scope: "changed-files" as const, scanFiles }
+      : { applicable: false, scope: "changed-files" as const, reason: "infrastructure and workflow files are unchanged" };
+  }
   async version() { return scannerVersion("checkov", {}, ["--version"]); }
 
   async run(context: ScannerContext): Promise<ScannerResult> {
@@ -131,8 +142,11 @@ export class CheckovScanner implements ScannerAdapter {
     const configPath = join(temporary, "checkov.yml");
     await writeFile(configPath, "{}\n", { encoding: "utf8", mode: 0o600 });
     try {
+      const targetArgs = context.scanFiles?.length
+        ? context.scanFiles.flatMap((path) => ["-f", join(context.target, path)])
+        : ["-d", context.target];
       const args = [
-        "-d", context.target,
+        ...targetArgs,
         "--framework", "terraform", "kubernetes", "helm", "kustomize", "dockerfile", "github_actions",
         "--output", "json",
         "--compact",

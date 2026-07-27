@@ -17,6 +17,7 @@ export function renderTerminal(report: ScanReport): string {
   lines.push(`Coverage: ${report.coverage_status.toUpperCase()} | Findings: ${report.summary.total} | Commit: ${report.target.commit?.slice(0, 12) ?? "working tree"}`);
   if (report.policy) {
     lines.push(`Policy: ${report.policy.summary.actionable} actionable | ${report.policy.summary.new} new | ${report.policy.summary.existing} baseline | ${report.policy.summary.suppressed} suppressed`);
+    if (report.policy.organization_policy) lines.push(`Organization policy: ${report.policy.organization_policy.name} (${report.policy.organization_policy.path})`);
     if (report.policy.summary.expired_suppressions) {
       lines.push(`! ${report.policy.summary.expired_suppressions} suppression${report.policy.summary.expired_suppressions === 1 ? " has" : "s have"} expired; matching findings are evaluated normally.`);
     }

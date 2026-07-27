@@ -117,6 +117,7 @@ function yaml(config: RepoRookConfig): string {
     `cacheEnabled: ${config.cacheEnabled}`,
     `cacheTtlMinutes: ${config.cacheTtlMinutes}`,
     `scannerRetries: ${config.scannerRetries}`,
+    ...(config.organizationPolicyFile ? [`organizationPolicy: ${config.organizationPolicyFile}`] : []),
     ...(config.containerImages.length
       ? ["containerImages:", ...config.containerImages.map((image) => `  - ${image}`)]
       : ["containerImages: []"]),
@@ -189,7 +190,10 @@ export async function initializeRepository(targetInput: string, force = false): 
     requiredScanners: [...profile.recommended_scanners],
     scanners: Object.fromEntries(scannerNames.map((name) => [name, true])),
   };
-  const contents = configPath.endsWith(".json") ? `${JSON.stringify(config, null, 2)}\n` : yaml(config);
+  const { organizationPolicyFile, organizationPolicy: _organizationPolicy, ...portableConfig } = config;
+  const contents = configPath.endsWith(".json")
+    ? `${JSON.stringify({ ...portableConfig, ...(organizationPolicyFile ? { organizationPolicy: organizationPolicyFile } : {}) }, null, 2)}\n`
+    : yaml(config);
   if (existingStats) await atomicReplace(configPath, contents, existingStats.mode & 0o777);
   else await writeFile(configPath, contents, { encoding: "utf8", mode: 0o600, flag: "wx" });
   const gitignoreUpdated = await updateGitignore(profile.target);

@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
-import { defaultConfig, normalizeConfig, parseSimpleYaml } from "../dist/config.js";
+import { defaultConfig, loadConfig, normalizeConfig, parseOrganizationPolicy, parseSimpleYaml } from "../dist/config.js";
 import { scanExitCode } from "../dist/engine.js";
 import {
   createFindingBaseline,
@@ -70,6 +70,75 @@ test("configuration accepts deterministic path-specific thresholds", () => {
   assert.throws(() => normalizeConfig({ pathPolicies: { "src/**": "urgent-ish" } }), /Invalid path policy severity/);
   assert.throws(() => normalizeConfig({ failOn: "medium", pathPolicies: { "src/**": "high" } }), /cannot weaken the global/);
   assert.throws(() => normalizeConfig({ baseline: ["wrong"] }), /baseline must be a non-empty string/);
+});
+
+test("organization policy is hash-bound and local configuration may tighten but not weaken it", async () => {
+  const target = await mkdtemp(join(tmpdir(), "reporook-organization-policy-"));
+  const policyPath = join(target, "policy", "security.yml");
+  try {
+    await Promise.all([mkdir(join(target, ".git")), mkdir(join(target, "policy"))]);
+    await writeFile(policyPath, [
+      "schemaVersion: \"1.0\"",
+      "name: CISO Ventures baseline",
+      "failOn: high",
+      "requiredScanners:",
+      "  - gitleaks",
+      "pathPolicies:",
+      "  src/auth/**: low",
+      "",
+    ].join("\n"));
+    await writeFile(join(target, "reporook.yml"), [
+      "organizationPolicy: policy/security.yml",
+      "failOn: high",
+      "requiredScanners:",
+      "  - semgrep",
+      "scanners:",
+      "  gitleaks: true",
+      "",
+    ].join("\n"));
+    const first = await loadConfig(target);
+    assert.deepEqual(first.config.requiredScanners, ["semgrep", "gitleaks"]);
+    assert.deepEqual(first.config.pathPolicies, { "src/auth/**": "low" });
+    assert.equal(first.config.organizationPolicy.name, "CISO Ventures baseline");
+    assert.match(first.config.organizationPolicy.hash, /^sha256:[a-f0-9]{64}$/);
+    const policy = await evaluatePolicy(target, [finding("rr-777777777777", { severity: "medium", file: "src/auth/session.ts" })], first.config);
+    assert.equal(policy.organization_policy.name, "CISO Ventures baseline");
+    assert.equal(policy.findings[0].disposition, "actionable");
+
+    await writeFile(policyPath, `${await readFile(policyPath, "utf8")}# reviewed\n`);
+    const changed = await loadConfig(target);
+    assert.notEqual(changed.hash, first.hash);
+    assert.notEqual(changed.config.organizationPolicy.hash, first.config.organizationPolicy.hash);
+
+    await writeFile(join(target, "reporook.yml"), "organizationPolicy: policy/security.yml\nfailOn: critical\n");
+    await assert.rejects(loadConfig(target), /weaker than organization policy/);
+    await writeFile(join(target, "reporook.yml"), "organizationPolicy: policy/security.yml\nfailOn: high\nscanners:\n  gitleaks: false\n");
+    await assert.rejects(loadConfig(target), /required by organization policy/);
+  } finally {
+    await rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
+test("organization policy parsing and paths fail closed", async () => {
+  assert.throws(() => parseOrganizationPolicy({ schemaVersion: "1.0", name: "test", failOn: "high", requiredScanners: [], pathPolicies: {}, typo: true }), /unknown field/);
+  assert.throws(() => parseOrganizationPolicy({ schemaVersion: "1.0", name: "test", failOn: "high", requiredScanners: ["gitleaks", "gitleaks"], pathPolicies: {} }), /must not contain duplicates/);
+  assert.throws(() => parseOrganizationPolicy({ schemaVersion: "1.0", name: "test", failOn: "low", requiredScanners: [], pathPolicies: { "src/**": "high" } }), /cannot weaken/);
+  const target = await mkdtemp(join(tmpdir(), "reporook-organization-path-"));
+  const outside = join(tmpdir(), `reporook-outside-policy-${process.pid}.yml`);
+  try {
+    await mkdir(join(target, ".git"));
+    await writeFile(outside, "schemaVersion: \"1.0\"\nname: outside\nfailOn: high\nrequiredScanners: []\npathPolicies:\n");
+    await writeFile(join(target, "reporook.yml"), `organizationPolicy: ../${outside.split("/").at(-1)}\n`);
+    await assert.rejects(loadConfig(target), /inside the repository/);
+    if (process.platform !== "win32") {
+      await symlink(outside, join(target, "linked-policy.yml"));
+      await writeFile(join(target, "reporook.yml"), "organizationPolicy: linked-policy.yml\n");
+      await assert.rejects(loadConfig(target), /symbolic link/);
+    }
+  } finally {
+    await rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    await rm(outside, { force: true });
+  }
 });
 
 test("policy evaluation separates new, baseline, suppressed, expired, and below-threshold findings", async () => {

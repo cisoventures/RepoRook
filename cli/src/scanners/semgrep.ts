@@ -2,6 +2,7 @@ import { access, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { findingFingerprint } from "../fingerprint.js";
+import { scopedChangedFiles } from "../incremental.js";
 import { plainSummary } from "../knowledge.js";
 import { repoRelative } from "../path-utils.js";
 import { runCommand } from "../process.js";
@@ -106,6 +107,13 @@ export class SemgrepScanner implements ScannerAdapter {
     return (await containsCode(target)) ? { applicable: true } : { applicable: false, reason: "no supported source files detected" };
   }
 
+  async incremental(context: ScannerContext) {
+    const scanFiles = await scopedChangedFiles(context, (path) => codeExtensions.has(path.slice(path.lastIndexOf("."))));
+    return scanFiles.length
+      ? { applicable: true, scope: "changed-files" as const, scanFiles }
+      : { applicable: false, scope: "changed-files" as const, reason: "no changed supported source files" };
+  }
+
   async version(): Promise<string | null> {
     const temporary = await mkdtemp(join(tmpdir(), "reporook-semgrep-version-"));
     try {
@@ -138,7 +146,7 @@ export class SemgrepScanner implements ScannerAdapter {
         "--disable-version-check",
       ];
       for (const ignored of context.config.ignore) args.push("--exclude", ignored);
-      args.push(context.target);
+      args.push(...(context.scanFiles?.length ? context.scanFiles.map((path) => join(context.target, path)) : [context.target]));
       const result = await runCommand("semgrep", args, { cwd: context.target, env });
       if (result.missing) return unavailable(this.name, result.duration_ms, "semgrep is not installed");
       try {

@@ -172,7 +172,7 @@ function ignoredLocalPath(pathInput: string, config: RepoRookConfig): boolean {
 
 export async function cacheEligible(target: string, commit: string | null, config: RepoRookConfig): Promise<boolean> {
   if (!commit) return false;
-  const result = await runCommand("git", ["status", "--porcelain=v1", "-z", "--untracked-files=normal", "--ignored=matching"], { cwd: target, timeoutMs: 30_000 });
+  const result = await runCommand("git", ["status", "--porcelain=v1", "-z", "--untracked-files=normal", "--ignored=matching"], { cwd: target, timeoutMs: 30_000, maxOutputBytes: 10 * 1024 * 1024 });
   if (result.code !== 0) return false;
   for (const entry of result.stdout.split("\0").filter(Boolean)) {
     if (entry.length < 4) return false;

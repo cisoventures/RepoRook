@@ -1,6 +1,7 @@
 import { access, readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { findingFingerprint } from "../fingerprint.js";
+import { scopedChangedFiles } from "../incremental.js";
 import { plainSummary } from "../knowledge.js";
 import { runCommand } from "../process.js";
 import type { Finding, ScannerAdapter, ScannerContext, ScannerResult } from "../types.js";
@@ -58,6 +59,14 @@ export class PipAuditScanner implements ScannerAdapter {
     const requirements = await requirementFiles(target);
     const locked = await exists(join(target, "poetry.lock")) || await exists(join(target, "uv.lock"));
     return requirements.length || locked ? { applicable: true } : { applicable: false, reason: "no supported Python dependency file detected" };
+  }
+  async incremental(context: ScannerContext) {
+    const applicability = await this.isApplicable(context.target);
+    if (!applicability.applicable) return { applicable: false, scope: "changed-files" as const, reason: applicability.reason };
+    const scanFiles = await scopedChangedFiles(context, (path) => !path.includes("/") && (/^requirements.*\.txt$/i.test(path) || ["poetry.lock", "uv.lock"].includes(path)));
+    return scanFiles.length
+      ? { applicable: true, scope: "changed-files" as const, scanFiles }
+      : { applicable: false, scope: "changed-files" as const, reason: "root Python dependency manifests are unchanged" };
   }
   async version() { return scannerVersion("pip-audit"); }
 

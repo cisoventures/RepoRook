@@ -43,6 +43,33 @@ pathPolicies:
 
 If several patterns match, RepoRook uses the strictest threshold. A path rule that would weaken `failOn` is a configuration error; accepted risk must use a finding-specific owned suppression.
 
+## Enforce an organization minimum
+
+An organization can commit one minimum profile, for example `security/reporook-organization.yml`:
+
+```yaml
+schemaVersion: "1.0"
+name: CISO Ventures baseline
+failOn: high
+requiredScanners:
+  - semgrep
+  - gitleaks
+pathPolicies:
+  src/auth/**: low
+  src/payments/**: medium
+```
+
+Reference it from the repository configuration:
+
+```yaml
+organizationPolicy: security/reporook-organization.yml
+failOn: high
+```
+
+The profile is a floor, not an override. A repository may use a stricter global threshold, add required scanners, or add stricter path rules. It may not weaken the profile threshold, disable a profile-required scanner, or weaken a matching organization path rule. Malformed, missing, outside-repository, oversized, or symbolic-link profiles fail with exit `2`.
+
+RepoRook accepts YAML or JSON, rejects unknown and duplicate fields, and binds the profile name, repository-relative path, and raw content hash into the effective configuration and policy evaluation. Reviewers can therefore prove which organization policy governed a scan without trusting a mutable URL or hidden service-side setting.
+
 ## Preserve exact approval evidence
 
 `reporook plan FINDING_ID .` now writes three files under `.reporook/remediations/FINDING_ID/`:

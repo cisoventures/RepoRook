@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { cacheEligible, readScannerCache, scannerCacheKey, writeScannerCache } from "./cache.js";
 import { sha256 } from "./fingerprint.js";
 import { gitChangedFiles, gitCommit } from "./git.js";
-import { matchesAny } from "./path-utils.js";
+import { inConfiguredScope } from "./incremental.js";
 import { evaluatePolicy } from "./policy.js";
 import { meetsThreshold, sortBySeverity } from "./severity.js";
 import { GitleaksScanner } from "./scanners/gitleaks.js";
@@ -14,7 +14,7 @@ import { PipAuditScanner } from "./scanners/pip-audit.js";
 import { SemgrepScanner } from "./scanners/semgrep.js";
 import { TrivyImageScanner } from "./scanners/trivy-image.js";
 import { status } from "./scanners/shared.js";
-import type { Finding, ScanOptions, ScanReport, ScannerAdapter, ScannerResult, ScannerStatus, Severity } from "./types.js";
+import type { Finding, ScanOptions, ScanReport, ScannerAdapter, ScannerContext, ScannerResult, ScannerScope, ScannerStatus, Severity } from "./types.js";
 import { VERSION } from "./version.js";
 
 export { VERSION };
@@ -52,11 +52,10 @@ function coverage(statuses: ScannerStatus[]): "complete" | "partial" | "failed" 
   return completed > 0 ? "partial" : "failed";
 }
 
-function filterFindings(findings: Finding[], ignore: string[], paths: string[], changed_files?: string[]): Finding[] {
+function filterFindings(findings: Finding[], config: ScanOptions["config"], changed_files?: string[]): Finding[] {
   return findings.filter((finding) => {
     if (finding.metadata.target_kind) return true;
-    if (matchesAny(finding.file, ignore)) return false;
-    if (paths.length && !paths.includes(".") && !matchesAny(finding.file, paths.map((path) => path.endsWith("/**") ? path : `${path.replace(/\/$/, "")}/**`))) return false;
+    if (!inConfiguredScope(finding.file, config)) return false;
     if (changed_files && !changed_files.includes(finding.file)) return false;
     return true;
   });
@@ -75,13 +74,39 @@ export async function scanRepository(options: ScanOptions, scanners: ScannerAdap
 
   const runs = await Promise.all(scanners.map(async (scanner) => {
     if (options.config.scanners[scanner.name] === false) {
-      return { status: status(scanner.name, { applicable: false, available: false, status: "skipped", reason: "disabled by configuration" }), findings: [] };
+      return { status: status(scanner.name, { applicable: false, available: false, status: "skipped", reason: "disabled by configuration" }), findings: [], scope: "not-applicable" as ScannerScope };
     }
-    const applicability = await scanner.isApplicable(target, options.config);
+    let context: ScannerContext = { target, config: options.config, ...(changed_files !== undefined ? { changedFiles: changed_files } : {}) };
+    let scannerScope: ScannerScope = "repository";
+    let incrementalConfirmed = false;
+    if (changed_files !== undefined && scanner.incremental) {
+      try {
+        const incremental = await scanner.incremental(context);
+        if (!incremental.applicable) {
+          return {
+            status: status(scanner.name, { applicable: false, available: false, status: "skipped", reason: incremental.reason ?? "no changed files in scanner scope" }),
+            findings: [],
+            scope: "not-applicable" as ScannerScope,
+          };
+        }
+        scannerScope = incremental.scope;
+        if (incremental.scanFiles) {
+          context = { ...context, scanFiles: incremental.scanFiles };
+          incrementalConfirmed = incremental.scanFiles.length > 0;
+        }
+      } catch (error) {
+        const reason = (error instanceof Error ? error.message : String(error)).replace(/\s+/g, " ").slice(0, 500);
+        return {
+          status: status(scanner.name, { applicable: true, available: false, status: "error", reason: `incremental scan planning failed: ${reason}` }),
+          findings: [],
+          scope: scannerScope,
+        };
+      }
+    }
+    const applicability = incrementalConfirmed ? { applicable: true } : await scanner.isApplicable(target, options.config);
     if (!applicability.applicable) {
-      return { status: status(scanner.name, { applicable: false, available: false, status: "skipped", reason: applicability.reason ?? "not applicable" }), findings: [] };
+      return { status: status(scanner.name, { applicable: false, available: false, status: "skipped", reason: applicability.reason ?? "not applicable" }), findings: [], scope: "not-applicable" as ScannerScope };
     }
-    const context = { target, config: options.config };
     const scannerVersion = canCache && scanner.version
       ? await scanner.version(context).catch(() => undefined)
       : undefined;
@@ -90,7 +115,7 @@ export async function scanRepository(options: ScanOptions, scanners: ScannerAdap
       : null;
     if (key && scannerVersion && !options.refreshCache) {
       const cached = await readScannerCache({ target, scanner: scanner.name, version: scannerVersion, key, ttlMs: cacheTtlMs }).catch(() => null);
-      if (cached) return cached;
+      if (cached) return { ...cached, scope: scannerScope };
     }
     const execute = async (): Promise<ScannerResult> => {
       try {
@@ -119,7 +144,7 @@ export async function scanRepository(options: ScanOptions, scanners: ScannerAdap
     if (key && scannerVersion && run.status.status === "ok") {
       await writeScannerCache({ target, scanner: scanner.name, version: scannerVersion, key, result: run }).catch(() => undefined);
     }
-    return run;
+    return { ...run, scope: scannerScope };
   }));
 
   const statuses = runs.map((run) => run.status);
@@ -129,7 +154,7 @@ export async function scanRepository(options: ScanOptions, scanners: ScannerAdap
       scanner.reason = `${scanner.reason ?? "scanner did not complete"}; scanner is required`;
     }
   }
-  const findings = deduplicate(filterFindings(runs.flatMap((run) => run.findings), options.config.ignore, options.config.paths, changed_files));
+  const findings = deduplicate(filterFindings(runs.flatMap((run) => run.findings), options.config, changed_files));
   const policy = await evaluatePolicy(target, findings, options.config);
   const completed_at = new Date().toISOString();
   return {
@@ -150,6 +175,7 @@ export async function scanRepository(options: ScanOptions, scanners: ScannerAdap
       started_at,
       completed_at,
       ...(changed_files ? { changed_files } : {}),
+      ...(changed_files !== undefined ? { scanner_scopes: Object.fromEntries(runs.map((run) => [run.status.name, run.scope])) } : {}),
     },
   };
 }

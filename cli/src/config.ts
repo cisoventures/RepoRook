@@ -1,5 +1,6 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { lstat, readFile, realpath, stat } from "node:fs/promises";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import { sha256 } from "./fingerprint.js";
 import { severities, type RepoRookConfig, type Severity } from "./types.js";
 
@@ -19,6 +20,8 @@ export const defaultConfig: RepoRookConfig = {
   cacheEnabled: true,
   cacheTtlMinutes: 15,
   scannerRetries: 1,
+  organizationPolicyFile: null,
+  organizationPolicy: null,
 };
 
 export const scannerNames = ["semgrep", "gitleaks", "npm-audit", "pip-audit", "osv-scanner", "checkov", "trivy-image"] as const;
@@ -29,15 +32,44 @@ const topLevelKeys = new Set([
   "baseline", "baselineFile", "suppressions", "suppressionsFile", "pathPolicies", "path-policies",
   "containerImages", "container-images", "gitHistory", "git-history",
   "cacheEnabled", "cache-enabled", "cacheTtlMinutes", "cache-ttl-minutes", "scannerRetries", "scanner-retries",
+  "organizationPolicy", "organization-policy",
 ]);
+const organizationPolicyKeys = new Set(["schemaVersion", "name", "failOn", "requiredScanners", "pathPolicies"]);
+const maximumOrganizationPolicyBytes = 256 * 1024;
+
+export interface OrganizationPolicyProfile {
+  schemaVersion: "1.0";
+  name: string;
+  failOn: Severity;
+  requiredScanners: string[];
+  pathPolicies: Record<string, Severity>;
+}
 
 function scalar(value: string): string | boolean | number | null {
-  const unquoted = value.replace(/^['\"]|['\"]$/g, "");
-  if (unquoted === "true") return true;
-  if (unquoted === "false") return false;
-  if (unquoted === "null") return null;
-  if (/^-?\d+(\.\d+)?$/.test(unquoted)) return Number(unquoted);
-  return unquoted;
+  let quote: "\"" | "'" | null = null;
+  let commentAt = -1;
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (quote) {
+      if (character === quote && value[index - 1] !== "\\") quote = null;
+      continue;
+    }
+    if (character === "\"" || character === "'") quote = character;
+    else if (character === "#" && (index === 0 || /\s/.test(value[index - 1] ?? ""))) {
+      commentAt = index;
+      break;
+    }
+  }
+  const withoutComment = (commentAt >= 0 ? value.slice(0, commentAt) : value).trim();
+  const quoted = (withoutComment.startsWith("\"") && withoutComment.endsWith("\""))
+    || (withoutComment.startsWith("'") && withoutComment.endsWith("'"));
+  const parsed = quoted ? withoutComment.slice(1, -1) : withoutComment;
+  if (quoted) return parsed;
+  if (parsed === "true") return true;
+  if (parsed === "false") return false;
+  if (parsed === "null") return null;
+  if (/^-?\d+(\.\d+)?$/.test(parsed)) return Number(parsed);
+  return parsed;
 }
 
 export function parseSimpleYaml(text: string): Record<string, unknown> {
@@ -107,6 +139,12 @@ function stringValue(value: unknown, name: string, fallback: string): string {
   return value;
 }
 
+function optionalString(value: unknown, name: string): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || !value.trim()) throw new Error(`${name} must be a non-empty string or null`);
+  return value.trim();
+}
+
 function stringList(value: unknown, name: string, fallback: string[]): string[] {
   if (value === undefined) return [...fallback];
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || !item.trim())) {
@@ -173,6 +211,94 @@ function pathPolicySettings(value: unknown): Record<string, Severity> {
   return normalized;
 }
 
+export function parseOrganizationPolicy(value: unknown): OrganizationPolicyProfile {
+  const parsed = configObject(value);
+  const unknown = Object.keys(parsed).filter((key) => !organizationPolicyKeys.has(key));
+  if (unknown.length) throw new Error(`Organization policy contains unknown field${unknown.length === 1 ? "" : "s"}: ${unknown.join(", ")}`);
+  if (parsed.schemaVersion !== "1.0") throw new Error("Organization policy schemaVersion must be 1.0");
+  if (typeof parsed.name !== "string" || !parsed.name.trim()) throw new Error("Organization policy name must be a non-empty string");
+  const name = parsed.name.trim();
+  const failOnRaw = parsed.failOn;
+  if (typeof failOnRaw !== "string") throw new Error("Organization policy failOn must be a severity string");
+  const failOn = failOnRaw.toLowerCase() as Severity;
+  if (!severities.includes(failOn)) throw new Error(`Invalid organization policy failOn severity: ${failOnRaw}`);
+  const requiredScanners = stringList(parsed.requiredScanners, "Organization policy requiredScanners", []);
+  for (const scanner of requiredScanners) {
+    if (!scannerNameSet.has(scanner)) throw new Error(`Unknown organization policy required scanner: ${scanner}`);
+  }
+  if (new Set(requiredScanners).size !== requiredScanners.length) throw new Error("Organization policy requiredScanners must not contain duplicates");
+  const pathPolicies = pathPolicySettings(parsed.pathPolicies);
+  for (const [pattern, threshold] of Object.entries(pathPolicies)) {
+    if (severities.indexOf(threshold) < severities.indexOf(failOn)) {
+      throw new Error(`Organization path policy ${pattern} cannot weaken its global failOn threshold`);
+    }
+  }
+  return { schemaVersion: "1.0", name, failOn, requiredScanners, pathPolicies };
+}
+
+async function repositoryRoot(target: string): Promise<string> {
+  const selected = await realpath(resolve(target));
+  let root = selected;
+  while (!existsSync(resolve(root, ".git")) && resolve(root, "..") !== root) root = resolve(root, "..");
+  return existsSync(resolve(root, ".git")) ? root : selected;
+}
+
+async function organizationPolicyPath(target: string, requested: string): Promise<string> {
+  if (isAbsolute(requested)) throw new Error("organizationPolicy must be repository-relative");
+  const root = await repositoryRoot(target);
+  const path = resolve(root, requested);
+  const traversal = relative(root, path);
+  if (!traversal || traversal === ".." || traversal.startsWith(`..${sep}`) || isAbsolute(traversal)) {
+    throw new Error("organizationPolicy must resolve to a file inside the repository");
+  }
+  let current = root;
+  for (const segment of traversal.split(sep).filter(Boolean)) {
+    current = resolve(current, segment);
+    const metadata = await lstat(current).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") throw new Error(`Organization policy file does not exist: ${requested}`);
+      throw error;
+    });
+    if (metadata.isSymbolicLink()) throw new Error(`Organization policy path contains a symbolic link: ${requested}`);
+  }
+  const metadata = await stat(path);
+  if (!metadata.isFile()) throw new Error("Organization policy path must be a regular file");
+  if (metadata.size > maximumOrganizationPolicyBytes) throw new Error("Organization policy file exceeds 256 KiB");
+  return path;
+}
+
+async function applyOrganizationPolicy(target: string, config: RepoRookConfig): Promise<RepoRookConfig> {
+  if (!config.organizationPolicyFile) return config;
+  const path = await organizationPolicyPath(target, config.organizationPolicyFile);
+  const contents = await readFile(path, "utf8");
+  const raw = path.endsWith(".json") ? configObject(JSON.parse(contents)) : parseSimpleYaml(contents);
+  const profile = parseOrganizationPolicy(raw);
+  if (severities.indexOf(config.failOn) < severities.indexOf(profile.failOn)) {
+    throw new Error(`Local failOn ${config.failOn} is weaker than organization policy ${profile.failOn}`);
+  }
+  for (const scanner of profile.requiredScanners) {
+    if (config.scanners[scanner] === false) throw new Error(`Scanner ${scanner} is required by organization policy and cannot be disabled locally`);
+  }
+  if (profile.requiredScanners.includes("trivy-image") && !config.containerImages.length) {
+    throw new Error("trivy-image is required by organization policy but containerImages is empty");
+  }
+  for (const [pattern, threshold] of Object.entries(config.pathPolicies)) {
+    const required = profile.pathPolicies[pattern];
+    if (required && severities.indexOf(threshold) < severities.indexOf(required)) {
+      throw new Error(`Local path policy ${pattern} is weaker than organization policy (${threshold} is weaker than ${required})`);
+    }
+  }
+  return {
+    ...config,
+    requiredScanners: scannerNames.filter((name) => profile.requiredScanners.includes(name) || config.requiredScanners.includes(name)),
+    pathPolicies: { ...profile.pathPolicies, ...config.pathPolicies },
+    organizationPolicy: {
+      name: profile.name,
+      path: config.organizationPolicyFile,
+      hash: `sha256:${sha256(contents)}`,
+    },
+  };
+}
+
 export function normalizeConfig(parsedValue: unknown): RepoRookConfig {
   const parsed = configObject(parsedValue);
   const unknown = Object.keys(parsed).filter((key) => !topLevelKeys.has(key));
@@ -222,6 +348,8 @@ export function normalizeConfig(parsedValue: unknown): RepoRookConfig {
     cacheEnabled: booleanValue(aliased(parsed, "cacheEnabled", "cache-enabled"), "cacheEnabled", defaultConfig.cacheEnabled),
     cacheTtlMinutes: boundedInteger(aliased(parsed, "cacheTtlMinutes", "cache-ttl-minutes"), "cacheTtlMinutes", defaultConfig.cacheTtlMinutes, 1, 1_440),
     scannerRetries: boundedInteger(aliased(parsed, "scannerRetries", "scanner-retries"), "scannerRetries", defaultConfig.scannerRetries, 0, 3),
+    organizationPolicyFile: optionalString(aliased(parsed, "organizationPolicy", "organization-policy"), "organizationPolicy"),
+    organizationPolicy: null,
   };
 }
 
@@ -240,6 +368,6 @@ export async function loadConfig(target: string, requestedPath?: string): Promis
       loadedPath = null;
     }
   }
-  const config = normalizeConfig(parsed);
+  const config = await applyOrganizationPolicy(target, normalizeConfig(parsed));
   return { config, hash: sha256(JSON.stringify(config)), path: loadedPath };
 }

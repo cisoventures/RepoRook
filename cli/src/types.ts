@@ -53,6 +53,15 @@ export interface ScanReceipt {
   started_at: string;
   completed_at: string;
   changed_files?: string[];
+  scanner_scopes?: Record<string, ScannerScope>;
+}
+
+export type ScannerScope = "repository" | "changed-files" | "external-targets" | "not-applicable";
+
+export interface OrganizationPolicyReference {
+  name: string;
+  path: string;
+  hash: string;
 }
 
 export interface FindingBaselineEntry {
@@ -119,6 +128,7 @@ export interface PolicyEvaluation {
     expired: number;
   };
   path_policies: Record<string, Severity>;
+  organization_policy?: OrganizationPolicyReference;
   summary: {
     new: number;
     existing: number;
@@ -306,6 +316,8 @@ export interface RepoRookConfig {
   cacheEnabled: boolean;
   cacheTtlMinutes: number;
   scannerRetries: number;
+  organizationPolicyFile: string | null;
+  organizationPolicy: OrganizationPolicyReference | null;
 }
 
 export interface ScanOptions {
@@ -323,6 +335,15 @@ export interface ScannerContext {
   target: string;
   config: RepoRookConfig;
   scannerVersion?: string | null;
+  changedFiles?: string[];
+  scanFiles?: string[];
+}
+
+export interface IncrementalScannerDecision {
+  applicable: boolean;
+  scope: Exclude<ScannerScope, "not-applicable">;
+  reason?: string;
+  scanFiles?: string[];
 }
 
 export interface ScannerResult {
@@ -333,6 +354,7 @@ export interface ScannerResult {
 export interface ScannerAdapter {
   name: string;
   isApplicable(target: string, config?: RepoRookConfig): Promise<{ applicable: boolean; reason?: string }>;
+  incremental?(context: ScannerContext): Promise<IncrementalScannerDecision>;
   version?(context: ScannerContext): Promise<string | null>;
   run(context: ScannerContext): Promise<ScannerResult>;
 }
