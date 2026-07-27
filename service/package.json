@@ -1,6 +1,6 @@
 {
   "name": "@reporook/service",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Local no-code security dashboard with guided repository-only GitHub App publishing.",
   "license": "MIT",
   "homepage": "https://github.com/cisoventures/RepoRook#readme",
@@ -35,6 +35,6 @@
     "node": ">=20"
   },
   "dependencies": {
-    "reporook": "0.9.0"
+    "reporook": "0.9.1"
   }
 }

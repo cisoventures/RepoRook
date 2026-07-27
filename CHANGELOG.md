@@ -2,6 +2,15 @@
 
 All notable changes to RepoRook are documented here. RepoRook follows semantic versioning while its public contracts remain pre-1.0.
 
+## 0.9.1 - 2026-07-27
+
+### Changed
+
+- Complete the 0.9 release across the CLI, MCP server, and local service after the initial 0.9.0 npm publication only completed for the CLI and MCP packages.
+- GitHub Action examples now pin the v0.9.1 release.
+
+No product behavior changed from 0.9.0. The v0.9.1 release supersedes the incomplete 0.9.0 package set.
+
 ## 0.9.0 - 2026-07-27
 
 ### Added
