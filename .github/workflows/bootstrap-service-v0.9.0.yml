@@ -1,0 +1,66 @@
+name: Bootstrap RepoRook service v0.9.0
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: bootstrap-reporook-service-v0.9.0
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: npm-release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: v0.9.0
+          fetch-depth: 0
+      - name: Verify immutable release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="ea6216f44f3a748f110653460faef392dd2d8789"
+          test "$(git rev-parse HEAD)" = "$expected"
+          test "$(git rev-list -n 1 v0.9.0)" = "$expected"
+          test "$(node -p "require('./service/package.json').name")" = "@reporook/service"
+          test "$(node -p "require('./service/package.json').version")" = "0.9.0"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: npm install --global --ignore-scripts npm@11.18.0
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - name: Pack and smoke-test the exact release
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir release
+          npm pack --workspace reporook --pack-destination release
+          npm pack --workspace @reporook/mcp-server --pack-destination release
+          npm pack --workspace @reporook/service --pack-destination release
+          node scripts/smoke-packages.mjs release
+          test -f release/reporook-service-0.9.0.tgz
+      - name: Confirm this package version is still unpublished
+        shell: bash
+        run: |
+          set -euo pipefail
+          if npm view @reporook/service@0.9.0 version >/dev/null 2>&1; then
+            echo "@reporook/service@0.9.0 is already published; refusing to run the bootstrap again."
+            exit 1
+          fi
+      - name: Publish the initial service package
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${NODE_AUTH_TOKEN:-}"
+          npm publish release/reporook-service-0.9.0.tgz --access public --tag latest --provenance
