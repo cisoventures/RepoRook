@@ -63,4 +63,4 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${NODE_AUTH_TOKEN:-}"
-          npm publish release/reporook-service-0.9.0.tgz --access public --tag latest --provenance
+          npm publish ./release/reporook-service-0.9.0.tgz --access public --tag latest --provenance
