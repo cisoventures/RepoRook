@@ -141,6 +141,30 @@ test("organization policy parsing and paths fail closed", async () => {
   }
 });
 
+test("configuration files fail closed on missing, outside, linked, non-file, and oversized paths", async () => {
+  const target = await mkdtemp(join(tmpdir(), "reporook-configuration-path-"));
+  const outside = join(tmpdir(), `reporook-outside-config-${process.pid}.yml`);
+  try {
+    await mkdir(join(target, ".git"));
+    await assert.rejects(loadConfig(target, "missing.yml"), /does not exist/);
+    await writeFile(outside, "failOn: low\n");
+    await assert.rejects(loadConfig(target, `../${outside.split("/").at(-1)}`), /inside the repository/);
+    await mkdir(join(target, "directory.yml"));
+    await assert.rejects(loadConfig(target, "directory.yml"), /regular file/);
+    await writeFile(join(target, "oversized.yml"), `#${"x".repeat(1024 * 1024)}\n`);
+    await assert.rejects(loadConfig(target, "oversized.yml"), /exceeds 1 MiB/);
+    if (process.platform !== "win32") {
+      await symlink(outside, join(target, "linked.yml"));
+      await assert.rejects(loadConfig(target, "linked.yml"), /symbolic link/);
+    }
+    await writeFile(join(target, "safe.yml"), "failOn: low\n");
+    assert.equal((await loadConfig(target, "safe.yml")).config.failOn, "low");
+  } finally {
+    await rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    await rm(outside, { force: true });
+  }
+});
+
 test("policy evaluation separates new, baseline, suppressed, expired, and below-threshold findings", async () => {
   const target = await mkdtemp(join(tmpdir(), "reporook-policy-"));
   const now = new Date("2026-07-24T12:00:00.000Z");

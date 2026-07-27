@@ -36,6 +36,8 @@ const topLevelKeys = new Set([
 ]);
 const organizationPolicyKeys = new Set(["schemaVersion", "name", "failOn", "requiredScanners", "pathPolicies"]);
 const maximumOrganizationPolicyBytes = 256 * 1024;
+const maximumConfigurationBytes = 1024 * 1024;
+const unsafeMappingKeys = new Set(["__proto__", "prototype", "constructor"]);
 
 export interface OrganizationPolicyProfile {
   schemaVersion: "1.0";
@@ -43,6 +45,10 @@ export interface OrganizationPolicyProfile {
   failOn: Severity;
   requiredScanners: string[];
   pathPolicies: Record<string, Severity>;
+}
+
+function assertSafeMappingKey(key: string, context: string): void {
+  if (unsafeMappingKeys.has(key)) throw new Error(`${context} contains an unsafe mapping key: ${key}`);
 }
 
 function scalar(value: string): string | boolean | number | null {
@@ -87,6 +93,7 @@ export function parseSimpleYaml(text: string): Record<string, unknown> {
     if (separator < 0) throw new Error(`Invalid configuration at line ${index + 1}`);
     const key = trimmed.slice(0, separator).trim();
     if (!key) throw new Error(`Configuration key is missing at line ${index + 1}`);
+    assertSafeMappingKey(key, `Configuration at line ${index + 1}`);
     if (Object.hasOwn(parent, key)) throw new Error(`Duplicate configuration key ${key} at line ${index + 1}`);
     const rest = trimmed.slice(separator + 1).trim();
     if (rest) {
@@ -98,7 +105,14 @@ export function parseSimpleYaml(text: string): Record<string, unknown> {
       }
       continue;
     }
-    const following = lines.slice(index + 1).find((line) => line.trim() && !line.trimStart().startsWith("#"));
+    let following: string | undefined;
+    for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
+      const candidate = lines[cursor];
+      if (candidate?.trim() && !candidate.trimStart().startsWith("#")) {
+        following = candidate;
+        break;
+      }
+    }
     if (following?.trimStart().startsWith("- ")) {
       const items: unknown[] = [];
       for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
@@ -203,6 +217,7 @@ function pathPolicySettings(value: unknown): Record<string, Severity> {
   const normalized: Record<string, Severity> = {};
   for (const [pattern, thresholdValue] of Object.entries(settings).sort(([left], [right]) => left.localeCompare(right))) {
     if (!pattern.trim()) throw new Error("pathPolicies patterns must be non-empty");
+    assertSafeMappingKey(pattern, "pathPolicies");
     if (typeof thresholdValue !== "string") throw new Error(`pathPolicies.${pattern} must be a severity string`);
     const threshold = thresholdValue.toLowerCase() as Severity;
     if (!severities.includes(threshold)) throw new Error(`Invalid path policy severity for ${pattern}: ${thresholdValue}`);
@@ -243,6 +258,33 @@ async function repositoryRoot(target: string): Promise<string> {
   return existsSync(resolve(root, ".git")) ? root : selected;
 }
 
+async function configurationPath(target: string, requested: string, required: boolean): Promise<string | null> {
+  const selected = await realpath(resolve(target));
+  const root = await repositoryRoot(selected);
+  const path = resolve(selected, requested);
+  const traversal = relative(root, path);
+  if (!traversal || traversal === ".." || traversal.startsWith(`..${sep}`) || isAbsolute(traversal)) {
+    throw new Error("Configuration path must resolve to a file inside the repository");
+  }
+  let current = root;
+  for (const segment of traversal.split(sep).filter(Boolean)) {
+    current = resolve(current, segment);
+    const metadata = await lstat(current).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    });
+    if (!metadata) {
+      if (required) throw new Error(`Configuration file does not exist: ${requested}`);
+      return null;
+    }
+    if (metadata.isSymbolicLink()) throw new Error(`Configuration path contains a symbolic link: ${requested}`);
+  }
+  const metadata = await lstat(path);
+  if (!metadata.isFile()) throw new Error("Configuration path must be a regular file");
+  if (metadata.size > maximumConfigurationBytes) throw new Error("Configuration file exceeds 1 MiB");
+  return path;
+}
+
 async function organizationPolicyPath(target: string, requested: string): Promise<string> {
   if (isAbsolute(requested)) throw new Error("organizationPolicy must be repository-relative");
   const root = await repositoryRoot(target);
@@ -270,6 +312,7 @@ async function applyOrganizationPolicy(target: string, config: RepoRookConfig): 
   if (!config.organizationPolicyFile) return config;
   const path = await organizationPolicyPath(target, config.organizationPolicyFile);
   const contents = await readFile(path, "utf8");
+  if (Buffer.byteLength(contents, "utf8") > maximumOrganizationPolicyBytes) throw new Error("Organization policy file exceeds 256 KiB");
   const raw = path.endsWith(".json") ? configObject(JSON.parse(contents)) : parseSimpleYaml(contents);
   const profile = parseOrganizationPolicy(raw);
   if (severities.indexOf(config.failOn) < severities.indexOf(profile.failOn)) {
@@ -358,15 +401,12 @@ export async function loadConfig(target: string, requestedPath?: string): Promis
   let parsed: Record<string, unknown> = {};
   let loadedPath: string | null = null;
   for (const candidate of candidates) {
-    try {
-      loadedPath = resolve(target, candidate);
-      const text = await readFile(loadedPath, "utf8");
-      parsed = candidate.endsWith(".json") ? configObject(JSON.parse(text)) : parseSimpleYaml(text);
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      loadedPath = null;
-    }
+    loadedPath = await configurationPath(target, candidate, requestedPath !== undefined);
+    if (!loadedPath) continue;
+    const text = await readFile(loadedPath, "utf8");
+    if (Buffer.byteLength(text, "utf8") > maximumConfigurationBytes) throw new Error("Configuration file exceeds 1 MiB");
+    parsed = loadedPath.endsWith(".json") ? configObject(JSON.parse(text)) : parseSimpleYaml(text);
+    break;
   }
   const config = await applyOrganizationPolicy(target, normalizeConfig(parsed));
   return { config, hash: sha256(JSON.stringify(config)), path: loadedPath };

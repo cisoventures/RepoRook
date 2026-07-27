@@ -12,7 +12,7 @@ RepoRook develops in auditable vertical slices. Each milestone must keep determi
 | v0.6 Infrastructure coverage | Implemented | Terraform, Kubernetes, Docker, GitHub Actions, explicit container-image, and optional redacted Git-history secret checks through fixture-backed adapters |
 | v0.7 No-code service | Implemented | Local onboarding, dashboard, scan control, exact-proposal approval, guided private GitHub App installation, one-repository short-lived credentials, and approval-bound draft PR publishing |
 | v0.8 Scale and reliability | Implemented | Commit-, version-, configuration-, and scope-bound scanner checkpoints; bounded freshness; safe retry/resume; workspace-aware incremental scans; bounded subprocess and Git output; and hash-bound organization policy profiles |
-| v0.9 Hardening | Planned | Threat model, parser fuzzing, hostile-repository testing, sandbox review, external audit, and security response readiness |
+| v0.9 Hardening | In progress | Authoritative repository threat model; hostile configuration boundaries; deterministic parser fuzzing; broader hostile-repository testing, sandbox review, external audit, and security response readiness |
 | v1.0 Stable platform | Planned | Stable CLI, MCP, and schema contracts with compatibility guarantees, migrations, governance, and long-term release policy |
 
 Priorities may change when fixture evidence, user research, or a security boundary requires it. Scanner count alone is not a progress metric; each new integration must improve trustworthy coverage without creating misleading success or unusable noise.
