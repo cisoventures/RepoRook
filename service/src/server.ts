@@ -194,6 +194,14 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
           publishing,
         });
       }
+      if (method === "GET" && url.pathname === "/api/setup") {
+        const result = await cli(["setup"]);
+        if (result.code !== 0) throw new HttpError(422, result.stderr.trim() || "RepoRook could not prepare scanner setup instructions");
+        return json(response, 200, {
+          instructions: result.stdout.trim().slice(0, 20_000),
+          installs_software: false,
+        });
+      }
       if (method === "GET" && url.pathname === "/api/job") return json(response, 200, job);
       if (method === "POST" && url.pathname === "/api/onboard") {
         const input = await body(request);
@@ -208,12 +216,14 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
         job = { status: "running", started_at: new Date().toISOString(), finished_at: null, exit_code: null, message: "Scanner evidence is being collected" };
         void cli(["scan", store.target, "--require-scanners", "--quiet"]).then((result) => {
           const completed = result.code === 0 || result.code === 1;
+          const failedMessage = result.stderr.trim().slice(0, 1_000)
+            || "Scan incomplete: one or more required scanners did not run. Review coverage details and scanner setup instructions.";
           job = {
             status: completed ? "completed" : "failed",
             started_at: job.started_at,
             finished_at: new Date().toISOString(),
             exit_code: result.code,
-            message: completed ? (result.code === 1 ? "Scan completed with actionable findings" : "Scan completed") : (result.stderr.trim().slice(0, 1_000) || "Scan coverage failed"),
+            message: completed ? (result.code === 1 ? "Scan completed with actionable findings" : "Scan completed") : failedMessage,
           };
         }).catch((error: Error) => {
           job = { status: "failed", started_at: job.started_at, finished_at: new Date().toISOString(), exit_code: 2, message: error.message.slice(0, 1_000) };
