@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { prioritizeViaCli, remediationPlanViaCli, scanViaCli } from "../dist/cli.js";
+import { prioritizeViaCli, remediationPlanViaCli, runRepoRook, scanViaCli } from "../dist/cli.js";
 
 test("verification can inspect a valid failed-coverage report without calling it a successful scan", async () => {
   const target = await mkdtemp(join(tmpdir(), "reporook-mcp-incomplete-"));
@@ -42,6 +42,33 @@ test("guided-fix MCP helpers return CLI priority and remediation artifacts", asy
     assert.equal(plan.finding.id, finding.id);
     assert.equal(plan.approval.status, "pending");
   } finally {
+    await rm(target, { recursive: true, force: true });
+  }
+});
+
+test("MCP bounds RepoRook CLI output and execution time", { skip: process.platform === "win32" }, async () => {
+  const target = await mkdtemp(join(tmpdir(), "reporook-mcp-cli-bound-"));
+  const executable = join(target, "reporook-test-cli");
+  const previous = process.env.REPOROOK_CLI;
+  try {
+    await writeFile(executable, `#!/bin/sh
+if [ "$1" = "noisy" ]; then
+  printf '%02048d' 0
+  exit 0
+fi
+while :; do :; done
+`);
+    await chmod(executable, 0o755);
+    process.env.REPOROOK_CLI = executable;
+    const noisy = await runRepoRook(["noisy"], { maxOutputBytes: 1024, timeoutMs: 1_000 });
+    assert.equal(noisy.code, 2);
+    assert.match(noisy.stderr, /output exceeded 1024 bytes/);
+    const slow = await runRepoRook(["slow"], { maxOutputBytes: 1024, timeoutMs: 25 });
+    assert.equal(slow.code, 2);
+    assert.match(slow.stderr, /timed out after 25ms/);
+  } finally {
+    if (previous === undefined) delete process.env.REPOROOK_CLI;
+    else process.env.REPOROOK_CLI = previous;
     await rm(target, { recursive: true, force: true });
   }
 });

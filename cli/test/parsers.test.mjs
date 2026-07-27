@@ -117,6 +117,34 @@ exit 0
   }
 });
 
+test("Gitleaks malformed report output fails coverage instead of looking clean", { skip: process.platform === "win32" }, async () => {
+  const target = await mkdtemp(join(tmpdir(), "reporook-gitleaks-malformed-test-"));
+  const executable = join(target, "gitleaks");
+  const previousPath = process.env.PATH;
+  await writeFile(executable, `#!/bin/sh
+if [ "$1" = "--version" ]; then printf '%s\\n' 'gitleaks 8.28.0'; exit 0; fi
+previous=""
+report=""
+for value in "$@"; do
+  if [ "$previous" = "--report-path" ]; then report="$value"; fi
+  previous="$value"
+done
+printf '%s\\n' '{"unexpected":true}' > "$report"
+exit 0
+`);
+  await chmod(executable, 0o755);
+  process.env.PATH = `${target}:${previousPath ?? ""}`;
+  try {
+    const result = await new GitleaksScanner().run({ target, config: structuredClone(defaultConfig) });
+    assert.equal(result.status.status, "error");
+    assert.equal(result.status.finding_count, 0);
+    assert.match(result.status.reason, /must be a JSON array/);
+  } finally {
+    process.env.PATH = previousPath;
+    await rm(target, { recursive: true, force: true });
+  }
+});
+
 test("Checkov output becomes a repository-relative infrastructure finding", () => {
   const findings = parseCheckov({
     check_type: "terraform",
@@ -161,6 +189,7 @@ test("Checkov and Trivy adapters treat scanner findings as completed runs", { sk
   const checkov = join(target, "checkov");
   const checkovArgsPath = join(target, "checkov-args.txt");
   const trivy = join(target, "trivy");
+  const trivyArgsPath = join(target, "trivy-args.txt");
   await writeFile(checkov, `#!/bin/sh
 if [ "$1" = "--version" ]; then printf '%s\\n' '3.3.8'; exit 0; fi
 if [ "\${BC_API_KEY+x}" = "x" ]; then exit 5; fi
@@ -179,14 +208,17 @@ exit 1
 `);
   await writeFile(trivy, `#!/bin/sh
 if [ "$1" = "--version" ]; then printf '%s\\n' 'Version: 0.72.0'; exit 0; fi
+printf '%s\\n' "$*" > "$REPOROOK_TRIVY_TEST_ARGS"
 printf '%s\\n' '{"Results":[{"Target":"example/app:1","Type":"alpine","Vulnerabilities":[{"VulnerabilityID":"CVE-2026-0002","PkgName":"busybox","InstalledVersion":"1","FixedVersion":"2","Severity":"CRITICAL"}]}]}'
 exit 0
 `);
   await Promise.all([chmod(checkov, 0o755), chmod(trivy, 0o755), writeFile(join(target, "Dockerfile"), "FROM alpine:3.17\n")]);
   process.env.PATH = `${target}:${previousPath ?? ""}`;
   const previousCheckovArgsPath = process.env.REPOROOK_CHECKOV_TEST_ARGS;
+  const previousTrivyArgsPath = process.env.REPOROOK_TRIVY_TEST_ARGS;
   const previousCheckovApiKey = process.env.BC_API_KEY;
   process.env.REPOROOK_CHECKOV_TEST_ARGS = checkovArgsPath;
+  process.env.REPOROOK_TRIVY_TEST_ARGS = trivyArgsPath;
   process.env.BC_API_KEY = "must-not-reach-checkov";
   try {
     const config = structuredClone(defaultConfig);
@@ -201,10 +233,13 @@ exit 0
     assert.match(checkovArgs, /--skip-download/);
     assert.match(checkovArgs, /--config-file/);
     assert.doesNotMatch(checkovArgs, /--skip-results-upload/);
+    assert.match(await readFile(trivyArgsPath, "utf8"), /--cache-dir .*reporook-trivy-/);
   } finally {
     process.env.PATH = previousPath;
     if (previousCheckovArgsPath === undefined) delete process.env.REPOROOK_CHECKOV_TEST_ARGS;
     else process.env.REPOROOK_CHECKOV_TEST_ARGS = previousCheckovArgsPath;
+    if (previousTrivyArgsPath === undefined) delete process.env.REPOROOK_TRIVY_TEST_ARGS;
+    else process.env.REPOROOK_TRIVY_TEST_ARGS = previousTrivyArgsPath;
     if (previousCheckovApiKey === undefined) delete process.env.BC_API_KEY;
     else process.env.BC_API_KEY = previousCheckovApiKey;
     await rm(target, { recursive: true, force: true });

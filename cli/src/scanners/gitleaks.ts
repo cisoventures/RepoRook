@@ -1,7 +1,8 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { findingFingerprint } from "../fingerprint.js";
+import { maximumScannerReportBytes, readBoundedJsonFile } from "../input.js";
 import { plainSummary } from "../knowledge.js";
 import { repoRelative } from "../path-utils.js";
 import { runCommand } from "../process.js";
@@ -64,9 +65,13 @@ export class GitleaksScanner implements ScannerAdapter {
       }
       if (result.missing) return unavailable(this.name, result.duration_ms, "gitleaks is not installed");
       if (![0, 1].includes(result.code)) return errored(this.name, version, result.duration_ms, result.stderr.trim() || `gitleaks exited ${result.code}`);
-      let raw: unknown = [];
-      try { raw = JSON.parse(await readFile(reportPath, "utf8")); } catch { raw = []; }
-      return successful(this.name, version, result.duration_ms, parseGitleaks(raw, context.target, history));
+      try {
+        const raw = await readBoundedJsonFile(reportPath, "Gitleaks report", maximumScannerReportBytes);
+        if (!Array.isArray(raw)) throw new Error("Gitleaks report must be a JSON array");
+        return successful(this.name, version, result.duration_ms, parseGitleaks(raw, context.target, history));
+      } catch (error) {
+        return errored(this.name, version, result.duration_ms, (error as Error).message);
+      }
     } finally {
       await rm(temporary, { recursive: true, force: true });
     }

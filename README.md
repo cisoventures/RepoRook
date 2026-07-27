@@ -217,7 +217,7 @@ npm run fixture:prepare
 node cli/dist/index.js scan test-fixtures/vulnerable-app --require-scanners
 ```
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/HARDENING.md`](docs/HARDENING.md), [`docs/SERVICE.md`](docs/SERVICE.md), [`docs/TEAM_POLICY.md`](docs/TEAM_POLICY.md), [`docs/ADAPTERS.md`](docs/ADAPTERS.md), [`docs/AGENT_SETUP.md`](docs/AGENT_SETUP.md), the [`roadmap`](docs/ROADMAP.md), and [`CONTRIBUTING.md`](CONTRIBUTING.md).
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/HARDENING.md`](docs/HARDENING.md), [`docs/SANDBOXING.md`](docs/SANDBOXING.md), the [`external review package`](docs/SECURITY_REVIEW.md), the [`security response runbook`](docs/SECURITY_RESPONSE.md), [`docs/SERVICE.md`](docs/SERVICE.md), [`docs/TEAM_POLICY.md`](docs/TEAM_POLICY.md), [`docs/ADAPTERS.md`](docs/ADAPTERS.md), [`docs/AGENT_SETUP.md`](docs/AGENT_SETUP.md), the [`roadmap`](docs/ROADMAP.md), and [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Project status
 

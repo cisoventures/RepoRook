@@ -1,8 +1,6 @@
 #!/usr/bin/env node
-import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
-import { createInterface } from "node:readline";
 import { approvalViaCli, baselineViaCli, prioritizeViaCli, remediationPlanViaCli, scanViaCli, suppressionViaCli, verifyViaCli } from "./cli.js";
 import { findFinding, findingContext, findings, readReport } from "./context.js";
 
@@ -20,6 +18,7 @@ interface ToolDefinition {
 
 const latestProtocolVersion = "2025-11-25";
 const protocolVersions = [latestProtocolVersion, "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"];
+const maximumRequestBytes = 1024 * 1024;
 const severityValues = ["critical", "high", "medium", "low"];
 const packageMetadata = createRequire(import.meta.url)("../package.json") as { version: string };
 const VERSION = packageMetadata.version;
@@ -124,11 +123,13 @@ const tools: ToolDefinition[] = [
     description: "Read baseline, suppression, path-policy, and actionable-finding status from an existing deterministic scan. Does not rescan or modify files.",
     inputSchema: {
       type: "object",
-      properties: { report_path: { type: "string", default: ".reporook/findings.json" } },
+      properties: { repository_path: { type: "string" }, report_path: { type: "string", default: ".reporook/findings.json" } },
+      required: ["repository_path"],
       additionalProperties: false,
     },
     async handler(input) {
-      const report = await readReport(string(input, "report_path", { default: ".reporook/findings.json" }));
+      const repositoryPath = string(input, "repository_path");
+      const report = await readReport(repositoryPath, string(input, "report_path", { default: ".reporook/findings.json" }));
       return { coverage_status: report.coverage_status, finding_summary: report.summary, policy: report.policy ?? null };
     },
   },
@@ -196,11 +197,13 @@ const tools: ToolDefinition[] = [
     description: "Read an existing findings artifact and return deterministic findings plus coverage status. Does not rescan or modify code.",
     inputSchema: {
       type: "object",
-      properties: { report_path: { type: "string", default: ".reporook/findings.json" }, severity: severitySchema },
+      properties: { repository_path: { type: "string" }, report_path: { type: "string", default: ".reporook/findings.json" }, severity: severitySchema },
+      required: ["repository_path"],
       additionalProperties: false,
     },
     async handler(input) {
-      const report = await readReport(string(input, "report_path", { default: ".reporook/findings.json" }));
+      const repositoryPath = string(input, "repository_path");
+      const report = await readReport(repositoryPath, string(input, "report_path", { default: ".reporook/findings.json" }));
       const requestedSeverity = optionalString(input, "severity", severityValues);
       const selected = requestedSeverity ? findings(report).filter((finding) => finding.severity === requestedSeverity) : findings(report);
       return { coverage_status: report.coverage_status, summary: report.summary, findings: selected };
@@ -217,9 +220,10 @@ const tools: ToolDefinition[] = [
       additionalProperties: false,
     },
     async handler(input) {
-      const report = await readReport(string(input, "report_path", { default: ".reporook/findings.json" }));
+      const repositoryPath = string(input, "repository_path");
+      const report = await readReport(repositoryPath, string(input, "report_path", { default: ".reporook/findings.json" }));
       const finding = findFinding(report, string(input, "finding_id"));
-      return { finding, context: await findingContext(string(input, "repository_path"), finding, integer(input, "context_lines", 8, 1, 30)), coverage_status: report.coverage_status, scan_receipt: report.scan_receipt };
+      return { finding, context: await findingContext(repositoryPath, finding, integer(input, "context_lines", 8, 1, 30)), coverage_status: report.coverage_status, scan_receipt: report.scan_receipt };
     },
   },
   {
@@ -233,7 +237,8 @@ const tools: ToolDefinition[] = [
       additionalProperties: false,
     },
     async handler(input) {
-      const report = await readReport(string(input, "report_path", { default: ".reporook/findings.json" }));
+      const repositoryPath = string(input, "repository_path");
+      const report = await readReport(repositoryPath, string(input, "report_path", { default: ".reporook/findings.json" }));
       const finding = findFinding(report, string(input, "finding_id"));
       const policyRecord = report.policy === undefined ? null : object(report.policy, "report policy");
       const policy = (policyRecord && Array.isArray(policyRecord.findings) ? policyRecord.findings : [])
@@ -245,7 +250,7 @@ const tools: ToolDefinition[] = [
       return {
         trust_status: "reporook-deterministic-finding",
         finding,
-        context: await findingContext(string(input, "repository_path"), finding, 12),
+        context: await findingContext(repositoryPath, finding, 12),
         instructions: [
           "Validate reachability and impact before changing code.",
           "Describe the risk in plain English and ask for approval before applying a patch.",
@@ -332,8 +337,7 @@ const tools: ToolDefinition[] = [
     async handler(input) {
       const repositoryPath = string(input, "repository_path");
       const format = string(input, "format", { default: "json", enum: ["json", "sarif"] });
-      const path = resolve(repositoryPath, format === "sarif" ? ".reporook/results.sarif" : ".reporook/findings.json");
-      return JSON.parse(await readFile(path, "utf8")) as JsonRecord;
+      return await readReport(repositoryPath, format === "sarif" ? ".reporook/results.sarif" : ".reporook/findings.json");
     },
   },
 ];
@@ -394,9 +398,48 @@ async function handle(message: unknown): Promise<void> {
   }
 }
 
-const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
-lines.on("line", (line) => {
-  if (!line.trim()) return;
-  try { void handle(JSON.parse(line)); }
-  catch { error(null, -32700, "Parse error"); }
+let requestChunks: Buffer[] = [];
+let requestBytes = 0;
+let discardingOversizedRequest = false;
+
+function appendRequestChunk(chunk: Buffer): void {
+  if (discardingOversizedRequest || chunk.length === 0) return;
+  if (requestBytes + chunk.length > maximumRequestBytes) {
+    requestChunks = [];
+    requestBytes = 0;
+    discardingOversizedRequest = true;
+    return;
+  }
+  requestChunks.push(chunk);
+  requestBytes += chunk.length;
+}
+
+function finishRequest(): void {
+  if (discardingOversizedRequest) {
+    error(null, -32600, `JSON-RPC request exceeds ${maximumRequestBytes} bytes`);
+  } else if (requestBytes > 0) {
+    const raw = Buffer.concat(requestChunks, requestBytes);
+    const content = raw.at(-1) === 13 ? raw.subarray(0, -1) : raw;
+    try {
+      const line = new TextDecoder("utf-8", { fatal: true }).decode(content);
+      if (line.trim()) void handle(JSON.parse(line));
+    } catch {
+      error(null, -32700, "Parse error");
+    }
+  }
+  requestChunks = [];
+  requestBytes = 0;
+  discardingOversizedRequest = false;
+}
+
+process.stdin.on("data", (chunk: Buffer) => {
+  let start = 0;
+  for (let index = 0; index < chunk.length; index += 1) {
+    if (chunk[index] !== 10) continue;
+    appendRequestChunk(chunk.subarray(start, index));
+    finishRequest();
+    start = index + 1;
+  }
+  appendRequestChunk(chunk.subarray(start));
 });
+process.stdin.on("end", finishRequest);
