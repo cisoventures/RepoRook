@@ -67,7 +67,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: cisoventures/RepoRook@v0.8.0
+      - uses: cisoventures/RepoRook@v0.9.0
         with:
           fail-on: high
           mode: diff
@@ -221,4 +221,4 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/HARDENING.md`](docs/H
 
 ## Project status
 
-The repository contains the v0.8 scale-and-reliability architecture: bounded scanner checkpoints and retries, workspace-aware changed-file scans with explicit scope receipts, and hash-bound organization policy profiles that repositories may tighten but not weaken. v0.9 hardening is underway from the authoritative `SECURITY.md` threat model, beginning with hostile configuration boundaries and deterministic parser fuzzing. It builds on the local no-code service and its one-repository GitHub App boundary. Remote multi-user service operation remains future work. Scanner accuracy, policy contracts, service boundaries, and host packaging remain pre-1.0 and should expand only through fixture-backed, reviewable contributions.
+The repository contains the v0.9 hardening baseline: hostile configuration and path boundaries, deterministic parser fuzzing, bounded scanner, MCP, service, and integration inputs, fail-closed malformed-output handling, documented sandbox expectations, an external-review package, and a security response runbook. It builds on the v0.8 scale-and-reliability architecture and the local no-code service's one-repository GitHub App boundary. Independent external review and remote multi-user service operation remain future work. Scanner accuracy, policy contracts, service boundaries, and host packaging remain pre-1.0 and should expand only through fixture-backed, reviewable contributions.

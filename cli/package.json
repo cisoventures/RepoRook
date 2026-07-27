@@ -1,6 +1,6 @@
 {
   "name": "reporook",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Free, deterministic, agent-agnostic security scanner for repositories.",
   "license": "MIT",
   "homepage": "https://github.com/cisoventures/RepoRook#readme",
