@@ -16,6 +16,8 @@ The dashboard can:
 
 - detect the project and create a conservative `reporook.yml` after confirmation;
 - run the same fail-closed RepoRook scan used by the CLI;
+- show a scanner-by-scanner coverage checklist and explain why an incomplete scan is inconclusive;
+- display platform-specific scanner setup commands after an explicit click without running them or installing software;
 - show reduced, plain-English finding evidence and coverage status;
 - prepare a finding-bound remediation plan and exact proposal template;
 - show the exact patch and tests supplied in that proposal;
@@ -24,6 +26,8 @@ The dashboard can:
 - optionally publish that exact approved patch as a draft pull request through a one-hour, single-repository installation token.
 
 It cannot install scanners or edit the local application working tree. GitHub publishing requires a separate confirmation after exact-proposal approval.
+
+When coverage is partial or failed, use **Show scanner setup instructions** in the coverage card. RepoRook displays the same reviewed commands as `reporook setup`; it does not execute those commands. After installing the scanners you choose, run the dashboard scan again and confirm that every applicable check is marked **ready** before treating the result as a security gate.
 
 ## Repository-scoped draft pull requests
 

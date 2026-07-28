@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { createApprovalReceipt } from "reporook";
 import { startDashboardServer } from "../dist/server.js";
 import { RepositoryStore } from "../dist/repository.js";
+import { dashboardHtml, dashboardJs } from "../dist/ui.js";
 
 const findingId = "rr-0123456789ab";
 
@@ -124,6 +125,16 @@ test("repository snapshots expose plain evidence without raw scanner metadata", 
   }
 });
 
+test("dashboard explains incomplete coverage and offers non-installing setup guidance", () => {
+  const html = dashboardHtml();
+  assert.match(html, /Coverage details/);
+  assert.match(html, /Some checks could not run/);
+  assert.match(html, /Show scanner setup instructions/);
+  assert.match(dashboardJs, /\/api\/setup/);
+  assert.match(dashboardJs, /not a clean bill of health/);
+  assert.match(dashboardJs, /RepoRook has not installed or changed anything/);
+});
+
 test("dashboard requires its fragment token and exposes only redacted finding fields", async (context) => {
   const { repository } = await fixture();
   const dashboard = await startOrSkip(context, { repository, port: 0, bootstrapToken: "bootstrap-test-token", sessionToken: "session-test-token", cliRunner: async () => ({ code: 0, stdout: "{}", stderr: "" }) });
@@ -201,6 +212,28 @@ test("scan execution is single-flight and preserves RepoRook exit semantics", as
     assert.equal(job.status, "completed");
     assert.equal(job.exit_code, 1);
     assert.match(job.message, /actionable findings/);
+  } finally {
+    await dashboard.close();
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("scanner setup instructions are session-protected and never install software", async (context) => {
+  const { repository } = await fixture();
+  const calls = [];
+  const runner = async (args) => {
+    calls.push(args);
+    return { code: 0, stdout: "Review first\nbrew install semgrep\n", stderr: "" };
+  };
+  const dashboard = await startOrSkip(context, { repository, port: 0, bootstrapToken: "bootstrap-test-token", sessionToken: "session-test-token", cliRunner: runner });
+  if (!dashboard) { await rm(repository, { recursive: true, force: true }); return; }
+  try {
+    assert.equal((await fetch(`${dashboard.origin}/api/setup`)).status, 401);
+    const cookie = await session(dashboard);
+    const response = await fetch(`${dashboard.origin}/api/setup`, { headers: { cookie } });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { instructions: "Review first\nbrew install semgrep", installs_software: false });
+    assert.deepEqual(calls, [["setup"]]);
   } finally {
     await dashboard.close();
     await rm(repository, { recursive: true, force: true });

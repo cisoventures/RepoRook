@@ -12,6 +12,8 @@ ignore:
   - node_modules/**
   - dist/**
   - build/**
+  - work/**
+  - outputs/**
   - .git/**
   - .reporook/**
 requiredScanners: []

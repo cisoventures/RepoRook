@@ -24,13 +24,17 @@ h2 { font-size: 1.05rem; color: #dce7ff; }
 .wide { grid-column: span 8; }
 .metric { font-size: 2rem; font-weight: 800; letter-spacing: -.04em; }
 .status { display: inline-flex; gap: .35rem; align-items: center; padding: .28rem .55rem; border-radius: 99px; background: #1c2a42; color: #bfd0ed; font-size: .78rem; font-weight: 700; text-transform: uppercase; }
-.status.complete, .status.ok, .severity.low { background: #123a2b; color: #7aebb3; }
-.status.partial, .severity.medium { background: #403315; color: #ffd879; }
+.status.complete, .status.ok, .status.ready, .severity.low { background: #123a2b; color: #7aebb3; }
+.status.partial, .status.missing, .severity.medium { background: #403315; color: #ffd879; }
 .status.failed, .status.error, .severity.high, .severity.critical { background: #481f2a; color: #ff9bac; }
 .actions { display: flex; flex-wrap: wrap; gap: .6rem; }
 .notice { padding: .85rem; background: #172641; border-left: .25rem solid #64d7a0; border-radius: .5rem; }
 .error { border-left-color: #ff7891; color: #ffc2cc; }
 .queue { display: grid; gap: .7rem; }
+.scanner-list { display: grid; gap: .65rem; }
+.scanner { display: grid; grid-template-columns: minmax(8rem, 1fr) auto; gap: .8rem; align-items: start; padding: .75rem 0; border-top: 1px solid #243653; }
+.scanner:first-child { border-top: 0; }
+.scanner p { grid-column: 1 / -1; margin: -.35rem 0 0; font-size: .84rem; }
 .finding { display: grid; grid-template-columns: 7rem minmax(0, 1fr) auto; gap: 1rem; align-items: center; padding: .85rem 0; border-top: 1px solid #243653; }
 .finding:first-child { border-top: 0; }
 .finding h3 { margin-bottom: .3rem; font-size: .95rem; }
@@ -64,7 +68,38 @@ function showMessage(message, failed = false) {
   banner.className = failed ? "notice error" : "notice";
   banner.classList.remove("hidden");
 }
-function statusBadge(value) { return element("span", { class: "status " + String(value).toLowerCase() }, String(value)); }
+function statusBadge(value) { return element("span", { class: "status " + String(value).toLowerCase().replaceAll(" ", "-") }, String(value)); }
+function scannerState(scanner) {
+  if (scanner.status === "ok") return { label: "ready", detail: scanner.finding_count + " finding" + (scanner.finding_count === 1 ? "" : "s") };
+  const reason = scanner.reason || "This scanner did not run.";
+  if (/not needed|no supported|no explicit/i.test(reason)) return { label: "not needed", detail: reason };
+  if (scanner.status === "error") return { label: "failed", detail: reason };
+  return { label: "missing", detail: reason };
+}
+function renderCoverage(scan) {
+  const list = $("scanners");
+  const setup = $("setup-help");
+  list.replaceChildren();
+  if (!scan) {
+    $("coverage-explanation").textContent = "Run the first scan to see which security checks completed.";
+    setup.classList.add("hidden");
+    return;
+  }
+  const incomplete = scan.coverage_status !== "complete";
+  $("coverage-explanation").textContent = scan.coverage_status === "complete"
+    ? "Every applicable security check completed."
+    : scan.coverage_status === "partial"
+      ? "Some checks completed, but missing or failed scanners mean this is not a clean bill of health."
+      : "No applicable security check completed. Treat the result as inconclusive.";
+  for (const scanner of scan.scanners || []) {
+    const state = scannerState(scanner);
+    const row = element("article", { class: "scanner" });
+    row.append(element("strong", {}, scanner.name), statusBadge(state.label));
+    row.append(element("p", { class: "muted" }, state.detail));
+    list.append(row);
+  }
+  setup.classList.toggle("hidden", !incomplete);
+}
 function render() {
   const snapshot = state.snapshot;
   if (!snapshot) return;
@@ -75,6 +110,7 @@ function render() {
   $("configured").textContent = snapshot.repository.configured ? "Configured" : "Setup needed";
   const scan = snapshot.scan;
   $("coverage").replaceChildren(scan ? statusBadge(scan.coverage_status) : statusBadge("not scanned"));
+  renderCoverage(scan);
   $("finding-count").textContent = String(scan?.summary?.total ?? 0);
   $("scan-time").textContent = scan ? new Date(scan.generated_at).toLocaleString() : "Run the first scan to create evidence";
   const queue = $("findings");
@@ -183,6 +219,17 @@ $("scan-button").addEventListener("click", async () => {
   try { state.job = await api("/api/scan", { method: "POST", body: "{}" }); renderJob(); showMessage("Scan started. The dashboard will update when deterministic evidence is ready."); }
   catch (error) { showMessage(error.message, true); }
 });
+$("setup-button").addEventListener("click", async () => {
+  const button = $("setup-button");
+  button.disabled = true;
+  try {
+    const setup = await api("/api/setup");
+    $("setup-output").textContent = setup.instructions || "No setup instructions were returned.";
+    $("setup-output").classList.remove("hidden");
+    showMessage("Review these commands before running them. RepoRook has not installed or changed anything.");
+  } catch (error) { showMessage(error.message, true); }
+  finally { button.disabled = false; }
+});
 $("github-connect").addEventListener("click", () => { location.assign("/github/connect"); });
 $("github-disconnect").addEventListener("click", async () => {
   if (!confirm("Remove RepoRook's local GitHub App key for this repository? This does not uninstall the App on GitHub.")) return;
@@ -206,6 +253,7 @@ export function dashboardHtml(): string {
   <article class="card wide"><h2 id="repo-name">Repository</h2><p id="repo-path" class="muted"></p><p><span id="configured" class="status"></span></p><p id="stacks"></p></article>
   <article class="card summary"><h2>Coverage</h2><div id="coverage"></div><p id="scan-time" class="muted"></p></article>
   <article class="card summary"><h2>Findings</h2><div id="finding-count" class="metric">0</div><p class="muted">Scanner evidence remains separate from agent reasoning.</p></article>
+  <article class="card wide"><h2>Coverage details</h2><p id="coverage-explanation" class="muted"></p><div id="scanners" class="scanner-list"></div><div id="setup-help" class="notice hidden"><p><strong>Some checks could not run.</strong> RepoRook will show installation commands for your system, but it will not run them or install software.</p><button id="setup-button" type="button" class="secondary">Show scanner setup instructions</button><pre id="setup-output" class="hidden"></pre></div></article>
   <article class="card"><h2>GitHub draft pull requests</h2><div id="github-status"></div><p id="github-target"></p><p id="github-detail" class="muted"></p><div class="actions"><button id="github-connect" type="button" class="hidden">Connect this repository</button><button id="github-disconnect" type="button" class="secondary hidden">Disconnect local key</button></div></article>
   <article class="card wide"><h2>Prioritized vulnerability queue</h2><div id="findings" class="queue"></div></article>
   <article class="card"><h2>Approval queue</h2><p class="muted">Approval binds a named person to the exact patch and test plan. The service never changes local application files. After the repository-only GitHub App is connected, a separate confirmation can publish the approved patch as a draft PR.</p><div id="approvals"></div></article>
