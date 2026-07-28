@@ -60,17 +60,26 @@ function validateFindings(findings) {
   }
 }
 
+function validateFindingsOrRepositoryBoundary(parse) {
+  try {
+    validateFindings(parse());
+  } catch (error) {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /resolves outside the repository/);
+  }
+}
+
 test("scanner normalizers survive a deterministic hostile JSON corpus", () => {
   for (let iteration = 0; iteration < 1_000; iteration += 1) {
     const input = jsonValue();
-    validateFindings(parseSemgrep(input, "/repo"));
+    validateFindingsOrRepositoryBoundary(() => parseSemgrep(input, "/repo"));
     assert.ok(Array.isArray(semgrepErrors(input)));
-    validateFindings(parseGitleaks(input, "/repo", iteration % 2 === 0));
-    validateFindings(parseCheckov(input, "/repo"));
-    validateFindings(parseTrivyImage(input, "fixture.invalid/app:latest"));
-    validateFindings(parseNpmAudit(input));
-    validateFindings(parsePipAudit(input, "requirements.txt"));
-    validateFindings(parseOsvScanner(input, "/repo"));
+    validateFindingsOrRepositoryBoundary(() => parseGitleaks(input, "/repo", iteration % 2 === 0));
+    validateFindingsOrRepositoryBoundary(() => parseCheckov(input, "/repo"));
+    validateFindingsOrRepositoryBoundary(() => parseTrivyImage(input, "fixture.invalid/app:latest"));
+    validateFindingsOrRepositoryBoundary(() => parseNpmAudit(input));
+    validateFindingsOrRepositoryBoundary(() => parsePipAudit(input, "requirements.txt"));
+    validateFindingsOrRepositoryBoundary(() => parseOsvScanner(input, "/repo"));
   }
 
   const secret = "RR_FUZZ_SECRET_SHOULD_NOT_SURVIVE";

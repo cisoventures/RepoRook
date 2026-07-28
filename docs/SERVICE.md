@@ -7,7 +7,7 @@ RepoRook Service is an optional local dashboard for people who prefer buttons an
 Requirements: Node.js 20 or later and the scanners appropriate for the repository.
 
 ```bash
-npx --yes @reporook/service@latest --repo .
+reporook-service --repo .
 ```
 
 The command prints a private URL such as `http://127.0.0.1:7377/#token=...`. Open it on the same machine. The fragment token is not sent in the initial HTTP request; dashboard JavaScript exchanges it for an HTTP-only, same-site session cookie and removes it from the address bar.
@@ -34,7 +34,7 @@ When coverage is partial or failed, use **Show scanner setup instructions** in t
 RepoRook detects `OWNER/REPOSITORY` from the local repository's `github.com` `origin`. If the project has no origin or uses a different remote, provide the target explicitly:
 
 ```bash
-npx --yes @reporook/service@latest --repo . --github-repo OWNER/REPOSITORY
+reporook-service --repo . --github-repo OWNER/REPOSITORY
 ```
 
 Then:
@@ -66,7 +66,7 @@ Automation can still supply a short-lived GitHub App installation token and expl
 
 ```bash
 REPOROOK_GITHUB_TOKEN="SHORT_LIVED_INSTALLATION_TOKEN" \
-  npx --yes @reporook/service@latest --repo . --github-repo OWNER/REPOSITORY
+  reporook-service --repo . --github-repo OWNER/REPOSITORY
 ```
 
 RepoRook verifies it through GitHub's installation-repositories endpoint and rejects the operation if the selected repository is not visible. A personal access token fails this installation-only check; there is no fallback to a broader credential.

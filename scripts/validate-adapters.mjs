@@ -33,13 +33,25 @@ const mcpConfigurations = [
   ["adapters/codex/reporook/.mcp.json", "direct"],
   ["adapters/cursor/reporook/.mcp.json", "wrapped"],
   ["adapters/copilot/reporook/.mcp.json", "wrapped"],
+  ["adapters/gemini/reporook/gemini-extension.json", "wrapped"],
   ["adapters/windsurf/reporook/.mcp.json", "wrapped"],
 ];
 for (const [path, format] of mcpConfigurations) {
   const parsed = JSON.parse(await readFile(resolve(root, path), "utf8"));
   const server = format === "direct" ? parsed.reporook : parsed.mcpServers?.reporook;
-  if (server?.command !== "npx" || !Array.isArray(server.args) || !server.args.includes("@reporook/mcp-server")) {
+  if (server?.command !== "reporook-mcp" || !Array.isArray(server.args) || server.args.length !== 0) {
     throw new Error(`Invalid RepoRook MCP adapter: ${path}`);
+  }
+}
+const executableIntegrationFiles = [
+  "adapters/cursor/reporook/hooks/hooks.json",
+  "adapters/copilot/reporook/hooks.json",
+  ...mcpConfigurations.map(([path]) => path),
+];
+for (const path of executableIntegrationFiles) {
+  const contents = await readFile(resolve(root, path), "utf8");
+  if (/\b(?:npx|npm\s+exec|pnpm\s+dlx|bunx)\b/i.test(contents)) {
+    throw new Error(`Adapter may bootstrap executable software: ${path}`);
   }
 }
 const schemas = [
@@ -56,4 +68,4 @@ const schemas = [
   "schemas/approval-receipt.schema.json",
 ];
 for (const schema of schemas) JSON.parse(await readFile(resolve(root, schema), "utf8"));
-process.stdout.write(`Validated ${copies.length} skill copies, ${manifests.length} manifests, ${mcpConfigurations.length} MCP configs, and ${schemas.length} schemas.\n`);
+process.stdout.write(`Validated ${copies.length} skill copies, ${manifests.length} manifests, ${mcpConfigurations.length} MCP configs, ${executableIntegrationFiles.length} executable integration files, and ${schemas.length} schemas.\n`);

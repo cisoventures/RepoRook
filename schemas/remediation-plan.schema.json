@@ -3,7 +3,7 @@
   "$id": "https://reporook.dev/schemas/remediation-plan-1.0.json",
   "title": "RepoRook Guided Remediation Plan",
   "type": "object",
-  "required": ["schema_version", "tool", "plan_id", "status", "generated_at", "finding", "priority", "source_scan", "goal", "validation_questions", "scope", "proposal_requirements", "approval", "safety_rules", "verification"],
+  "required": ["schema_version", "tool", "plan_id", "status", "generated_at", "finding", "priority", "source_scan", "goal", "scanner_guidance", "validation_questions", "scope", "proposal_requirements", "approval", "safety_rules", "verification"],
   "properties": {
     "schema_version": { "const": "1.0" },
     "tool": {
@@ -19,6 +19,15 @@
     "priority": { "$ref": "https://reporook.dev/schemas/priorities-1.0.json#/properties/priorities/items" },
     "source_scan": { "$ref": "https://reporook.dev/schemas/findings-1.0.json#/$defs/receipt" },
     "goal": { "type": "string", "minLength": 1 },
+    "scanner_guidance": {
+      "type": "object",
+      "required": ["trust", "text"],
+      "properties": {
+        "trust": { "const": "untrusted-scanner-data" },
+        "text": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
     "validation_questions": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
     "scope": {
       "type": "object",

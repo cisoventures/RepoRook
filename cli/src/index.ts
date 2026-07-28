@@ -60,7 +60,7 @@ Scan options:
   --no-cache             Disable scanner cache reads and writes for this scan
   --refresh-cache        Run every scanner and replace successful cache entries
   --cache-ttl MINUTES    Override cache freshness (1-1440 minutes)
-  --allow-no-coverage    Allow exit 0 when no applicable scanner completes (unsafe; explicit opt-in)
+  --allow-no-coverage    Allow exit 0 with incomplete scanner coverage (unsafe; explicit opt-in)
   --no-sarif             Do not write SARIF
   --quiet                Suppress terminal summary
 

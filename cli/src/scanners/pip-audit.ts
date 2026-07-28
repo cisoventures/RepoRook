@@ -5,7 +5,7 @@ import { scopedChangedFiles } from "../incremental.js";
 import { plainSummary } from "../knowledge.js";
 import { runCommand } from "../process.js";
 import type { Finding, ScannerAdapter, ScannerContext, ScannerResult } from "../types.js";
-import { array, errored, jsonFromOutput, record, scannerParseError, scannerVersion, successful, text, unavailable } from "./shared.js";
+import { array, errored, jsonFromOutput, pythonScannerExecutionBlocked, record, scannerParseError, scannerVersion, successful, text, unavailable, unverifiedPythonScannerReason } from "./shared.js";
 
 async function requirementFiles(target: string): Promise<string[]> {
   let names: string[] = [];
@@ -68,9 +68,10 @@ export class PipAuditScanner implements ScannerAdapter {
       ? { applicable: true, scope: "changed-files" as const, scanFiles }
       : { applicable: false, scope: "changed-files" as const, reason: "root Python dependency manifests are unchanged" };
   }
-  async version() { return scannerVersion("pip-audit"); }
+  async version() { return pythonScannerExecutionBlocked() ? null : scannerVersion("pip-audit"); }
 
   async run(context: ScannerContext): Promise<ScannerResult> {
+    if (pythonScannerExecutionBlocked()) return unavailable(this.name, 0, unverifiedPythonScannerReason);
     const version = context.scannerVersion !== undefined ? context.scannerVersion : await scannerVersion("pip-audit");
     if (!version) return unavailable(this.name, 0, "pip-audit is not installed; run `reporook setup`");
     const requirements = await requirementFiles(context.target);

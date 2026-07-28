@@ -1,6 +1,12 @@
 import { commandVersion, type CommandOptions } from "../process.js";
 import type { Finding, ScannerResult, ScannerRunStatus, ScannerStatus } from "../types.js";
 
+export const unverifiedPythonScannerReason = "scanner execution is blocked because the RepoRook Action did not install it from a repository-owned hash lock";
+
+export function pythonScannerExecutionBlocked(): boolean {
+  return process.env.REPOROOK_PYTHON_SCANNERS_VERIFIED === "false";
+}
+
 export function text(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }

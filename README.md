@@ -18,12 +18,20 @@ Requirements: Node.js 20 or later. RepoRook orchestrates Semgrep, Gitleaks, `npm
 
 By default Semgrep downloads the public `p/default` rule bundle and runs it with metrics disabled. Set `semgrepConfig` to a pinned local rules file when you need fully offline or byte-for-byte reproducible source scans.
 
+Install RepoRook yourself once after reviewing the packages:
+
 ```bash
-npx --yes reporook@latest init .
-npx --yes reporook@latest doctor .
-npx --yes reporook@latest setup # prints reviewed install commands; does not install
-npx --yes reporook@latest integrate install . --apply
-npx --yes reporook@latest scan . --require-scanners
+npm install --global reporook @reporook/mcp-server @reporook/service
+```
+
+RepoRook, its service, generated integrations, and agent hooks never run that installation command or use an automatic package bootstrapper. A missing binary fails visibly.
+
+```bash
+reporook init .
+reporook doctor .
+reporook setup # displays reviewed scanner install commands; never runs them
+reporook integrate install . --apply
+reporook scan . --require-scanners
 ```
 
 `init` detects the project stack, writes a fail-closed `reporook.yml`, and keeps local evidence out of Git. It never replaces an existing configuration unless you explicitly pass `--force`.
@@ -32,19 +40,19 @@ Exit `1` means the scan worked and found a policy-actionable issue; exit `2` mea
 
 Exit codes are stable for CI:
 
-- `0`: no new, unsuppressed finding met its effective threshold
+- `0`: coverage completed and no new, unsuppressed finding met its effective threshold
 - `1`: at least one policy-actionable finding met its effective threshold
-- `2`: target/configuration error, required scanner error, or no completed coverage
+- `2`: target/configuration error, required scanner error, or incomplete coverage
 
 Scanner absence never masquerades as safety. Every report says whether coverage was `complete`, `partial`, or `failed`.
-Failed coverage exits `2` by default. `--allow-no-coverage` exists only for explicit diagnostic workflows where a successful process exit is more important than a security gate.
+Incomplete coverage exits `2` by default. `--allow-no-coverage` exists only for explicit diagnostic workflows where a successful process exit is more important than a security gate.
 
 ## No-code local dashboard
 
 People who do not want to operate the CLI can run the optional self-hosted service:
 
 ```bash
-npx --yes @reporook/service@latest --repo .
+reporook-service --repo .
 ```
 
 Open the private loopback URL printed in the terminal. The dashboard walks through repository setup, runs the same deterministic scanner path, explains findings in plain English, prepares finding-bound remediation plans, and records approval of an exact proposal. It binds only to `127.0.0.1`, uses a private fragment token to establish an HTTP-only session, and never changes local application files. The **Connect this repository** button guides the user through creating and installing a private GitHub App for the detected repository; RepoRook then mints one-hour tokens narrowed to that repository and can publish an exact approved proposal as a draft PR. Personal access tokens, OAuth authorization, webhooks, and organization-wide fallback are not requested. See the [service guide](docs/SERVICE.md).
@@ -130,7 +138,7 @@ An optional organization policy is a committed, repository-relative YAML or JSON
 
 Checkov runs with uploads and external downloads disabled and ignores repository-supplied Checkov configuration. Trivy runs only when `containerImages` contains an explicit target; tags work, but immutable digest references are safer. Git-history scanning is off by default because it expands scope and runtime. See [Infrastructure, container, and history scanning](docs/INFRASTRUCTURE.md).
 
-Successful per-scanner results are checkpointed under `.reporook/cache/` only for a clean Git commit and reused for at most 15 minutes by default. The key binds the commit, RepoRook and scanner versions, normalized configuration, and changed-file scope. Dirty relevant files, configuration or version changes, stale or malformed records, `--refresh-cache`, and `verify` all force a fresh scanner run. Errors and unavailable scanners are never cached. Use `--no-cache` for a cache-free scan or `--cache-ttl MINUTES` for a bounded one-run freshness override.
+Successful per-scanner results are checkpointed under `.reporook/cache/` only for a clean Git commit and reused for at most 15 minutes by default. The key binds the commit, RepoRook and scanner versions, normalized configuration, and changed-file scope, while a host-local HMAC key outside the repository prevents repository content from forging a successful checkpoint. Dirty relevant files, authentication failures, configuration or version changes, stale or malformed records, `--refresh-cache`, and `verify` all force a fresh scanner run. Errors and unavailable scanners are never cached. Use `--no-cache` for a cache-free scan or `--cache-ttl MINUTES` for a bounded one-run freshness override.
 
 Changed-file scans plan work per adapter. Semgrep, OSV-Scanner, `npm audit`, `pip-audit`, and Checkov receive only relevant changed files or manifests; unrelated adapters are explicitly marked `not-applicable`. Gitleaks deliberately retains repository scope so a changed secret is not missed, and Trivy retains its explicit external-image scope. The receipt records every scanner scope, making faster monorepo scans auditable rather than silently narrower.
 
@@ -156,7 +164,7 @@ The v1 schemas are in [`schemas/`](schemas/). Finding IDs intentionally exclude 
 Install repository-local support for all six coding-agent hosts with one command:
 
 ```bash
-npx --yes reporook@latest integrate install . --apply
+reporook integrate install . --apply
 ```
 
 Then ask your agent, “Scan this project for security vulnerabilities and explain what I should fix first.” Use `reporook integrate doctor .`, `update . --apply`, or `uninstall . --apply` for the managed lifecycle. RepoRook previews changes without `--apply`, preserves unrelated JSON configuration, and refuses to overwrite or remove user-edited content. See the [step-by-step agent setup guide](docs/AGENT_SETUP.md).
@@ -183,8 +191,8 @@ Run it directly:
 {
   "mcpServers": {
     "reporook": {
-      "command": "npx",
-      "args": ["--yes", "@reporook/mcp-server"]
+      "command": "reporook-mcp",
+      "args": []
     }
   }
 }

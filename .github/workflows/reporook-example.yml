@@ -21,5 +21,6 @@ jobs:
       - uses: ./
         with:
           path: cli
+          config: ../.github/reporook-example.yml
           fail-on: high
           mode: full

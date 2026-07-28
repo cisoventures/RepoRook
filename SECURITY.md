@@ -31,10 +31,12 @@ The project is community-maintained with no SLA. Maintainers will coordinate val
 - Never call partial or failed coverage clean.
 - Never let host-agent opinions silently alter deterministic findings.
 - Never apply application patches from the CLI or MCP server.
+- Never let the CLI, MCP server, local service, generated agent configuration, or hooks download, install, or update executable software. Setup surfaces display instructions only.
+- Generated integrations invoke only already-installed `reporook` and `reporook-mcp` binaries. A missing binary must fail visibly instead of falling back to a package bootstrapper such as `npx`.
 - Never report a fix as verified unless the original scanner completed under an equivalent configuration.
 - Keep finding and artifact paths inside the selected repository.
 - Use argument arrays rather than shell interpolation for scanner execution.
-- Pin and checksum downloaded CI scanner binaries.
+- Restrict scanner downloads to explicit CI Action execution on an ephemeral runner; pin and checksum every downloaded CI scanner binary before execution. Python scanners require a repository-owned, fully resolved `--require-hashes` lock and wheel-only installation; without it, the Action must not install or execute them and required coverage fails closed.
 
 ## Reportable findings
 

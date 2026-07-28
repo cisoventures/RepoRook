@@ -8,9 +8,12 @@ import { repoRelative } from "../path-utils.js";
 import { runCommand } from "../process.js";
 import { normalizeSeverity } from "../severity.js";
 import type { Finding, ScannerAdapter, ScannerContext, ScannerResult } from "../types.js";
-import { array, errored, jsonFromOutput, record, scannerParseError, scannerVersion, strings, successful, text, unavailable } from "./shared.js";
+import { array, errored, jsonFromOutput, pythonScannerExecutionBlocked, record, scannerParseError, scannerVersion, strings, successful, text, unavailable, unverifiedPythonScannerReason } from "./shared.js";
 
 const codeExtensions = new Set([".js", ".jsx", ".ts", ".tsx", ".py", ".go", ".java", ".rb", ".php", ".cs", ".rs", ".kt", ".swift"]);
+const ignoredDirectories = new Set(["node_modules", ".git", "dist", "build", ".reporook"]);
+const maximumDiscoveryDepth = 10;
+const maximumDiscoveryFiles = 10_000;
 const trustStoreCandidates = [
   "/etc/ssl/certs/ca-certificates.crt",
   "/etc/ssl/cert.pem",
@@ -40,16 +43,37 @@ async function semgrepEnvironment(temporary: string): Promise<NodeJS.ProcessEnv>
   };
 }
 
-async function containsCode(directory: string, depth = 0): Promise<boolean> {
-  if (depth > 4) return false;
-  let entries;
-  try { entries = await readdir(directory, { withFileTypes: true }); } catch { return false; }
-  for (const entry of entries) {
-    if (["node_modules", ".git", "dist", "build", ".reporook"].includes(entry.name)) continue;
-    if (entry.isFile() && codeExtensions.has(entry.name.slice(entry.name.lastIndexOf(".")))) return true;
-    if (entry.isDirectory() && await containsCode(join(directory, entry.name), depth + 1)) return true;
+export type CodePresence = "present" | "absent" | "indeterminate";
+
+export async function discoverCodePresence(
+  directory: string,
+  depth = 0,
+  state: { visited: number; incomplete: boolean } = { visited: 0, incomplete: false },
+): Promise<CodePresence> {
+  if (depth > maximumDiscoveryDepth || state.visited >= maximumDiscoveryFiles) {
+    state.incomplete = true;
+    return "indeterminate";
   }
-  return false;
+  let entries;
+  try { entries = await readdir(directory, { withFileTypes: true }); }
+  catch {
+    state.incomplete = true;
+    return "indeterminate";
+  }
+  for (const entry of entries) {
+    if (ignoredDirectories.has(entry.name)) continue;
+    if (entry.isFile()) {
+      state.visited += 1;
+      if (codeExtensions.has(entry.name.slice(entry.name.lastIndexOf(".")))) return "present";
+      if (state.visited >= maximumDiscoveryFiles) state.incomplete = true;
+      continue;
+    }
+    if (entry.isDirectory()) {
+      const child = await discoverCodePresence(join(directory, entry.name), depth + 1, state);
+      if (child === "present") return "present";
+    }
+  }
+  return state.incomplete ? "indeterminate" : "absent";
 }
 
 export function parseSemgrep(raw: unknown, target: string): Finding[] {
@@ -64,6 +88,7 @@ export function parseSemgrep(raw: unknown, target: string): Finding[] {
     const file = repoRelative(target, text(result.path));
     const stableEvidence = text(extra.lines) || text(extra.message);
     const ids = findingFingerprint(["semgrep", rule, file, stableEvidence]);
+    const verificationFingerprint = findingFingerprint(["semgrep", rule, stableEvidence]).fingerprint;
     const cwe = strings(metadata.cwe).map((value) => value.match(/CWE-\d+/i)?.[0]?.toUpperCase() ?? value);
     const references = [...strings(metadata.references), ...strings(metadata.source)].filter((value, index, all) => all.indexOf(value) === index);
     return {
@@ -78,6 +103,7 @@ export function parseSemgrep(raw: unknown, target: string): Finding[] {
       plain_summary: plainSummary({ scanner: "semgrep", rule, cwes: cwe, description: text(extra.message) }),
       description: text(extra.message, `Semgrep rule ${rule} matched.`),
       remediation_hint: text(metadata.fix, text(metadata.remediation, "Review the matched data flow and apply the rule's recommended secure pattern.")),
+      verification_fingerprint: verificationFingerprint,
       references,
       metadata: {
         cwe,
@@ -104,7 +130,10 @@ export class SemgrepScanner implements ScannerAdapter {
 
   async isApplicable(target: string) {
     try { await access(target); } catch { return { applicable: false, reason: "target does not exist" }; }
-    return (await containsCode(target)) ? { applicable: true } : { applicable: false, reason: "no supported source files detected" };
+    const presence = await discoverCodePresence(target);
+    if (presence === "present") return { applicable: true };
+    if (presence === "indeterminate") throw new Error("Semgrep applicability discovery exceeded a safety limit or could not read the complete source tree");
+    return { applicable: false, reason: "no supported source files detected" };
   }
 
   async incremental(context: ScannerContext) {
@@ -115,6 +144,7 @@ export class SemgrepScanner implements ScannerAdapter {
   }
 
   async version(): Promise<string | null> {
+    if (pythonScannerExecutionBlocked()) return null;
     const temporary = await mkdtemp(join(tmpdir(), "reporook-semgrep-version-"));
     try {
       return await scannerVersion(
@@ -129,6 +159,7 @@ export class SemgrepScanner implements ScannerAdapter {
 
   async run(context: ScannerContext): Promise<ScannerResult> {
     const started = Date.now();
+    if (pythonScannerExecutionBlocked()) return unavailable(this.name, Date.now() - started, unverifiedPythonScannerReason);
     const temporary = await mkdtemp(join(tmpdir(), "reporook-semgrep-"));
     const env = await semgrepEnvironment(temporary);
     try {

@@ -25,6 +25,14 @@ node "$GITHUB_ACTION_PATH/cli/dist/index.js" "${args[@]}"
 exit_code=$?
 set -e
 
+case "$exit_code" in
+  0|1|2) ;;
+  *)
+    echo "RepoRook terminated unexpectedly with exit code $exit_code; treating the scan as a tool error." >&2
+    exit_code=2
+    ;;
+esac
+
 {
   echo "exit_code=$exit_code"
   echo "findings_file=$findings"

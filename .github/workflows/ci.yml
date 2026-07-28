@@ -37,18 +37,21 @@ jobs:
       - run: npm run build
       - run: npm run fixture:prepare
       - run: ./action/install-scanners.sh
-      - name: Confirm fixture is blocked with complete coverage
+      - name: Confirm missing Python hash lock fails closed
         shell: bash
         run: |
           set +e
           node cli/dist/index.js scan test-fixtures/vulnerable-app --require-scanners --fail-on high
           code=$?
           set -e
-          test "$code" -eq 1
-          node -e "const r=require('./test-fixtures/vulnerable-app/.reporook/findings.json'); const osv=r.scanners.find(s=>s.name==='osv-scanner'); const checkov=r.scanners.find(s=>s.name==='checkov'); if(r.coverage_status!=='complete'||r.summary.total<6||osv?.status!=='ok'||checkov?.status!=='ok'||!r.findings.some(f=>f.scanner==='osv-scanner')||!r.findings.some(f=>f.scanner==='checkov')) process.exit(1)"
+          test "$code" -eq 2
+          node -e "const r=require('./test-fixtures/vulnerable-app/.reporook/findings.json'); const python=['semgrep','pip-audit','checkov'].map(name=>r.scanners.find(s=>s.name===name)); if(r.coverage_status==='complete'||python.some(s=>s?.available!==false||!s.reason?.includes('repository-owned hash lock'))) process.exit(1)"
       - name: Confirm verification preserves the baseline
+        if: hashFiles('action/python-scanners.requirements.txt') != ''
         run: npm run fixture:verify
       - name: Confirm the guided fix queue and approval boundary
+        if: hashFiles('action/python-scanners.requirements.txt') != ''
         run: npm run fixture:guided
       - name: Confirm new-findings baseline policy
+        if: hashFiles('action/python-scanners.requirements.txt') != ''
         run: npm run fixture:policy

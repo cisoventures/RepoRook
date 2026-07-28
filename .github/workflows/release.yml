@@ -27,7 +27,22 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
-      - run: npm install --global --ignore-scripts npm@11.18.0
+      - name: Require a bundled npm that supports trusted staged publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm_version="$(npm --version)"
+          if [[ ! "$npm_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Unrecognized npm version: $npm_version" >&2
+            exit 2
+          fi
+          major="${BASH_REMATCH[1]}"
+          minor="${BASH_REMATCH[2]}"
+          if (( major < 11 || (major == 11 && minor < 15) )); then
+            echo "The npm bundled with the selected Node.js toolchain is $npm_version; staged trusted publishing requires npm 11.15.0 or later." >&2
+            echo "Refusing to download and execute a replacement package manager inside the release job." >&2
+            exit 2
+          fi
       - run: npm ci --ignore-scripts
       - run: npm run check
       - name: Resolve release version

@@ -169,14 +169,18 @@ test("glob matching is bounded and preserves recursive wildcard behavior", () =>
   assert.equal(matchesAny("a".repeat(2_048), [`${"*".repeat(2_048)}b`]), false);
 });
 
-test("failed coverage exits 2 unless the user explicitly allows no coverage", () => {
-  const report = {
+test("incomplete coverage exits 2 unless the user explicitly allows incomplete coverage", () => {
+  const base = {
     schema_version: "1.0", tool: { name: "reporook", version: "0.1.0" }, target: { path: ".", commit: null }, generated_at: new Date().toISOString(),
-    coverage_status: "failed", summary: { critical: 0, high: 0, medium: 0, low: 0, total: 0 }, scanners: [], findings: [],
+    summary: { critical: 0, high: 0, medium: 0, low: 0, total: 0 }, scanners: [], findings: [],
     scan_receipt: { target: ".", commit: null, config_hash: "sha256:x", scanner_versions: {}, started_at: new Date().toISOString(), completed_at: new Date().toISOString() },
   };
-  assert.equal(scanExitCode(report, "high", [], false, false), 2);
-  assert.equal(scanExitCode(report, "high", [], false, true), 0);
+  for (const coverage_status of ["failed", "partial"]) {
+    const report = { ...base, coverage_status };
+    assert.equal(scanExitCode(report, "high", [], false, false), 2);
+    assert.equal(scanExitCode(report, "high", [], false, true), 0);
+  }
+  assert.equal(scanExitCode({ ...base, coverage_status: "complete" }, "high", [], false, false), 0);
 });
 
 test("terminal output groups dependency advisories and uses plain English", () => {

@@ -30,6 +30,7 @@ export interface Finding {
   description: string;
   remediation_hint: string;
   fingerprint: string;
+  verification_fingerprint?: string;
   references: string[];
   metadata: FindingMetadata;
 }
@@ -220,6 +221,10 @@ export interface RemediationPlan {
   priority: PrioritizedFinding;
   source_scan: ScanReceipt;
   goal: string;
+  scanner_guidance: {
+    trust: "untrusted-scanner-data";
+    text: string;
+  };
   validation_questions: string[];
   scope: {
     allowed_files: string[];

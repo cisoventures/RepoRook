@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
-import { lstat, readFile, realpath } from "node:fs/promises";
+import { lstat, realpath } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { sha256 } from "./fingerprint.js";
+import { readBoundedJsonFile } from "./input.js";
 import { matchesAny } from "./path-utils.js";
 import { meetsThreshold } from "./severity.js";
 import type {
@@ -76,7 +77,7 @@ async function optionalJson(target: string, requested: string, label: string): P
   const selected = await safePolicyPath(target, requested);
   if (!selected.exists) return { path: requested, value: null };
   try {
-    return { path: requested, value: JSON.parse(await readFile(selected.path, "utf8")) as unknown };
+    return { path: requested, value: await readBoundedJsonFile(selected.path, label) };
   } catch (error) {
     if (error instanceof SyntaxError) throw new Error(`${label} is not valid JSON: ${error.message}`);
     throw error;

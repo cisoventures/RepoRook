@@ -1,0 +1,22 @@
+failOn: high
+outputDir: .reporook
+gitHistory: false
+cacheEnabled: false
+paths:
+  - .
+ignore:
+  - node_modules/**
+  - dist/**
+  - build/**
+  - .git/**
+  - .reporook/**
+requiredScanners:
+  - gitleaks
+scanners:
+  semgrep: false
+  gitleaks: true
+  npm-audit: false
+  pip-audit: false
+  osv-scanner: false
+  checkov: false
+  trivy-image: false

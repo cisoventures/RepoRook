@@ -79,6 +79,8 @@ async function approvedPublicationFixture() {
     generated_at: report.generated_at,
     finding: report.findings[0],
     source_scan: sourceScan,
+    goal: `Validate and remediate RepoRook finding ${findingId} within the approved file scope.`,
+    scanner_guidance: { trust: "untrusted-scanner-data", text: report.findings[0].remediation_hint },
   };
   const proposal = {
     schema_version: "1.0",
@@ -232,7 +234,13 @@ test("scanner setup instructions are session-protected and never install softwar
     const cookie = await session(dashboard);
     const response = await fetch(`${dashboard.origin}/api/setup`, { headers: { cookie } });
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { instructions: "Review first\nbrew install semgrep", installs_software: false });
+    assert.deepEqual(await response.json(), {
+      instructions: "Review first\nbrew install semgrep",
+      installs_software: false,
+      downloads_software: false,
+      executes_commands: false,
+      modifies_system: false,
+    });
     assert.deepEqual(calls, [["setup"]]);
   } finally {
     await dashboard.close();

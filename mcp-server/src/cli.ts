@@ -8,7 +8,10 @@ export interface CliOptions { maxOutputBytes?: number; timeoutMs?: number; }
 
 function resolveCli(): { command: string; prefix: string[] } {
   const override = process.env.REPOROOK_CLI;
-  if (override) return { command: override, prefix: [] };
+  if (override) {
+    if (/\.(?:c|m)?js$/i.test(override)) return { command: process.execPath, prefix: [override] };
+    return { command: override, prefix: [] };
+  }
   try {
     return { command: process.execPath, prefix: [require.resolve("reporook")] };
   } catch {

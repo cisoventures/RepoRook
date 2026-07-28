@@ -27,7 +27,8 @@ test("agent integrations preview, install, merge, diagnose, and uninstall safely
     assert.equal(integrationExitCode(installed), 0);
     const rootMcp = JSON.parse(await readFile(join(target, ".mcp.json"), "utf8"));
     assert.deepEqual(rootMcp.mcpServers.existing, { command: "existing" });
-    assert.deepEqual(rootMcp.mcpServers.reporook.args, ["--yes", "@reporook/mcp-server"]);
+    assert.equal(rootMcp.mcpServers.reporook.command, "reporook-mcp");
+    assert.deepEqual(rootMcp.mcpServers.reporook.args, []);
     assert.equal(rootMcp.keep, true);
     if (process.platform !== "win32") assert.equal((await stat(join(target, ".mcp.json"))).mode & 0o777, 0o600);
 

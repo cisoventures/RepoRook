@@ -23,8 +23,10 @@ function publication() {
     plan_id: planId,
     status: "awaiting-proposal",
     generated_at: source_scan.completed_at,
-    finding: { id: findingId, plain_summary: "Unsafe command execution" },
+    finding: { id: findingId, plain_summary: "Unsafe command execution", remediation_hint: "Use the safe command API." },
     source_scan,
+    goal: `Validate and remediate RepoRook finding ${findingId} within the approved file scope.`,
+    scanner_guidance: { trust: "untrusted-scanner-data", text: "Use the safe command API." },
   };
   const proposal = {
     schema_version: "1.0",

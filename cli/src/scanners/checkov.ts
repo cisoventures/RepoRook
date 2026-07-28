@@ -7,7 +7,7 @@ import { repoRelative } from "../path-utils.js";
 import { runCommand } from "../process.js";
 import { normalizeSeverity } from "../severity.js";
 import type { Finding, ScannerAdapter, ScannerContext, ScannerResult } from "../types.js";
-import { array, errored, jsonFromOutput, record, scannerParseError, scannerVersion, strings, successful, text, unavailable } from "./shared.js";
+import { array, errored, jsonFromOutput, pythonScannerExecutionBlocked, record, scannerParseError, scannerVersion, strings, successful, text, unavailable, unverifiedPythonScannerReason } from "./shared.js";
 
 const ignoredDirectories = new Set([".git", ".reporook", ".serverless", ".terraform", "build", "dist", "node_modules", "vendor"]);
 const maxFiles = 10_000;
@@ -40,12 +40,24 @@ async function looksLikeKubernetesYaml(path: string): Promise<boolean> {
 export async function discoverCheckovFiles(target: string): Promise<string[]> {
   const matches: string[] = [];
   let visited = 0;
+  let incomplete = false;
   const walk = async (directory: string, depth: number): Promise<void> => {
-    if (depth > maxDepth || visited >= maxFiles) return;
-    const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+    if (depth > maxDepth || visited >= maxFiles) {
+      incomplete = true;
+      return;
+    }
+    let entries;
+    try { entries = await readdir(directory, { withFileTypes: true }); }
+    catch {
+      incomplete = true;
+      return;
+    }
     entries.sort((left, right) => left.name.localeCompare(right.name));
     for (const entry of entries) {
-      if (visited >= maxFiles) return;
+      if (visited >= maxFiles) {
+        incomplete = true;
+        return;
+      }
       if (entry.isSymbolicLink()) continue;
       const absolute = join(directory, entry.name);
       if (entry.isDirectory()) {
@@ -59,6 +71,9 @@ export async function discoverCheckovFiles(target: string): Promise<string[]> {
     }
   };
   await walk(target, 0);
+  if (!matches.length && incomplete) {
+    throw new Error("Checkov applicability discovery exceeded a safety limit or could not read the complete infrastructure tree");
+  }
   return matches;
 }
 
@@ -132,10 +147,11 @@ export class CheckovScanner implements ScannerAdapter {
       ? { applicable: true, scope: "changed-files" as const, scanFiles }
       : { applicable: false, scope: "changed-files" as const, reason: "infrastructure and workflow files are unchanged" };
   }
-  async version() { return scannerVersion("checkov", {}, ["--version"]); }
+  async version() { return pythonScannerExecutionBlocked() ? null : scannerVersion("checkov", {}, ["--version"]); }
 
   async run(context: ScannerContext): Promise<ScannerResult> {
     const started = Date.now();
+    if (pythonScannerExecutionBlocked()) return unavailable(this.name, Date.now() - started, unverifiedPythonScannerReason);
     const version = context.scannerVersion !== undefined ? context.scannerVersion : await scannerVersion("checkov", {}, ["--version"]);
     if (!version) return unavailable(this.name, Date.now() - started, "checkov is not installed; run `reporook setup`");
     const temporary = await mkdtemp(join(tmpdir(), "reporook-checkov-"));
