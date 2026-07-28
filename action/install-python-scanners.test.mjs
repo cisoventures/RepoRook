@@ -56,7 +56,10 @@ test("a repository-owned lock is passed to pip in strict hash and wheel-only mod
     assert.match(invocation, /--force-reinstall/);
     assert.match(invocation, /--only-binary=:all:/);
     assert.match(invocation, /--require-hashes/);
-    assert.match(invocation, new RegExp(lock.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    const invocationArgs = invocation.trim().split(/\r?\n/);
+    const requirementIndex = invocationArgs.indexOf("--requirement");
+    assert.notEqual(requirementIndex, -1);
+    assert.match(invocationArgs[requirementIndex + 1], /(?:^|[\\/])action[\\/]python-scanners[.]requirements[.]txt$/);
     assert.equal(await readFile(githubEnv, "utf8"), "REPOROOK_PYTHON_SCANNERS_VERIFIED=false\nREPOROOK_PYTHON_SCANNERS_VERIFIED=true\n");
   } finally {
     await rm(root, { recursive: true, force: true });
