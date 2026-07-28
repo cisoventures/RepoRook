@@ -14,7 +14,7 @@ function validReport(target, findings = []) {
   for (const finding of findings) summary[finding.severity] += 1;
   return {
     schema_version: "1.0",
-    tool: { name: "reporook", version: "0.9.1" },
+    tool: { name: "reporook", version: "0.9.2" },
     target: { path: target, commit: null },
     generated_at: now,
     coverage_status: "complete",
