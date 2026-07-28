@@ -4,8 +4,8 @@
   "description": "Deterministic code security scanning with plain-English agent triage and fix verification.",
   "mcpServers": {
     "reporook": {
-      "command": "npx",
-      "args": ["--yes", "@reporook/mcp-server"],
+      "command": "reporook-mcp",
+      "args": [],
       "cwd": "${workspacePath}"
     }
   },

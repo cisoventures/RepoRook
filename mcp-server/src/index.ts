@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
-import { approvalViaCli, baselineViaCli, prioritizeViaCli, remediationPlanViaCli, scanViaCli, suppressionViaCli, verifyViaCli } from "./cli.js";
+import { toSarif } from "reporook";
+import { baselineViaCli, prioritizeViaCli, remediationPlanViaCli, scanViaCli, suppressionViaCli, verifyViaCli } from "./cli.js";
 import { findFinding, findingContext, findings, readReport } from "./context.js";
 
 type JsonRecord = Record<string, unknown>;
@@ -19,6 +20,8 @@ interface ToolDefinition {
 const latestProtocolVersion = "2025-11-25";
 const protocolVersions = [latestProtocolVersion, "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"];
 const maximumRequestBytes = 1024 * 1024;
+const maximumConcurrentToolCalls = 2;
+let activeToolCalls = 0;
 const severityValues = ["critical", "high", "medium", "low"];
 const packageMetadata = createRequire(import.meta.url)("../package.json") as { version: string };
 const VERSION = packageMetadata.version;
@@ -45,6 +48,14 @@ function optionalBoolean(input: JsonRecord, name: string): boolean | undefined {
   const value = input[name];
   if (value === undefined) return undefined;
   if (typeof value !== "boolean") throw new Error(`${name} must be a boolean`);
+  return value;
+}
+
+function gitRevision(input: JsonRecord, name: string, defaultValue: string): string {
+  const value = string(input, name, { default: defaultValue });
+  if (value.length > 1024 || value.startsWith("-") || value.includes("\0") || /[\r\n]/.test(value)) {
+    throw new Error(`${name} must be a single Git revision and must not begin with '-'`);
+  }
   return value;
 }
 
@@ -95,8 +106,8 @@ const tools: ToolDefinition[] = [
     },
     async handler(input) {
       const path = string(input, "path");
-      const base = string(input, "base", { default: "HEAD~1" });
-      const head = string(input, "head", { default: "HEAD" });
+      const base = gitRevision(input, "base", "HEAD~1");
+      const head = gitRevision(input, "head", "HEAD");
       const failOn = optionalString(input, "fail_on", severityValues);
       return await scanViaCli(path, ["--changed", base, "--head", head, ...(failOn ? ["--fail-on", failOn] : [])]);
     },
@@ -248,7 +259,7 @@ const tools: ToolDefinition[] = [
         throw new Error(`Finding ${finding.id} is ${String(policy.disposition)} under team policy and is not actionable`);
       }
       return {
-        trust_status: "reporook-deterministic-finding",
+        trust_status: "unverified-repository-artifact",
         finding,
         context: await findingContext(repositoryPath, finding, 12),
         instructions: [
@@ -297,34 +308,6 @@ const tools: ToolDefinition[] = [
     },
   },
   {
-    name: "record_remediation_approval",
-    title: "Record exact remediation approval",
-    description: "Hash the exact remediation plan, unified diff, files, and test plan into a durable approval receipt. Call only after the named approver explicitly approves that exact proposal.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        repository_path: { type: "string" },
-        finding_id: { type: "string" },
-        approved_by: { type: "string" },
-        reason: { type: "string" },
-        proposal_path: { type: "string" },
-        confirmed: { type: "boolean", description: "True only after approval of the exact proposal" },
-      },
-      required: ["repository_path", "finding_id", "approved_by", "reason", "confirmed"],
-      additionalProperties: false,
-    },
-    async handler(input) {
-      if (optionalBoolean(input, "confirmed") !== true) throw new Error("Recording approval requires confirmed=true after approval of the exact proposal");
-      return await approvalViaCli(
-        string(input, "repository_path"),
-        string(input, "finding_id"),
-        string(input, "approved_by"),
-        string(input, "reason"),
-        optionalString(input, "proposal_path"),
-      );
-    },
-  },
-  {
     name: "export_findings",
     title: "Export RepoRook findings",
     description: "Read the latest JSON or SARIF artifact for downstream tools. This does not create issues or mutate external systems.",
@@ -337,7 +320,8 @@ const tools: ToolDefinition[] = [
     async handler(input) {
       const repositoryPath = string(input, "repository_path");
       const format = string(input, "format", { default: "json", enum: ["json", "sarif"] });
-      return await readReport(repositoryPath, format === "sarif" ? ".reporook/results.sarif" : ".reporook/findings.json");
+      const report = await readReport(repositoryPath, ".reporook/findings.json");
+      return format === "sarif" ? toSarif(report) : report;
     },
   },
 ];
@@ -385,10 +369,17 @@ async function handle(message: unknown): Promise<void> {
       const name = string(params, "name");
       const tool = tools.find((candidate) => candidate.name === name);
       if (!tool) { error(id, -32602, `Unknown tool: ${name}`); return; }
+      if (activeToolCalls >= maximumConcurrentToolCalls) {
+        result(id, { content: [{ type: "text", text: `RepoRook is busy; at most ${maximumConcurrentToolCalls} tool calls may run concurrently` }], isError: true });
+        return;
+      }
+      activeToolCalls += 1;
       try {
         result(id, response(await tool.handler(object(params.arguments ?? {}, "tool arguments"))));
       } catch (caught) {
         result(id, { content: [{ type: "text", text: (caught as Error).message }], isError: true });
+      } finally {
+        activeToolCalls -= 1;
       }
       return;
     }

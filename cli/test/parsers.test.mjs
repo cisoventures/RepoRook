@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SemgrepScanner, parseSemgrep, semgrepErrors } from "../dist/scanners/semgrep.js";
+import { SemgrepScanner, discoverCodePresence, parseSemgrep, semgrepErrors } from "../dist/scanners/semgrep.js";
 import { GitleaksScanner, parseGitleaks } from "../dist/scanners/gitleaks.js";
-import { CheckovScanner, parseCheckov } from "../dist/scanners/checkov.js";
+import { CheckovScanner, discoverCheckovFiles, parseCheckov } from "../dist/scanners/checkov.js";
 import { parseTrivyImage, TrivyImageScanner } from "../dist/scanners/trivy-image.js";
 import { parseNpmAudit } from "../dist/scanners/npm-audit.js";
 import { parsePipAudit } from "../dist/scanners/pip-audit.js";
@@ -32,6 +32,57 @@ test("Semgrep output maps to the normalized schema", () => {
   assert.equal(findings[0].file, "src/app.js");
   assert.deepEqual(findings[0].metadata.cwe, ["CWE-78"]);
   assert.match(findings[0].plain_summary, /system command/);
+  assert.match(findings[0].verification_fingerprint, /^sha256:[a-f0-9]{64}$/);
+});
+
+test("Semgrep verification fingerprints survive file moves but not evidence changes", () => {
+  const result = (path, lines) => ({ results: [{ check_id: "rule.move", path, start: { line: 1, col: 1 }, end: { line: 1, col: 2 }, extra: { severity: "ERROR", message: "Match", lines, metadata: {} } }] });
+  const original = parseSemgrep(result("/repo/src/old.ts", "danger(value)"), "/repo")[0];
+  const moved = parseSemgrep(result("/repo/src/new.ts", "danger(value)"), "/repo")[0];
+  const changed = parseSemgrep(result("/repo/src/new.ts", "other(value)"), "/repo")[0];
+  assert.notEqual(original.fingerprint, moved.fingerprint);
+  assert.equal(original.verification_fingerprint, moved.verification_fingerprint);
+  assert.notEqual(original.verification_fingerprint, changed.verification_fingerprint);
+});
+
+test("scanner paths resolving outside the repository are rejected", () => {
+  assert.throws(() => parseSemgrep({ results: [{
+    check_id: "rule.escape", path: "/outside/app.ts", start: { line: 1, col: 1 }, end: { line: 1, col: 2 },
+    extra: { severity: "ERROR", message: "Match", lines: "danger(value)", metadata: {} },
+  }] }, "/repo"), /outside the repository/);
+});
+
+test("Semgrep applicability is fail-closed beyond its discovery bound", async () => {
+  const target = await mkdtemp(join(tmpdir(), "reporook-semgrep-discovery-"));
+  try {
+    const supported = join(target, "a", "b", "c", "d", "e");
+    await mkdir(supported, { recursive: true });
+    await writeFile(join(supported, "app.ts"), "export const ready = true;\n");
+    assert.equal(await discoverCodePresence(target), "present");
+    assert.equal((await new SemgrepScanner().isApplicable(target)).applicable, true);
+
+    const deep = join(target, "deep", ...Array.from({ length: 11 }, (_, index) => `d${index}`));
+    await mkdir(deep, { recursive: true });
+    await rm(supported, { recursive: true, force: true });
+    await writeFile(join(deep, "hidden.ts"), "export const hidden = true;\n");
+    assert.equal(await discoverCodePresence(target), "indeterminate");
+    await assert.rejects(() => new SemgrepScanner().isApplicable(target), /applicability discovery exceeded/);
+  } finally {
+    await rm(target, { recursive: true, force: true });
+  }
+});
+
+test("Checkov applicability is fail-closed beyond its discovery bound", async () => {
+  const target = await mkdtemp(join(tmpdir(), "reporook-checkov-discovery-"));
+  try {
+    const deep = join(target, ...Array.from({ length: 11 }, (_, index) => `d${index}`));
+    await mkdir(deep, { recursive: true });
+    await writeFile(join(deep, "main.tf"), "resource \"aws_s3_bucket\" \"hidden\" {}\n");
+    await assert.rejects(() => discoverCheckovFiles(target), /applicability discovery exceeded/);
+    await assert.rejects(() => new CheckovScanner().isApplicable(target), /applicability discovery exceeded/);
+  } finally {
+    await rm(target, { recursive: true, force: true });
+  }
 });
 
 test("Semgrep errors are surfaced separately from findings", () => {

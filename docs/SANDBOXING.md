@@ -27,6 +27,6 @@ The MCP server accepts at most 1 MiB per JSON-RPC message. It caps one RepoRook 
 - Mount only the selected repository and a disposable temporary/cache directory.
 - Do not expose cloud, package-registry, VCS, signing, or production credentials unless a selected scanner explicitly needs them.
 - Prefer pinned scanner versions, pinned local Semgrep rules, immutable container digests, and read-only network egress to required registries and advisory services.
-- Treat scanner installation and advisory/rule databases as supply-chain inputs; RepoRook's GitHub Action pins scanner versions and checksums downloaded binaries where a checksum artifact is available.
+- Treat scanner installation and advisory/rule databases as supply-chain inputs. RepoRook's GitHub Action checks downloaded native binaries against repository-owned digests. Python scanners are installed only from a repository-owned, fully resolved pip hash lock in wheel-only mode; releases without that lock leave them unavailable and required coverage fails closed.
 
 These expectations are part of the v0.9 hardening contract and should be reviewed again before v1.0 or whenever a scanner gains a new execution or network capability.

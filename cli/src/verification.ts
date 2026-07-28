@@ -8,6 +8,12 @@ export interface VerificationResult {
   config_unchanged: boolean | null;
 }
 
+function verificationFingerprint(finding: Finding): string | null {
+  return typeof finding.verification_fingerprint === "string" && /^sha256:[a-f0-9]{64}$/.test(finding.verification_fingerprint)
+    ? finding.verification_fingerprint
+    : null;
+}
+
 function scannerStatus(report: ScanReport, scanner: string): ScannerStatus | undefined {
   return report.scanners.find((value) => value.name === scanner);
 }
@@ -42,16 +48,30 @@ export function verifyFindingResolution(previous: ScanReport, current: ScanRepor
     };
   }
 
+  const originalVerificationFingerprint = verificationFingerprint(original);
   const remaining = current.findings.find((finding) =>
     finding.id === original.id
     || finding.fingerprint === original.fingerprint
+    || (originalVerificationFingerprint !== null && verificationFingerprint(finding) === originalVerificationFingerprint)
     || (finding.scanner === original.scanner && finding.rule === original.rule && finding.file === original.file),
   );
+  const relocationCandidate = !remaining
+    ? current.findings.find((finding) => finding.scanner === original.scanner && finding.rule === original.rule)
+    : undefined;
   if (!remaining && requiredCoverageFailed) {
     return {
       scanner_resolution: "inconclusive",
       reason: "The original finding disappeared, but at least one required scanner did not complete. Treat the remediation as inconclusive.",
       remaining_finding: null,
+      original_scanner_status: status,
+      config_unchanged: true,
+    };
+  }
+  if (relocationCandidate) {
+    return {
+      scanner_resolution: "inconclusive",
+      reason: "A finding from the same scanner and rule remains at another path, so relocation cannot be ruled out.",
+      remaining_finding: relocationCandidate,
       original_scanner_status: status,
       config_unchanged: true,
     };

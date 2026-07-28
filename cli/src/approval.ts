@@ -11,7 +11,8 @@ const receiptKeys = new Set([
 ]);
 const toolKeys = new Set(["name", "version"]);
 const receiptBindingKeys = new Set(["plan_hash", "proposal_hash", "patch_hash", "test_plan_hash", "files"]);
-const scanReceiptKeys = new Set(["target", "commit", "config_hash", "scanner_versions", "started_at", "completed_at", "changed_files"]);
+const scanReceiptKeys = new Set(["target", "commit", "config_hash", "scanner_versions", "started_at", "completed_at", "changed_files", "scanner_scopes"]);
+const approvalInvalidationRule = "This approval is invalid if its attribution, plan, exact patch, file list, or test plan changes.";
 
 function record(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be an object`);
@@ -37,6 +38,10 @@ function timestamp(value: unknown, label: string): string {
 
 function digest(value: unknown): string {
   return `sha256:${sha256(typeof value === "string" ? value : JSON.stringify(value))}`;
+}
+
+function approvalIdentifier(planId: string, proposalHash: string, actor: string, reason: string, approvedAt: string): string {
+  return `rra-${sha256([planId, proposalHash, actor, reason, approvedAt].join("\0")).slice(0, 12)}`;
 }
 
 function safeFile(value: unknown, label: string): string {
@@ -79,6 +84,18 @@ function parseScanReceipt(value: unknown, label: string): ScanReceipt {
     changedFiles = input.changed_files.map((file, index) => safeFile(file, `${label}.changed_files[${index}]`));
     if (new Set(changedFiles).size !== changedFiles.length) throw new Error(`${label}.changed_files must be unique`);
   }
+  let scannerScopes: ScanReceipt["scanner_scopes"];
+  if (input.scanner_scopes !== undefined) {
+    const scopes = record(input.scanner_scopes, `${label}.scanner_scopes`);
+    scannerScopes = {};
+    for (const [scanner, scope] of Object.entries(scopes)) {
+      const name = nonEmpty(scanner, `${label}.scanner_scopes key`);
+      if (scope !== "repository" && scope !== "changed-files" && scope !== "external-targets" && scope !== "not-applicable") {
+        throw new Error(`${label}.scanner_scopes.${name} is invalid`);
+      }
+      scannerScopes[name] = scope;
+    }
+  }
   return {
     target: nonEmpty(input.target, `${label}.target`),
     commit,
@@ -87,6 +104,7 @@ function parseScanReceipt(value: unknown, label: string): ScanReceipt {
     started_at: timestamp(input.started_at, `${label}.started_at`),
     completed_at: timestamp(input.completed_at, `${label}.completed_at`),
     ...(changedFiles ? { changed_files: changedFiles } : {}),
+    ...(scannerScopes ? { scanner_scopes: scannerScopes } : {}),
   };
 }
 
@@ -131,6 +149,12 @@ export function validateRemediationPlan(value: unknown): RemediationPlan {
   const sourceScan = record(plan.source_scan, "Remediation plan source_scan");
   parseScanReceipt(sourceScan, "Remediation plan source_scan");
   if (plan.status !== "awaiting-proposal") throw new Error("Remediation plan status must be awaiting-proposal");
+  const expectedGoal = `Validate and remediate RepoRook finding ${findingId} within the approved file scope.`;
+  if (plan.goal !== expectedGoal) throw new Error("Remediation plan goal must use the trusted RepoRook template");
+  const guidance = record(plan.scanner_guidance, "Remediation plan scanner_guidance");
+  if (guidance.trust !== "untrusted-scanner-data" || guidance.text !== finding.remediation_hint) {
+    throw new Error("Remediation plan scanner guidance must preserve finding remediation as explicitly untrusted data");
+  }
   return value as RemediationPlan;
 }
 
@@ -156,11 +180,10 @@ export function createApprovalReceipt(
     test_plan_hash: digest(proposal.test_plan),
     files: proposal.files,
   };
-  const approvalIdentity = [plan.plan_id, bindings.proposal_hash, actor, approvalReason, approvedAt].join("\0");
   return {
     schema_version: "1.0",
     tool: { name: "reporook", version: VERSION },
-    approval_id: `rra-${sha256(approvalIdentity).slice(0, 12)}`,
+    approval_id: approvalIdentifier(plan.plan_id, bindings.proposal_hash, actor, approvalReason, approvedAt),
     status: "approved",
     approved_at: approvedAt,
     approved_by: actor,
@@ -169,7 +192,7 @@ export function createApprovalReceipt(
     plan_id: plan.plan_id,
     source_scan: sourceScan,
     bindings,
-    invalidation_rule: "This approval is invalid if the plan, exact patch, file list, or test plan changes.",
+    invalidation_rule: approvalInvalidationRule,
   };
 }
 
@@ -195,14 +218,22 @@ export function parseApprovalReceipt(value: unknown): ApprovalReceipt {
     }
   }
   const sourceScan = parseScanReceipt(input.source_scan, "Approval receipt source_scan");
+  const approvedAt = timestamp(input.approved_at, "Approval receipt approved_at");
+  const approvedBy = nonEmpty(input.approved_by, "Approval receipt approved_by");
+  const reason = nonEmpty(input.reason, "Approval receipt reason");
+  const invalidationRule = nonEmpty(input.invalidation_rule, "Approval receipt invalidation_rule");
+  if (approvalId !== approvalIdentifier(planId, String(bindings.proposal_hash), approvedBy, reason, approvedAt)) {
+    throw new Error("Approval receipt ID does not match its approval attribution and proposal binding");
+  }
+  if (invalidationRule !== approvalInvalidationRule) throw new Error("Approval receipt invalidation_rule is invalid");
   return {
     schema_version: "1.0",
     tool: { name: "reporook", version: nonEmpty(tool.version, "Approval receipt tool.version") },
     approval_id: approvalId,
     status: "approved",
-    approved_at: timestamp(input.approved_at, "Approval receipt approved_at"),
-    approved_by: nonEmpty(input.approved_by, "Approval receipt approved_by"),
-    reason: nonEmpty(input.reason, "Approval receipt reason"),
+    approved_at: approvedAt,
+    approved_by: approvedBy,
+    reason,
     finding_id: findingId,
     plan_id: planId,
     source_scan: sourceScan,
@@ -213,21 +244,26 @@ export function parseApprovalReceipt(value: unknown): ApprovalReceipt {
       test_plan_hash: String(bindings.test_plan_hash),
       files,
     },
-    invalidation_rule: nonEmpty(input.invalidation_rule, "Approval receipt invalidation_rule"),
+    invalidation_rule: invalidationRule,
   };
 }
 
 export function approvalMatches(receipt: ApprovalReceipt, planValue: unknown, proposalValue: unknown): boolean {
-  const plan = validateRemediationPlan(planValue);
-  const proposal = parseRemediationProposal(proposalValue);
-  const sourceScan = parseScanReceipt(plan.source_scan, "Remediation plan source_scan");
-  return receipt.status === "approved"
-    && receipt.plan_id === plan.plan_id
-    && receipt.finding_id === plan.finding.id
-    && receipt.bindings.plan_hash === digest(plan)
-    && receipt.bindings.proposal_hash === digest(proposal)
-    && receipt.bindings.patch_hash === digest(proposal.patch)
-    && receipt.bindings.test_plan_hash === digest(proposal.test_plan)
-    && JSON.stringify(receipt.bindings.files) === JSON.stringify(proposal.files)
-    && JSON.stringify(receipt.source_scan) === JSON.stringify(sourceScan);
+  try {
+    const parsedReceipt = parseApprovalReceipt(receipt);
+    const plan = validateRemediationPlan(planValue);
+    const proposal = parseRemediationProposal(proposalValue);
+    const sourceScan = parseScanReceipt(plan.source_scan, "Remediation plan source_scan");
+    return parsedReceipt.status === "approved"
+      && parsedReceipt.plan_id === plan.plan_id
+      && parsedReceipt.finding_id === plan.finding.id
+      && parsedReceipt.bindings.plan_hash === digest(plan)
+      && parsedReceipt.bindings.proposal_hash === digest(proposal)
+      && parsedReceipt.bindings.patch_hash === digest(proposal.patch)
+      && parsedReceipt.bindings.test_plan_hash === digest(proposal.test_plan)
+      && JSON.stringify(parsedReceipt.bindings.files) === JSON.stringify(proposal.files)
+      && JSON.stringify(parsedReceipt.source_scan) === JSON.stringify(sourceScan);
+  } catch {
+    return false;
+  }
 }

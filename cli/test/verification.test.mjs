@@ -30,6 +30,31 @@ test("fix verification rejects an equivalent finding with a changed fingerprint"
   assert.equal(result.remaining_finding.id, equivalent.id);
 });
 
+test("fix verification rejects a Semgrep finding moved to another file", () => {
+  const verificationFingerprint = `sha256:${"c".repeat(64)}`;
+  const before = { ...original, verification_fingerprint: verificationFingerprint };
+  const moved = { ...original, id: "rr-cccccccccccc", fingerprint: `sha256:${"d".repeat(64)}`, verification_fingerprint: verificationFingerprint, file: "src/moved.js" };
+  const result = verifyFindingResolution(report({ findings: [before] }), report({ findings: [moved] }), before.id);
+  assert.equal(result.scanner_resolution, "failed");
+  assert.equal(result.remaining_finding.file, "src/moved.js");
+});
+
+test("legacy verification is inconclusive when same-rule relocation cannot be ruled out", () => {
+  const moved = { ...original, id: "rr-dddddddddddd", fingerprint: `sha256:${"d".repeat(64)}`, file: "src/moved.js" };
+  const result = verifyFindingResolution(report(), report({ findings: [moved] }), original.id);
+  assert.equal(result.scanner_resolution, "inconclusive");
+  assert.match(result.reason, /relocation cannot be ruled out/);
+});
+
+test("different Semgrep evidence remains inconclusive when same-rule relocation cannot be ruled out", () => {
+  const before = { ...original, verification_fingerprint: `sha256:${"c".repeat(64)}` };
+  const unrelated = { ...original, id: "rr-eeeeeeeeeeee", fingerprint: `sha256:${"e".repeat(64)}`, verification_fingerprint: `sha256:${"f".repeat(64)}`, file: "src/moved.js" };
+  const result = verifyFindingResolution(report({ findings: [before] }), report({ findings: [unrelated] }), before.id);
+  assert.equal(result.scanner_resolution, "inconclusive");
+  assert.equal(result.remaining_finding.id, unrelated.id);
+  assert.match(result.reason, /relocation cannot be ruled out/);
+});
+
 test("fix verification passes only after the same scanner and configuration complete", () => {
   const result = verifyFindingResolution(report(), report({ findings: [] }), original.id);
   assert.equal(result.scanner_resolution, "passed");

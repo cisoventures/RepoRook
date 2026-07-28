@@ -4,8 +4,8 @@
     "agentStop": [
       {
         "type": "command",
-        "bash": "npx --yes reporook scan . --quiet --fail-on critical",
-        "powershell": "npx --yes reporook scan . --quiet --fail-on critical",
+        "bash": "reporook scan . --quiet --fail-on critical --require-scanners",
+        "powershell": "reporook scan . --quiet --fail-on critical --require-scanners",
         "cwd": ".",
         "timeoutSec": 120
       }

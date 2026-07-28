@@ -103,7 +103,17 @@ export async function scanRepository(options: ScanOptions, scanners: ScannerAdap
         };
       }
     }
-    const applicability = incrementalConfirmed ? { applicable: true } : await scanner.isApplicable(target, options.config);
+    let applicability: { applicable: boolean; reason?: string };
+    try {
+      applicability = incrementalConfirmed ? { applicable: true } : await scanner.isApplicable(target, options.config);
+    } catch (error) {
+      const reason = (error instanceof Error ? error.message : String(error)).replace(/\s+/g, " ").slice(0, 500);
+      return {
+        status: status(scanner.name, { applicable: true, available: false, status: "error", reason: `applicability discovery failed: ${reason}` }),
+        findings: [],
+        scope: scannerScope,
+      };
+    }
     if (!applicability.applicable) {
       return { status: status(scanner.name, { applicable: false, available: false, status: "skipped", reason: applicability.reason ?? "not applicable" }), findings: [], scope: "not-applicable" as ScannerScope };
     }
@@ -194,7 +204,7 @@ export function scanExitCode(
   requireAllApplicable: boolean,
   allowNoCoverage: boolean,
 ): 0 | 1 | 2 {
-  if (!allowNoCoverage && report.coverage_status === "failed") return 2;
+  if (!allowNoCoverage && report.coverage_status !== "complete") return 2;
   if (requiredScannerFailure(report, requiredScanners, requireAllApplicable)) return 2;
   if (report.policy) return report.policy.summary.actionable > 0 ? 1 : 0;
   return report.findings.some((finding) => meetsThreshold(finding.severity, failOn)) ? 1 : 0;

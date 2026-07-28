@@ -68,8 +68,10 @@ export interface IntegrationResult {
 const receiptName = ".reporook/integrations.json";
 const maximumIntegrationBytes = 2 * 1024 * 1024;
 const maximumReceiptBytes = 1024 * 1024;
-const mcpValue = { command: "npx", args: ["--yes", "@reporook/mcp-server"] };
-const copilotMcpValue = { type: "local", command: "npx", args: ["--yes", "@reporook/mcp-server"], tools: ["*"] };
+// Integration files must never bootstrap executable code. The user installs the
+// MCP package explicitly; hosts invoke only that already-installed binary.
+const mcpValue = { command: "reporook-mcp", args: [] };
+const copilotMcpValue = { type: "local", command: "reporook-mcp", args: [], tools: ["*"] };
 const codexMarketplaceEntry = {
   name: "reporook",
   source: { source: "local", path: "./.agents/plugins/reporook" },

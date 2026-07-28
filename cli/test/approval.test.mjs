@@ -83,6 +83,10 @@ test("approval receipts bind the exact plan, diff, files, and tests", () => {
   const changedSource = structuredClone(receipt);
   changedSource.source_scan.commit = "def456";
   assert.equal(approvalMatches(changedSource, plan, proposed), false);
+  for (const [field, value] of [["approved_by", "attacker"], ["reason", "changed reason"], ["approved_at", "2026-07-24T12:11:00.000Z"]]) {
+    assert.equal(approvalMatches({ ...receipt, [field]: value }, plan, proposed), false);
+  }
+  assert.equal(approvalMatches({ ...receipt, approval_id: "rra-000000000000" }, plan, proposed), false);
   assert.throws(() => parseRemediationProposal({ ...proposed, files: ["../outside.ts"] }), /repository-relative/);
   assert.throws(() => parseRemediationProposal({ ...proposed, files: ["src/other.ts"] }), /exactly match/);
 });

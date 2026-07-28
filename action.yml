@@ -63,7 +63,7 @@ runs:
       run: |
         npm ci --ignore-scripts --prefix "$GITHUB_ACTION_PATH"
         npm run build --prefix "$GITHUB_ACTION_PATH" --workspace reporook
-    - name: Install deterministic scanners
+    - name: Install checksum-verified scanners
       shell: bash
       run: "$GITHUB_ACTION_PATH/action/install-scanners.sh"
     - name: Run RepoRook
@@ -96,10 +96,14 @@ runs:
       run: node "$GITHUB_ACTION_PATH/action/comment.mjs"
     - name: Preserve scan evidence
       if: always()
+      shell: bash
+      run: node "$GITHUB_ACTION_PATH/action/stage-artifacts.mjs" "$GITHUB_WORKSPACE/.reporook" "$RUNNER_TEMP/reporook-artifacts"
+    - name: Upload staged scan evidence
+      if: always()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
       with:
         name: reporook-${{ github.run_id }}
-        path: .reporook/
+        path: ${{ runner.temp }}/reporook-artifacts/
         if-no-files-found: warn
         include-hidden-files: true
         retention-days: 14
@@ -110,11 +114,18 @@ runs:
         EXIT_CODE: ${{ steps.scan.outputs.exit_code }}
       run: |
         code="${EXIT_CODE:-2}"
-        if [ "$code" -eq 1 ]; then
-          echo "RepoRook found vulnerabilities at or above the configured threshold."
-          exit 1
-        fi
-        if [ "$code" -eq 2 ]; then
-          echo "RepoRook could not complete the required security coverage."
-          exit 2
-        fi
+        case "$code" in
+          0) exit 0 ;;
+          1)
+            echo "RepoRook found vulnerabilities at or above the configured threshold."
+            exit 1
+            ;;
+          2)
+            echo "RepoRook could not complete the required security coverage."
+            exit 2
+            ;;
+          *)
+            echo "RepoRook returned an unexpected result code: $code"
+            exit 2
+            ;;
+        esac

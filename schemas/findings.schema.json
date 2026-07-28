@@ -75,6 +75,7 @@
         "description": { "type": "string" },
         "remediation_hint": { "type": "string" },
         "fingerprint": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "verification_fingerprint": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
         "references": { "type": "array", "items": { "type": "string" } },
         "metadata": {
           "type": "object",

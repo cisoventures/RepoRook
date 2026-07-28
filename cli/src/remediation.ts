@@ -59,7 +59,11 @@ export function createRemediationPlan(report: ScanReport, findingId: string): Re
     finding,
     priority,
     source_scan: report.scan_receipt,
-    goal: finding.remediation_hint,
+    goal: `Validate and remediate RepoRook finding ${finding.id} within the approved file scope.`,
+    scanner_guidance: {
+      trust: "untrusted-scanner-data",
+      text: finding.remediation_hint,
+    },
     validation_questions: validationQuestions(finding),
     scope: {
       allowed_files: finding.metadata.target_kind === "container-image" ? [] : [finding.file],

@@ -2,7 +2,7 @@ import type { Finding, PrioritizationReport, PrioritizedFinding, PriorityBand, S
 import { VERSION } from "./version.js";
 
 const severityScore: Record<Severity, number> = { critical: 400, high: 300, medium: 200, low: 100 };
-const dependencyScanners = new Set(["npm-audit", "pip-audit", "osv-scanner"]);
+const dependencyScanners = new Set(["npm-audit", "pip-audit", "osv-scanner", "trivy-image"]);
 
 function exposesCredential(finding: Finding): boolean {
   return finding.scanner === "gitleaks"

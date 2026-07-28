@@ -200,6 +200,9 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
         return json(response, 200, {
           instructions: result.stdout.trim().slice(0, 20_000),
           installs_software: false,
+          downloads_software: false,
+          executes_commands: false,
+          modifies_system: false,
         });
       }
       if (method === "GET" && url.pathname === "/api/job") return json(response, 200, job);

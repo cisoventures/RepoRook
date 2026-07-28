@@ -1,6 +1,7 @@
-import { randomBytes } from "node:crypto";
-import { lstat, mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
 import { artifactPath } from "./artifacts.js";
 import { sha256 } from "./fingerprint.js";
 import { maximumEvidenceBytes, readBoundedJsonFile } from "./input.js";
@@ -21,6 +22,55 @@ interface CacheRecord {
   scanner_version: string;
   created_at: string;
   result: ScannerResult;
+  authentication: string;
+}
+
+type UnsignedCacheRecord = Omit<CacheRecord, "authentication">;
+
+let authenticationKeyPromise: Promise<Buffer> | null = null;
+
+async function cacheAuthenticationKey(): Promise<Buffer> {
+  if (authenticationKeyPromise) return await authenticationKeyPromise;
+  authenticationKeyPromise = (async () => {
+    const base = resolve(process.env.XDG_CACHE_HOME || join(homedir(), ".cache"));
+    const directory = join(base, "reporook");
+    const path = join(directory, "cache-auth-key");
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    try { await writeFile(path, randomBytes(32), { flag: "wx", mode: 0o600 }); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    }
+    const metadata = await lstat(path);
+    if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size !== 32) throw new Error("RepoRook cache authentication key is invalid");
+    const key = await readFile(path);
+    if (key.length !== 32) throw new Error("RepoRook cache authentication key is invalid");
+    return key;
+  })();
+  return await authenticationKeyPromise;
+}
+
+function cacheAuthentication(record: UnsignedCacheRecord, key: Buffer): string {
+  return `hmac-sha256:${createHmac("sha256", key).update(JSON.stringify(record)).digest("hex")}`;
+}
+
+function authenticCacheRecord(value: Record<string, unknown>, key: Buffer): UnsignedCacheRecord | null {
+  const keys = Object.keys(value).sort();
+  const expectedKeys = ["authentication", "created_at", "key", "result", "scanner", "scanner_version", "schema_version"];
+  if (JSON.stringify(keys) !== JSON.stringify(expectedKeys) || typeof value.authentication !== "string") return null;
+  const unsigned: UnsignedCacheRecord = {
+    schema_version: value.schema_version as "1.0",
+    key: String(value.key ?? ""),
+    scanner: String(value.scanner ?? ""),
+    scanner_version: String(value.scanner_version ?? ""),
+    created_at: String(value.created_at ?? ""),
+    result: value.result as ScannerResult,
+  };
+  const expected = cacheAuthentication(unsigned, key);
+  const supplied = value.authentication;
+  if (supplied.length !== expected.length) return null;
+  const expectedBytes = Buffer.from(expected, "utf8");
+  const suppliedBytes = Buffer.from(supplied, "utf8");
+  return timingSafeEqual(expectedBytes, suppliedBytes) ? unsigned : null;
 }
 
 function object(value: unknown): Record<string, unknown> | null {
@@ -102,11 +152,14 @@ function cachedFinding(value: unknown, scanner: string): Finding | null {
   const description = requiredString(input.description, 100_000);
   const remediationHint = requiredString(input.remediation_hint, 20_000);
   const fingerprint = requiredString(input.fingerprint, 71);
+  const verificationFingerprint = optionalString(input.verification_fingerprint, 71);
   const line = positiveInteger(input.line);
   const references = strings(input.references);
   const metadata = cachedMetadata(input.metadata);
   if (!id || !/^rr-[a-f0-9]{12}$/.test(id) || !rule || !file || !plainSummary || !description || !remediationHint
-    || !fingerprint || !/^sha256:[a-f0-9]{64}$/.test(fingerprint) || !line || !references || !metadata) return null;
+    || !fingerprint || !/^sha256:[a-f0-9]{64}$/.test(fingerprint)
+    || (verificationFingerprint !== undefined && (verificationFingerprint === null || !/^sha256:[a-f0-9]{64}$/.test(verificationFingerprint)))
+    || !line || !references || !metadata) return null;
   const finding: Finding = {
     id,
     scanner,
@@ -118,6 +171,7 @@ function cachedFinding(value: unknown, scanner: string): Finding | null {
     description,
     remediation_hint: remediationHint,
     fingerprint,
+    ...(verificationFingerprint ? { verification_fingerprint: verificationFingerprint } : {}),
     references,
     metadata,
   };
@@ -222,8 +276,12 @@ export async function readScannerCache(options: {
   let value: unknown;
   try { value = await readBoundedJsonFile(path, "Scanner cache", maximumEvidenceBytes); }
   catch { return null; }
-  const record = object(value);
-  const createdAt = Date.parse(typeof record?.created_at === "string" ? record.created_at : "");
+  const input = object(value);
+  if (!input) return null;
+  let record: UnsignedCacheRecord | null;
+  try { record = authenticCacheRecord(input, await cacheAuthenticationKey()); }
+  catch { return null; }
+  const createdAt = Date.parse(record?.created_at ?? "");
   const ageMs = (options.now ?? new Date()).getTime() - createdAt;
   if (!record || record.schema_version !== cacheSchema || record.key !== options.key || record.scanner !== options.scanner
     || record.scanner_version !== options.version || !Number.isFinite(createdAt) || ageMs < 0 || ageMs > options.ttlMs) return null;
@@ -256,7 +314,7 @@ export async function writeScannerCache(options: {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const directoryMetadata = await lstat(directory);
   if (!directoryMetadata.isDirectory() || directoryMetadata.isSymbolicLink()) return;
-  const record: CacheRecord = {
+  const unsigned: UnsignedCacheRecord = {
     schema_version: cacheSchema,
     key: options.key,
     scanner: options.scanner,
@@ -264,6 +322,7 @@ export async function writeScannerCache(options: {
     created_at: (options.now ?? new Date()).toISOString(),
     result: options.result,
   };
+  const record: CacheRecord = { ...unsigned, authentication: cacheAuthentication(unsigned, await cacheAuthenticationKey()) };
   const contents = `${JSON.stringify(record)}\n`;
   if (Buffer.byteLength(contents, "utf8") > maxCacheBytes) return;
   const temporary = join(directory, `.${basename(path)}.${process.pid}-${randomBytes(6).toString("hex")}.tmp`);

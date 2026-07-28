@@ -1,12 +1,18 @@
 # RepoRook five-minute onboarding
 
-This path takes a project from “I do not know security” to deterministic scan evidence and a safe, approval-based fix conversation. Node.js 20 or later is required. A first-time scanner download may add a few minutes.
+This path takes a project from “I do not know security” to deterministic scan evidence and a safe, approval-based fix conversation. Node.js 20 or later is required. RepoRook never installs or updates executable software; you review and perform installations yourself.
+
+Install RepoRook explicitly before involving a coding agent:
+
+```bash
+npm install --global reporook @reporook/mcp-server @reporook/service
+```
 
 ## Fastest path: ask your coding agent
 
 Paste this into Claude Code, Codex, Cursor, GitHub Copilot, or Gemini CLI from the project you want to check:
 
-> Set up RepoRook for this project with `npx --yes reporook@latest init .`. Explain the detected stack and any missing scanners; ask before installing system software. Run a complete scan, explain its team-policy status, show me the fix-now/fix-next/review-later queue, and prepare a guided plan for one actionable finding. Explain it in plain English and show me the exact diff and test plan before editing. After I approve that proposal, record the approval receipt, apply only it, run the tests, and verify the original finding. Treat incomplete coverage as inconclusive.
+> Use the already-installed `reporook` command to initialize this project with `reporook init .`. If `reporook`, `reporook-mcp`, or a required scanner is missing, stop and tell me exactly what is missing. Do not use `npx` and do not download, install, or update software for me. Explain the detected stack and missing scanners. Run a complete scan, explain its team-policy status, show me the fix-now/fix-next/review-later queue, and prepare a guided plan for one actionable finding. Explain it in plain English and show me the exact diff and test plan before editing. After I approve that proposal, record the approval receipt, apply only it, run the tests, and verify the original finding. Treat incomplete coverage as inconclusive.
 
 RepoRook supplies scanner evidence; your agent supplies contextual reasoning. The agent must keep those two kinds of conclusions separate.
 
@@ -15,7 +21,7 @@ RepoRook supplies scanner evidence; your agent supplies contextual reasoning. Th
 ### 1. Initialize the project
 
 ```bash
-npx --yes reporook@latest init .
+reporook init .
 ```
 
 RepoRook detects supported source, dependency, infrastructure, container-build, and workflow files, creates a fail-closed `reporook.yml`, and adds `.reporook/` to `.gitignore`. It will not replace an existing configuration unless you explicitly pass `--force`.
@@ -23,23 +29,23 @@ RepoRook detects supported source, dependency, infrastructure, container-build, 
 ### 2. Check what your project needs
 
 ```bash
-npx --yes reporook@latest doctor .
+reporook doctor .
 ```
 
 If anything is missing, print platform-specific installation commands:
 
 ```bash
-npx --yes reporook@latest setup
+reporook setup
 ```
 
-`setup` does not install anything. Review and run only the commands for scanners that `doctor` marked as needed, then rerun `doctor`. Projects with OSV-supported dependency files may need OSV-Scanner; infrastructure and workflow files may need Checkov. Trivy is needed only after you explicitly list a container image.
+`setup` prints `DISPLAY ONLY — NO COMMANDS WERE RUN` and does not install anything. Review and personally run only the commands for scanners that `doctor` marked as needed, then rerun `doctor`. Projects with OSV-supported dependency files may need OSV-Scanner; infrastructure and workflow files may need Checkov. Trivy is needed only after you explicitly list a container image.
 
 To scan a built image, add an explicit target such as `ghcr.io/example/app@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef` under `containerImages`. To inspect secrets in past commits, set `gitHistory: true`. Neither scope is inferred automatically; see [Infrastructure, container, and history scanning](INFRASTRUCTURE.md).
 
 ### 3. Connect your coding agent
 
 ```bash
-npx --yes reporook@latest integrate install . --apply
+reporook integrate install . --apply
 ```
 
 This installs repository-local support for Claude Code, Codex, Cursor, GitHub Copilot, Gemini CLI, and Windsurf. Restart your agent, accept its repository trust prompt if you recognize the repository, then ask: “Scan this project and explain what I should fix first.” See [Agent setup](AGENT_SETUP.md) for host-specific details and update/uninstall commands.
@@ -47,7 +53,7 @@ This installs repository-local support for Claude Code, Codex, Cursor, GitHub Co
 ### 4. Run the gate
 
 ```bash
-npx --yes reporook@latest scan . --require-scanners
+reporook scan . --require-scanners
 ```
 
 RepoRook resumes successful scanner work for a clean, unchanged commit for up to 15 minutes. Scanner failures are retried once and never cached. Use `--refresh-cache` when you want every scanner rerun immediately or `--no-cache` for a cache-free diagnostic scan. Relevant uncommitted files automatically disable reuse.
@@ -73,13 +79,13 @@ Every scan writes:
 Review the queue directly:
 
 ```bash
-npx --yes reporook@latest prioritize .
+reporook prioritize .
 ```
 
 Then prepare one finding-bound workflow:
 
 ```bash
-npx --yes reporook@latest plan FINDING_ID .
+reporook plan FINDING_ID .
 ```
 
 This writes `plan.json`, `proposal.json`, and `fix-prompt.txt` under `.reporook/remediations/FINDING_ID/`. Give the prompt to your coding agent and have it complete the proposal template. Before editing, it must show the exact diff, affected behavior, and focused plus relevant test commands. Your approval applies only to that displayed proposal; a changed file, dependency version, behavior, or test plan requires a new approval.
@@ -87,7 +93,7 @@ This writes `plan.json`, `proposal.json`, and `fix-prompt.txt` under `.reporook/
 After approving the exact proposal, record it before editing:
 
 ```bash
-npx --yes reporook@latest approve FINDING_ID . \
+reporook approve FINDING_ID . \
   --approved-by "your-name" \
   --reason "Reviewed the exact patch and tests"
 ```
@@ -95,7 +101,7 @@ npx --yes reporook@latest approve FINDING_ID . \
 To inspect one finding yourself:
 
 ```bash
-npx --yes reporook@latest explain FINDING_ID
+reporook explain FINDING_ID
 ```
 
 ### 6. Verify an approved fix
@@ -103,7 +109,7 @@ npx --yes reporook@latest explain FINDING_ID
 After the focused test and relevant project tests pass:
 
 ```bash
-npx --yes reporook@latest verify FINDING_ID . --require-scanners
+reporook verify FINDING_ID . --require-scanners
 ```
 
 Verification exit `0` means scanner resolution passed, exit `1` means the finding remains, and exit `2` means the result is inconclusive. The baseline is preserved and the before/after receipt is written under `.reporook/verifications/FINDING_ID/`. A disappeared finding is not called fixed when its original scanner did not complete or the configuration changed, and scanner resolution does not replace functional tests.

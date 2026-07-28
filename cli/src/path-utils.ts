@@ -1,11 +1,16 @@
-import { relative, resolve, sep } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 
 export function repoRelative(target: string, input: string | undefined, fallback = "unknown"): string {
   if (!input) return fallback;
-  const absolute = resolve(target, input);
-  const rel = relative(resolve(target), absolute).split(sep).join("/");
-  if (!rel || rel.startsWith("../")) return input.split(sep).join("/");
-  return rel;
+  if (input.includes("\0")) throw new Error("Scanner finding path contains a null byte");
+  const root = resolve(target);
+  const absolute = resolve(root, input);
+  const rel = relative(root, absolute);
+  if (rel === "") return fallback;
+  if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+    throw new Error("Scanner finding path resolves outside the repository");
+  }
+  return rel.split(sep).join("/");
 }
 
 function segmentMatches(value: string, pattern: string): boolean {

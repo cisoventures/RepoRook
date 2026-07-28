@@ -35,4 +35,4 @@ Immediately after the first release:
 
 Never retry a publish blindly after npm has accepted a package or stage. First check the staged-package view and public registry; npm package versions are immutable.
 
-Trusted publishing requires npm 11.5.1 or later. Staged publishing and the `npm trust` command require npm 11.15.0 or later and Node.js 22.14.0 or later. The release workflow pins npm 11.18.0 and uses the current Node.js 22 release.
+Trusted publishing requires npm 11.5.1 or later. Staged publishing and the `npm trust` command require npm 11.15.0 or later and Node.js 22.14.0 or later. The release workflow uses npm bundled with the selected Node.js 22 toolchain and verifies that it is new enough before any dependency or publishing command. It deliberately fails instead of downloading and executing a replacement package manager inside the privileged release job.

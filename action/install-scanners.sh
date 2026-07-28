@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-python3 -m pip install --disable-pip-version-check --no-input "semgrep==1.171.0" "pip-audit==2.10.1" "checkov==3.3.8"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+bash "$script_dir/install-python-scanners.sh"
 
 GITLEAKS_VERSION="8.28.0"
 case "$(uname -m)" in

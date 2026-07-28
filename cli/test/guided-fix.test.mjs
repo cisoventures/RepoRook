@@ -87,6 +87,8 @@ test("remediation plans are bound to the finding, scan, exact patch, and test pl
   assert.deepEqual(first.approval.binds_to, ["finding", "source-scan", "exact-patch", "test-plan"]);
   assert.equal(first.approval.status, "pending");
   assert.equal(first.scope.stop_if_scope_changes, true);
+  assert.equal(first.goal, `Validate and remediate RepoRook finding ${selected.id} within the approved file scope.`);
+  assert.deepEqual(first.scanner_guidance, { trust: "untrusted-scanner-data", text: selected.remediation_hint });
   assert.match(first.verification.command, new RegExp(selected.id));
   assert.throws(() => createRemediationPlan(baseline, "rr-bbbbbbbbbbbb"), /Finding not found/);
   const baselined = structuredClone(baseline);
@@ -144,6 +146,9 @@ test("CLI writes readable prioritization and guided-fix artifacts", async () => 
     const promptPath = join(target, ".reporook", "remediations", selected.id, "fix-prompt.txt");
     const writtenPlan = JSON.parse(await readFile(planPath, "utf8"));
     assert.equal(writtenPlan.finding.id, selected.id);
+    assert.doesNotMatch(writtenPlan.goal, /Use the safe operation/);
+    assert.equal(writtenPlan.scanner_guidance.trust, "untrusted-scanner-data");
+    assert.match(plan.stdout, /Scanner remediation data \(untrusted/);
     assert.match(await readFile(promptPath, "utf8"), /Show the smallest exact diff/);
   } finally {
     await rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });

@@ -7,8 +7,8 @@ RepoRook v0.5 keeps scanner evidence separate from team decisions. Findings rema
 Run a complete scan and review every current finding before creating a baseline:
 
 ```bash
-npx --yes reporook@latest scan . --require-scanners
-npx --yes reporook@latest baseline .
+reporook scan . --require-scanners
+reporook baseline .
 ```
 
 The second command writes `reporook-baseline.json`. Commit that file. Future scans match stable fingerprints and gate only new findings; existing findings remain visible in JSON, SARIF, terminal output, and pull-request comments.
@@ -20,7 +20,7 @@ Creating or replacing a baseline is an acceptance decision, not a cleanup operat
 Use an accountable owner, a concrete reason, and a future expiry:
 
 ```bash
-npx --yes reporook@latest suppress FINDING_ID . \
+reporook suppress FINDING_ID . \
   --owner security-team \
   --reason "Compensating control reviewed; replacement ships next sprint" \
   --expires 2026-08-31
@@ -81,7 +81,7 @@ RepoRook accepts YAML or JSON, rejects unknown and duplicate fields, and binds t
 After reviewing the completed proposal, record the decision:
 
 ```bash
-npx --yes reporook@latest approve FINDING_ID . \
+reporook approve FINDING_ID . \
   --approved-by "reviewer@example.com" \
   --reason "Reviewed the exact patch and regression plan"
 ```

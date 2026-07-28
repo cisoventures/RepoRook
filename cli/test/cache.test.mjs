@@ -8,6 +8,13 @@ import { readScannerCache, scannerCacheKey, writeScannerCache } from "../dist/ca
 import { defaultConfig } from "../dist/config.js";
 import { scanRepository } from "../dist/engine.js";
 
+const testCacheHome = await mkdtemp(join(tmpdir(), "reporook-cache-auth-"));
+process.env.XDG_CACHE_HOME = testCacheHome;
+test.after(async () => {
+  delete process.env.XDG_CACHE_HOME;
+  await rm(testCacheHome, { recursive: true, force: true });
+});
+
 const finding = {
   id: "rr-eeeeeeeeeeee",
   scanner: "fake",

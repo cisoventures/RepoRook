@@ -19,7 +19,8 @@
   "main": "dist/index.js",
   "exports": {
     ".": "./dist/index.js",
-    "./schema": "./dist/types.js"
+    "./schema": "./dist/types.js",
+    "./report-validation": "./dist/report-validation.js"
   },
   "files": [
     "dist",
