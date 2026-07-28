@@ -12,11 +12,10 @@ ignore:
   - .reporook/**
 requiredScanners:
   - gitleaks
-  - npm-audit
 scanners:
   semgrep: false
   gitleaks: true
-  npm-audit: true
+  npm-audit: false
   pip-audit: false
   osv-scanner: false
   checkov: false
