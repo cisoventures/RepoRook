@@ -20,6 +20,7 @@ jobs:
           fetch-depth: 0
       - uses: ./
         with:
-          path: cli
+          path: .
+          config: .github/reporook-example.yml
           fail-on: high
           mode: full
