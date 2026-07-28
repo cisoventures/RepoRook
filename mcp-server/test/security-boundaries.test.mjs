@@ -38,7 +38,7 @@ function validReport(target) {
   const now = "2026-07-28T12:00:00.000Z";
   return {
     schema_version: "1.0",
-    tool: { name: "reporook", version: "0.9.1" },
+    tool: { name: "reporook", version: "0.9.2" },
     target: { path: target, commit: null },
     generated_at: now,
     coverage_status: "complete",
