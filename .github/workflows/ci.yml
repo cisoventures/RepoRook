@@ -35,6 +35,10 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run build
+      - name: Confirm the beginner-grade local journey
+        run: npm run fixture:journey
+        env:
+          REPOROOK_REQUIRE_LOOPBACK_TESTS: "1"
       - run: npm run fixture:prepare
       - run: ./action/install-scanners.sh
       - name: Confirm missing Python hash lock fails closed
