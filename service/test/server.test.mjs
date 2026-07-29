@@ -19,7 +19,7 @@ async function fixture() {
   await writeFile(join(repository, "reporook.yml"), "failOn: high\n");
   const report = {
     schema_version: "1.0",
-    tool: { name: "reporook", version: "0.9.1" },
+    tool: { name: "reporook", version: "0.9.2" },
     target: { path: repository, commit: "a".repeat(40) },
     generated_at: "2026-07-25T00:00:00.000Z",
     coverage_status: "complete",
@@ -34,7 +34,7 @@ async function fixture() {
     scan_receipt: { schema_version: "1.0", scan_id: "scan-test", target: repository, commit: "a".repeat(40), config_hash: "sha256:" + "c".repeat(64), scanners: [] },
   };
   const priorities = {
-    schema_version: "1.0", tool: { name: "reporook", version: "0.9.1" }, generated_at: report.generated_at,
+    schema_version: "1.0", tool: { name: "reporook", version: "0.9.2" }, generated_at: report.generated_at,
     coverage_status: "complete", source_scan: report.scan_receipt,
     summary: { fix_now: 1, fix_next: 0, review_later: 0, total: 1 },
     priorities: [{ rank: 1, priority: "fix-now", finding_id: findingId, severity: "high", scanner: "semgrep", package: null, file: "app.js", line: 1, title: "Command injection", reason: "High severity", next_step: "Avoid shell execution", related_finding_ids: [] }],
@@ -73,7 +73,7 @@ async function approvedPublicationFixture() {
   };
   const plan = {
     schema_version: "1.0",
-    tool: { name: "reporook", version: "0.9.1" },
+    tool: { name: "reporook", version: "0.9.2" },
     plan_id: "rrp-0123456789ab",
     status: "awaiting-proposal",
     generated_at: report.generated_at,

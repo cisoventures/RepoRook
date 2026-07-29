@@ -2,6 +2,18 @@
 
 All notable changes to RepoRook are documented here. RepoRook follows semantic versioning while its public contracts remain pre-1.0.
 
+## 0.9.2 - 2026-07-28
+
+### Security
+
+- Fail closed when applicable scanners do not complete unless the caller explicitly opts into diagnostic partial coverage.
+- Bind verification to the original finding evidence so moved Semgrep findings or cosmetic evidence drift cannot be mistaken for successful remediation.
+
+### Changed
+
+- Make clean CI, GitHub Action tests, package typechecking, and RepoRook's self-scan path deterministic across supported platforms.
+- Preserve the no-download security posture for the self-scan by requiring only the already available Gitleaks scanner.
+
 ## 0.9.1 - 2026-07-27
 
 ### Changed

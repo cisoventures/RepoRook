@@ -6,7 +6,7 @@ import { detectGitHubRepository, GitHubAppIntegration } from "./github-app.js";
 import { GitHubPublisher } from "./github.js";
 import { startDashboardServer } from "./server.js";
 
-const VERSION = "0.9.1";
+const VERSION = "0.9.2";
 const help = `RepoRook Service ${VERSION}
 
 Usage:
