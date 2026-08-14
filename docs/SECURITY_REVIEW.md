@@ -43,16 +43,23 @@ Third-party scanner detection accuracy is not itself a RepoRook defect unless Re
 - [`SERVICE.md`](SERVICE.md), [`TEAM_POLICY.md`](TEAM_POLICY.md), and [`GUIDED_FIX.md`](GUIDED_FIX.md) — user-visible security contracts.
 - `schemas/` and `test-fixtures/` — deterministic evidence contracts and adversarial fixtures.
 
-Reproduce the maintained baseline with:
+After reviewing the lockfile and explicitly choosing to install the repository's development dependencies, reproduce the maintained baseline with:
 
 ```bash
-npm ci
-npm run check
-npm run smoke:packages
-npm run fixture:prepare
-npm run fixture:guided
-npm run fixture:policy
+npm ci --ignore-scripts
+npm run review:baseline
 ```
+
+The second command is governed by [`contracts/security-review.json`](../contracts/security-review.json). It forces npm offline mode, disables lifecycle scripts, uses and removes a private temporary npm cache, does not install or download scanners or external software, and does not require GitHub, npm-registry, or other-repository access. The package smoke test does temporarily install RepoRook's three locally built tarballs into a temporary directory and removes them afterward. This is an application-level offline guarantee, not an operating-system network sandbox. The baseline also runs the existing repository checks and strict loopback beginner journey. It writes `outputs/security-review-baseline.json`, which is ignored by Git and contains only:
+
+- `schema_version`, `generated_at`, `revision`, and `dirty` revision identity;
+- `platform` runtime information;
+- explicit `safety` non-claims;
+- a SHA-256 `integrity` manifest for the tracked review surface;
+- exact `commands`, exit states, and durations; and
+- a `summary` of passed and failed commands.
+
+This evidence is not an independent review or a security opinion. It is a reproducible starting point and must be accompanied by the manual methods below. A dirty worktree is recorded rather than hidden, and any failed command remains failed evidence.
 
 GitHub Actions is the source of truth for loopback HTTP tests that cannot bind in a restricted local sandbox, plus CodeQL and the end-to-end RepoRook example workflow.
 
