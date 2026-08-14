@@ -2,6 +2,18 @@
 
 All notable changes to RepoRook are documented here. RepoRook follows semantic versioning while its public contracts remain pre-1.0.
 
+## Unreleased
+
+### Added
+
+- Add a machine-readable v1 release-candidate contract and CI gate for package entry points, CLI behavior, MCP tools, configuration, evidence schemas, GitHub Action inputs and outputs, and the supported platform matrix.
+- Document the post-v1 compatibility, deprecation, and migration policy.
+
+### Changed
+
+- Document CLI help aliases and stable exit-code meanings directly in `reporook --help`.
+- Remove a stale README reference to an MCP approval tool; remediation approval intentionally remains at the trusted CLI or local-service boundary.
+
 ## 0.9.2 - 2026-07-28
 
 ### Security
