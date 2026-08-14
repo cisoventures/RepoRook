@@ -107,7 +107,7 @@ const toolContracts = tools.map((tool) => ({ name: tool.name, input_schema_sha25
 assertEqual("MCP tool names and input schemas", toolContracts, contract.mcp.tools);
 
 const readme = await readText("README.md");
-const mcpReadmeSection = readme.match(/The local MCP server exposes:\n([\s\S]*?)\nRun it directly:/)?.[1];
+const mcpReadmeSection = readme.match(/The local MCP server exposes:\r?\n([\s\S]*?)\r?\nRun it directly:/)?.[1];
 if (!mcpReadmeSection) throw new Error("README MCP tool section is missing");
 const documentedTools = [...mcpReadmeSection.matchAll(/^- `([^`]+)`/gm)].map((match) => match[1]).sort();
 assertEqual("README MCP tool list", documentedTools, toolContracts.map((tool) => tool.name));
