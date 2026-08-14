@@ -6,6 +6,7 @@ All notable changes to RepoRook are documented here. RepoRook follows semantic v
 
 ### Added
 
+- Add a machine-readable external-review contract and one-command offline baseline that records revision, platform, command results, and integrity hashes without installing scanners or external software or asserting an audit opinion.
 - Add a machine-readable v1 release-candidate contract and CI gate for package entry points, CLI behavior, MCP tools, configuration, evidence schemas, GitHub Action inputs and outputs, and the supported platform matrix.
 - Document the post-v1 compatibility, deprecation, and migration policy.
 - Add a six-host native-agent parity contract and executable validation gate for evidence, coverage, secret-redaction, approval, verification, MCP, and repository-local lifecycle guarantees.
