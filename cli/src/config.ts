@@ -27,14 +27,15 @@ export const defaultConfig: RepoRookConfig = {
 
 export const scannerNames = ["semgrep", "gitleaks", "npm-audit", "pip-audit", "osv-scanner", "checkov", "trivy-image"] as const;
 const scannerNameSet = new Set<string>(scannerNames);
-const topLevelKeys = new Set([
+export const acceptedConfigKeys = [
   "failOn", "fail-on", "outputDir", "output-dir", "semgrepConfig", "semgrep-config",
   "paths", "ignore", "requiredScanners", "required-scanners", "scanners",
   "baseline", "baselineFile", "suppressions", "suppressionsFile", "pathPolicies", "path-policies",
   "containerImages", "container-images", "gitHistory", "git-history",
   "cacheEnabled", "cache-enabled", "cacheTtlMinutes", "cache-ttl-minutes", "scannerRetries", "scanner-retries",
   "organizationPolicy", "organization-policy",
-]);
+] as const;
+const topLevelKeys = new Set<string>(acceptedConfigKeys);
 const organizationPolicyKeys = new Set(["schemaVersion", "name", "failOn", "requiredScanners", "pathPolicies"]);
 const maximumOrganizationPolicyBytes = 256 * 1024;
 const maximumConfigurationBytes = 1024 * 1024;

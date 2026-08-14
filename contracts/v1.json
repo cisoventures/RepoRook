@@ -1,0 +1,368 @@
+{
+  "contract_version": "1.0",
+  "status": "release-candidate",
+  "packages": [
+    {
+      "path": "cli/package.json",
+      "name": "reporook",
+      "type": "module",
+      "bin": {
+        "reporook": "dist/index.js"
+      },
+      "main": "dist/index.js",
+      "exports": {
+        ".": "./dist/index.js",
+        "./schema": "./dist/types.js",
+        "./report-validation": "./dist/report-validation.js"
+      },
+      "files": [
+        "dist",
+        "README.md"
+      ],
+      "engines": {
+        "node": ">=20"
+      },
+      "runtime_exports": {
+        ".": [
+          "VERSION",
+          "approvalMatches",
+          "createApprovalReceipt",
+          "createFindingBaseline",
+          "createFindingSuppression",
+          "createRemediationPlan",
+          "detectProject",
+          "initializeRepository",
+          "manageIntegrations",
+          "parseApprovalReceipt",
+          "parseIntegrationHosts",
+          "parseRemediationProposal",
+          "prioritizeFindings",
+          "priorityBands",
+          "scanRepository",
+          "severities",
+          "toSarif",
+          "verifyFindingResolution"
+        ],
+        "./schema": [
+          "priorityBands",
+          "severities"
+        ],
+        "./report-validation": [
+          "assertFindingsReportConsistency",
+          "parseFindingsReport"
+        ]
+      }
+    },
+    {
+      "path": "mcp-server/package.json",
+      "name": "@reporook/mcp-server",
+      "type": "module",
+      "bin": {
+        "reporook-mcp": "dist/index.js"
+      },
+      "main": "dist/index.js",
+      "exports": null,
+      "files": [
+        "dist",
+        "README.md"
+      ],
+      "engines": {
+        "node": ">=20"
+      },
+      "runtime_exports": {}
+    },
+    {
+      "path": "service/package.json",
+      "name": "@reporook/service",
+      "type": "module",
+      "bin": {
+        "reporook-service": "dist/index.js"
+      },
+      "main": "dist/index.js",
+      "exports": {
+        ".": "./dist/server.js"
+      },
+      "files": [
+        "dist",
+        "README.md"
+      ],
+      "engines": {
+        "node": ">=20"
+      },
+      "runtime_exports": {
+        ".": [
+          "startDashboardServer"
+        ]
+      }
+    }
+  ],
+  "cli": {
+    "binary": "reporook",
+    "commands": [
+      "approve",
+      "baseline",
+      "doctor",
+      "explain",
+      "init",
+      "integrate",
+      "plan",
+      "prioritize",
+      "scan",
+      "setup",
+      "suppress",
+      "verify"
+    ],
+    "flags": [
+      "--allow-no-coverage",
+      "--apply",
+      "--approval",
+      "--approval-output",
+      "--approved-by",
+      "--cache-ttl",
+      "--changed",
+      "--config",
+      "--expires",
+      "--fail-on",
+      "--force",
+      "--format",
+      "--head",
+      "--help",
+      "--host",
+      "--input",
+      "--no-cache",
+      "--no-sarif",
+      "--output",
+      "--owner",
+      "--prompt-output",
+      "--proposal",
+      "--proposal-output",
+      "--quiet",
+      "--reason",
+      "--refresh-cache",
+      "--require-scanners",
+      "--sarif-output",
+      "--verification-output",
+      "--version"
+    ],
+    "aliases": {
+      "-h": "--help",
+      "-v": "--version"
+    },
+    "exit_codes": {
+      "0": "Complete coverage and no policy-actionable finding met the configured threshold",
+      "1": "Complete coverage and at least one policy-actionable finding met the configured threshold",
+      "2": "Target, configuration, required scanner, policy, or incomplete-coverage error"
+    }
+  },
+  "mcp": {
+    "server_name": "reporook",
+    "tools": [
+      {
+        "name": "create_findings_baseline",
+        "input_schema_sha256": "sha256:880b6b2980e0b259ffe17118c88bf576c7b88f9c7a72d36179ac396481669376"
+      },
+      {
+        "name": "export_findings",
+        "input_schema_sha256": "sha256:650ea1bbad5f3a1aa50902d8fc480b10960eff9aff5ea48ae11f62d1fa11b8be"
+      },
+      {
+        "name": "get_finding",
+        "input_schema_sha256": "sha256:7edd7ba725294d6a866e72a8ff47817e475612b576b41dfdd27d869d840a9cce"
+      },
+      {
+        "name": "get_policy_status",
+        "input_schema_sha256": "sha256:34c4648943877ebcc158b1fa88bd139be65167c31510cbe250f06032a92cfad2"
+      },
+      {
+        "name": "get_remediation_context",
+        "input_schema_sha256": "sha256:0fbd437b12f296fa9be7ecf794225e6294a8946a328d78165452d16d3b2d433e"
+      },
+      {
+        "name": "list_findings",
+        "input_schema_sha256": "sha256:2d85e4522543c4759601f0cdc3751cb0e02a527ae5e5f8d78272fcf8cbdfa997"
+      },
+      {
+        "name": "prepare_remediation_plan",
+        "input_schema_sha256": "sha256:6493d0f573eca7c53289efadcace684884bcb05162c33ec56611c717b219df49"
+      },
+      {
+        "name": "prioritize_findings",
+        "input_schema_sha256": "sha256:34c4648943877ebcc158b1fa88bd139be65167c31510cbe250f06032a92cfad2"
+      },
+      {
+        "name": "scan_changes",
+        "input_schema_sha256": "sha256:bcde0c51b2d3676951560ebb7a15960db3e9a2f6dec2c03e8501af1dba16543f"
+      },
+      {
+        "name": "scan_repository",
+        "input_schema_sha256": "sha256:8bc6a8de5c8bdc7abe8f06435baf8a1489e73fa42d021512b9d54a8da37743c9"
+      },
+      {
+        "name": "suppress_finding",
+        "input_schema_sha256": "sha256:1923dd567ba9d952576126e8f3c1483c15c7d7a9efee567154ee90a5355e3f25"
+      },
+      {
+        "name": "verify_fix",
+        "input_schema_sha256": "sha256:9bea957196140aed6a72a7d5b421d9098bb9a804f7737a63f0be90e75b20cc39"
+      }
+    ]
+  },
+  "configuration": {
+    "accepted_keys": [
+      "baseline",
+      "baselineFile",
+      "cache-enabled",
+      "cache-ttl-minutes",
+      "cacheEnabled",
+      "cacheTtlMinutes",
+      "container-images",
+      "containerImages",
+      "fail-on",
+      "failOn",
+      "git-history",
+      "gitHistory",
+      "ignore",
+      "organization-policy",
+      "organizationPolicy",
+      "output-dir",
+      "outputDir",
+      "path-policies",
+      "pathPolicies",
+      "paths",
+      "required-scanners",
+      "requiredScanners",
+      "scanner-retries",
+      "scannerRetries",
+      "scanners",
+      "semgrep-config",
+      "semgrepConfig",
+      "suppressions",
+      "suppressionsFile"
+    ],
+    "defaults": {
+      "failOn": "high",
+      "outputDir": ".reporook",
+      "semgrepConfig": "p/default",
+      "paths": [
+        "."
+      ],
+      "ignore": [
+        "node_modules/**",
+        "dist/**",
+        "build/**",
+        ".git/**",
+        ".reporook/**"
+      ],
+      "requiredScanners": [],
+      "scanners": {},
+      "baselineFile": "reporook-baseline.json",
+      "suppressionsFile": "reporook-suppressions.json",
+      "pathPolicies": {},
+      "containerImages": [],
+      "gitHistory": false,
+      "cacheEnabled": true,
+      "cacheTtlMinutes": 15,
+      "scannerRetries": 1,
+      "organizationPolicyFile": null,
+      "organizationPolicy": null
+    },
+    "scanners": [
+      "checkov",
+      "gitleaks",
+      "npm-audit",
+      "osv-scanner",
+      "pip-audit",
+      "semgrep",
+      "trivy-image"
+    ]
+  },
+  "schemas": [
+    {
+      "path": "schemas/agent-review.schema.json",
+      "id": "https://reporook.dev/schemas/agent-review-1.0.json",
+      "sha256": "sha256:04df968402310b88d7fdde0b0903572c91048564d3689a431761479480d08d17"
+    },
+    {
+      "path": "schemas/approval-receipt.schema.json",
+      "id": "https://reporook.dev/schemas/approval-receipt-1.0.json",
+      "sha256": "sha256:d7a113ca229d3b6ba52fc6e4e58b5be95c8ca341db3f683b339ab9b64fbcc1f2"
+    },
+    {
+      "path": "schemas/baseline.schema.json",
+      "id": "https://reporook.dev/schemas/baseline-1.0.json",
+      "sha256": "sha256:8e465108bbbe384d4112400d2da8bfdb363a8a486666e98c777ce634333628d3"
+    },
+    {
+      "path": "schemas/findings.schema.json",
+      "id": "https://reporook.dev/schemas/findings-1.0.json",
+      "sha256": "sha256:2b980f98489ceecbbebf0654cb3f3319ca8659b26fd941312921c021b465b9c8"
+    },
+    {
+      "path": "schemas/organization-policy.schema.json",
+      "id": "https://reporook.dev/schemas/organization-policy-1.0.json",
+      "sha256": "sha256:f7b4eec5b74c268e58d5f969a9f75ea118d58b4d18a2ac6f74ef1f1a6645f3a1"
+    },
+    {
+      "path": "schemas/policy-evaluation.schema.json",
+      "id": "https://reporook.dev/schemas/policy-evaluation-1.0.json",
+      "sha256": "sha256:f85cf335226a7a285c45dbe270175554830d5f138f13e7c9a0c5622f33779479"
+    },
+    {
+      "path": "schemas/priorities.schema.json",
+      "id": "https://reporook.dev/schemas/priorities-1.0.json",
+      "sha256": "sha256:54c556f89528eafd411645863ca87e9bca264497c4fde0328aed35249b8c54bb"
+    },
+    {
+      "path": "schemas/remediation-plan.schema.json",
+      "id": "https://reporook.dev/schemas/remediation-plan-1.0.json",
+      "sha256": "sha256:fdd1ff65d219b14983d595ee4b76b6d8c0a0b1a36f1aa670c493b0753129c551"
+    },
+    {
+      "path": "schemas/remediation-proposal.schema.json",
+      "id": "https://reporook.dev/schemas/remediation-proposal-1.0.json",
+      "sha256": "sha256:cd7b2d6386c08b365c49a4b81312b069fe488da2184162d795510b8153f58792"
+    },
+    {
+      "path": "schemas/suppressions.schema.json",
+      "id": "https://reporook.dev/schemas/suppressions-1.0.json",
+      "sha256": "sha256:ed0b297f39c2bb9e44dac9675190c8bf4ebc68780cc766275355a651828c1307"
+    },
+    {
+      "path": "schemas/verification.schema.json",
+      "id": "https://reporook.dev/schemas/verification-1.0.json",
+      "sha256": "sha256:96cb6126bd45b11ff25e0817f7b58153b0c5d53fbd33e0fc0e4f75c7fb57a36a"
+    }
+  ],
+  "github_action": {
+    "inputs": {
+      "base": "",
+      "config": "",
+      "fail-on": "high",
+      "github-token": "${{ github.token }}",
+      "mode": "diff",
+      "path": ".",
+      "require-scanners": "true"
+    },
+    "outputs": [
+      "exit-code",
+      "findings-file",
+      "policy-actionable",
+      "policy-new",
+      "policy-suppressed",
+      "priorities-file",
+      "sarif-file"
+    ]
+  },
+  "compatibility": {
+    "node_engine": ">=20",
+    "ci_node_versions": [
+      20,
+      22
+    ],
+    "ci_operating_systems": [
+      "macos-latest",
+      "ubuntu-latest",
+      "windows-latest"
+    ]
+  }
+}

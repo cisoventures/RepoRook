@@ -21,6 +21,7 @@
   "scripts": {
     "sync:adapters": "node scripts/sync-adapters.mjs",
     "validate:adapters": "node scripts/validate-adapters.mjs",
+    "validate:contracts": "node scripts/validate-v1-contract.mjs",
     "fixture:prepare": "node scripts/materialize-fixture.mjs",
     "fixture:verify": "node scripts/verify-fixture.mjs",
     "fixture:guided": "node scripts/verify-guided-fixture.mjs",
@@ -28,7 +29,7 @@
     "fixture:journey": "node --test service/test/beginner-journey.test.mjs",
     "build": "npm run build --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present",
-    "test": "npm run build && npm run test --workspaces --if-present && npm run test:action",
+    "test": "npm run build && npm run validate:contracts && npm run test --workspaces --if-present && npm run test:action",
     "test:action": "node scripts/run-action-tests.mjs",
     "smoke:packages": "npm run build && node scripts/smoke-packages.mjs",
     "lint": "npm run typecheck --workspaces --if-present",

@@ -182,7 +182,6 @@ The local MCP server exposes:
 - `get_remediation_context`
 - `prepare_remediation_plan`
 - `verify_fix`
-- `record_remediation_approval`
 - `export_findings`
 
 Run it directly:
@@ -225,8 +224,8 @@ npm run fixture:prepare
 node cli/dist/index.js scan test-fixtures/vulnerable-app --require-scanners
 ```
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/HARDENING.md`](docs/HARDENING.md), [`docs/SANDBOXING.md`](docs/SANDBOXING.md), the [`external review package`](docs/SECURITY_REVIEW.md), the [`security response runbook`](docs/SECURITY_RESPONSE.md), [`docs/SERVICE.md`](docs/SERVICE.md), [`docs/TEAM_POLICY.md`](docs/TEAM_POLICY.md), [`docs/ADAPTERS.md`](docs/ADAPTERS.md), [`docs/AGENT_SETUP.md`](docs/AGENT_SETUP.md), the [`roadmap`](docs/ROADMAP.md), and [`CONTRIBUTING.md`](CONTRIBUTING.md).
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), the [v1 compatibility policy](docs/COMPATIBILITY.md), [`docs/HARDENING.md`](docs/HARDENING.md), [`docs/SANDBOXING.md`](docs/SANDBOXING.md), the [`external review package`](docs/SECURITY_REVIEW.md), the [`security response runbook`](docs/SECURITY_RESPONSE.md), [`docs/SERVICE.md`](docs/SERVICE.md), [`docs/TEAM_POLICY.md`](docs/TEAM_POLICY.md), [`docs/ADAPTERS.md`](docs/ADAPTERS.md), [`docs/AGENT_SETUP.md`](docs/AGENT_SETUP.md), the [`roadmap`](docs/ROADMAP.md), and [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Project status
 
-The repository contains the v0.9 hardening baseline: hostile configuration and path boundaries, deterministic parser fuzzing, bounded scanner, MCP, service, and integration inputs, fail-closed malformed-output handling, documented sandbox expectations, an external-review package, and a security response runbook. It builds on the v0.8 scale-and-reliability architecture and the local no-code service's one-repository GitHub App boundary. Independent external review and remote multi-user service operation remain future work. Scanner accuracy, policy contracts, service boundaries, and host packaging remain pre-1.0 and should expand only through fixture-backed, reviewable contributions.
+The repository contains the v0.9 hardening baseline: hostile configuration and path boundaries, deterministic parser fuzzing, bounded scanner, MCP, service, and integration inputs, fail-closed malformed-output handling, documented sandbox expectations, an external-review package, and a security response runbook. It builds on the v0.8 scale-and-reliability architecture and the local no-code service's one-repository GitHub App boundary. The v1 release-candidate public surface is captured in [`contracts/v1.json`](contracts/v1.json) and enforced during tests; it becomes the stable compatibility promise when v1.0 ships. Independent external review and remote multi-user service operation remain future work.
