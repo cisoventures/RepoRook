@@ -56,7 +56,8 @@
     "schemas",
     "scripts",
     "service",
-    "test-fixtures"
+    "test-fixtures",
+    "test-support"
   ],
   "review_scope": [
     ".github/workflows",
@@ -71,7 +72,8 @@
     "schemas",
     "scripts",
     "service",
-    "test-fixtures"
+    "test-fixtures",
+    "test-support"
   ],
   "starting_evidence": [
     "SECURITY.md",

@@ -8,6 +8,7 @@ import { createApprovalReceipt } from "reporook";
 import { startDashboardServer } from "../dist/server.js";
 import { RepositoryStore } from "../dist/repository.js";
 import { dashboardHtml, dashboardJs } from "../dist/ui.js";
+import { createDirectoryLink, removeDirectoryLink } from "../../test-support/path-links.mjs";
 
 const findingId = "rr-0123456789ab";
 
@@ -124,6 +125,23 @@ test("repository snapshots expose plain evidence without raw scanner metadata", 
     assert.match(snapshot.approvals[0].proposal_digest, /^[a-f0-9]{64}$/);
   } finally {
     await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("service artifact boundaries reject linked directories including Windows junctions", async () => {
+  const repository = await mkdtemp(join(tmpdir(), "reporook-service-junction-repository-"));
+  const outside = await mkdtemp(join(tmpdir(), "reporook-service-junction-outside-"));
+  const linked = join(repository, ".reporook");
+  try {
+    await mkdir(join(repository, ".git"));
+    await writeFile(join(outside, "findings.json"), "{\"outside\":true}\n");
+    await createDirectoryLink(outside, linked);
+    const store = await RepositoryStore.open(repository);
+    await assert.rejects(store.snapshot(), /symbolic link/);
+  } finally {
+    await removeDirectoryLink(linked);
+    await rm(repository, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
   }
 });
 

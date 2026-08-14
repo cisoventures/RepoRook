@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { codeContext, findingContext, readReport } from "../dist/context.js";
+import { createDirectoryLink, removeDirectoryLink } from "../../test-support/path-links.mjs";
 
 function validReport(target, findings = []) {
   const now = "2026-07-28T12:00:00.000Z";
@@ -99,5 +100,25 @@ test("MCP source context rejects linked and oversized repository files", async (
   } finally {
     await rm(root, { recursive: true, force: true });
     await rm(outside, { force: true });
+  }
+});
+
+test("MCP evidence and source boundaries reject linked directories including Windows junctions", async () => {
+  const root = await mkdtemp(join(tmpdir(), "reporook-mcp-junction-repository-"));
+  const outside = await mkdtemp(join(tmpdir(), "reporook-mcp-junction-outside-"));
+  const linked = join(root, "linked");
+  try {
+    await writeFile(join(outside, "findings.json"), `${JSON.stringify(validReport(root))}\n`);
+    await writeFile(join(outside, "app.js"), "do not expose\n");
+    await createDirectoryLink(outside, linked);
+    await assert.rejects(readReport(root, "linked/findings.json"), /symbolic link/);
+    await assert.rejects(
+      codeContext(root, { id: "rr-test", file: "linked/app.js", line: 1, description: "x", remediation_hint: "y" }, 1),
+      /symbolic link/,
+    );
+  } finally {
+    await removeDirectoryLink(linked);
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
   }
 });
