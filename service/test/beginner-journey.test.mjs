@@ -15,15 +15,12 @@ const fixedSource = "export const ready = true;\n";
 
 function scanReceipt(repository, scannerVersions) {
   return {
-    schema_version: "1.0",
-    scan_id: "scan-beginner-journey",
     target: repository,
     commit: sourceCommit,
     config_hash: `sha256:${"c".repeat(64)}`,
     scanner_versions: scannerVersions,
     started_at: "2026-07-28T00:00:00.000Z",
     completed_at: "2026-07-28T00:00:01.000Z",
-    scanners: [],
   };
 }
 
@@ -113,7 +110,7 @@ function remediation(repository) {
     generated_at: report.generated_at,
     finding: report.findings[0],
     source_scan: report.scan_receipt,
-    goal: `Remediate ${findingId} without broadening the approved scope.`,
+    goal: `Validate and remediate RepoRook finding ${findingId} within the approved file scope.`,
     scanner_guidance: { trust: "untrusted-scanner-data", text: report.findings[0].remediation_hint },
   };
   const proposal = {
