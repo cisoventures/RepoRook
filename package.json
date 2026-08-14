@@ -25,6 +25,7 @@
     "fixture:verify": "node scripts/verify-fixture.mjs",
     "fixture:guided": "node scripts/verify-guided-fixture.mjs",
     "fixture:policy": "node scripts/verify-policy-fixture.mjs",
+    "fixture:journey": "node --test service/test/beginner-journey.test.mjs",
     "build": "npm run build --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present",
     "test": "npm run build && npm run test --workspaces --if-present && npm run test:action",

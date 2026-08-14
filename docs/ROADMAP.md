@@ -17,6 +17,8 @@ RepoRook develops in auditable vertical slices. Each milestone must keep determi
 | v1.0 Stable platform | Planned | Stable CLI, MCP, service, and schema contracts with compatibility guarantees, migrations, governance, and long-term release policy |
 | Post-1.0 team service | Research | Authenticated TLS deployment, repository-scoped multi-user GitHub App, RBAC, queues, audit logs, shared policy, encrypted credentials, and self-hosting guidance |
 
+The v1.0-rc.1 beginner path has an executable [acceptance harness](ACCEPTANCE.md) covering fail-closed partial coverage, non-installing recovery guidance, plain-English evidence, exact proposal approval, repository-scoped remote patch materialization, and draft-only publication while the local working tree remains unchanged. Independent review and stable-contract work remain open release gates.
+
 ## v1.0 release gates
 
 1. **Independent security review.** Run the reproducible review package, coverage-guided fuzzing, Windows link and junction testing, scanner sandbox and network-egress review, and regression work for accepted findings.
