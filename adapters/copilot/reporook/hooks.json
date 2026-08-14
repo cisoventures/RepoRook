@@ -4,8 +4,8 @@
     "agentStop": [
       {
         "type": "command",
-        "bash": "reporook scan . --quiet --fail-on critical --require-scanners",
-        "powershell": "reporook scan . --quiet --fail-on critical --require-scanners",
+        "bash": "reporook scan . --quiet --require-scanners",
+        "powershell": "reporook scan . --quiet --require-scanners",
         "cwd": ".",
         "timeoutSec": 120
       }

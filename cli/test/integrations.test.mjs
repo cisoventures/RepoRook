@@ -48,6 +48,21 @@ test("agent integrations preview, install, merge, diagnose, and uninstall safely
   }
 });
 
+test("every native host installs exactly its repository-local parity contract", async () => {
+  const contract = JSON.parse(await readFile(new URL("../../contracts/native-agent-parity.json", import.meta.url), "utf8"));
+  for (const host of contract.hosts) {
+    const target = await repository();
+    try {
+      const preview = await manageIntegrations({ target, operation: "install", hosts: parseIntegrationHosts(host.id) });
+      assert.equal(preview.applied, false);
+      assert.deepEqual(preview.actions.map((action) => action.path).sort(), [...host.installed_paths].sort(), `${host.name} install surface drifted`);
+      assert.equal(preview.actions.every((action) => action.status === "create"), true);
+    } finally {
+      await rm(target, { recursive: true, force: true });
+    }
+  }
+});
+
 test("integration conflicts block the entire write pass", async () => {
   const target = await repository();
   try {

@@ -23,9 +23,11 @@ test("Python scanner installation is hash-locked, wheel-only, and disabled witho
   await assert.rejects(access("action/python-scanners.requirements.txt"), /ENOENT/);
 });
 
-test("shipped quiet Copilot hooks require every applicable scanner", async () => {
-  const hooks = JSON.parse(await readFile("adapters/copilot/reporook/hooks.json", "utf8"));
-  const commands = hooks.hooks?.agentStop?.[0];
-  assert.equal(commands?.bash, "reporook scan . --quiet --fail-on critical --require-scanners");
-  assert.equal(commands?.powershell, "reporook scan . --quiet --fail-on critical --require-scanners");
+test("shipped automatic agent hooks preserve repository policy and require every applicable scanner", async () => {
+  const expected = "reporook scan . --quiet --require-scanners";
+  const copilot = JSON.parse(await readFile("adapters/copilot/reporook/hooks.json", "utf8"));
+  const cursor = JSON.parse(await readFile("adapters/cursor/reporook/hooks/hooks.json", "utf8"));
+  assert.equal(copilot.hooks?.agentStop?.[0]?.bash, expected);
+  assert.equal(copilot.hooks?.agentStop?.[0]?.powershell, expected);
+  assert.equal(cursor.hooks?.stop?.[0]?.command, expected);
 });

@@ -28,6 +28,8 @@ Restart the coding agent after installation. The host may ask you to trust the r
 
 Generated MCP entries invoke the already-installed `reporook-mcp` executable directly. Hooks invoke the already-installed `reporook` executable. If either is missing, the host fails visibly; it never downloads a replacement.
 
+Cursor and Copilot plugin packages can run an automatic stop hook. The hook runs `reporook scan . --quiet --require-scanners`: it honors the threshold in repository or organization policy and fails when an applicable scanner is unavailable. The hook does not install scanners, change configuration, or mean the code is safe merely because no finding crossed the configured threshold.
+
 ## What to ask
 
 Use ordinary language. The same workflow is installed for every host:
@@ -65,3 +67,5 @@ RepoRook records hashes in `.reporook/integrations.json`. Update replaces only c
 | Windsurf | Skill, rule, and `/reporook-security` workflow |
 
 Windsurf currently documents MCP configuration at user scope rather than repository scope. RepoRook deliberately leaves that global file untouched. The installed Windsurf skill and workflow use the RepoRook CLI directly, so scanning, explanation, planning, and verification still work without MCP.
+
+The six-host packaging and lifecycle promises are enforced by the [native-agent parity contract](../contracts/native-agent-parity.json). Run `npm run validate:agent-parity` when reviewing adapter changes.

@@ -8,11 +8,13 @@ All notable changes to RepoRook are documented here. RepoRook follows semantic v
 
 - Add a machine-readable v1 release-candidate contract and CI gate for package entry points, CLI behavior, MCP tools, configuration, evidence schemas, GitHub Action inputs and outputs, and the supported platform matrix.
 - Document the post-v1 compatibility, deprecation, and migration policy.
+- Add a six-host native-agent parity contract and executable validation gate for evidence, coverage, secret-redaction, approval, verification, MCP, and repository-local lifecycle guarantees.
 
 ### Changed
 
 - Document CLI help aliases and stable exit-code meanings directly in `reporook --help`.
 - Remove a stale README reference to an MCP approval tool; remediation approval intentionally remains at the trusted CLI or local-service boundary.
+- Make Cursor and Copilot automatic hooks honor repository policy thresholds and fail closed when applicable scanner coverage is unavailable.
 
 ## 0.9.2 - 2026-07-28
 

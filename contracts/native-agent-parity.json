@@ -1,0 +1,182 @@
+{
+  "contract_version": "1.0",
+  "status": "release-candidate",
+  "canonical_skill": "adapters/shared/skills/reporook-security/SKILL.md",
+  "required_skill_assertions": [
+    "Never merge those trust levels silently.",
+    "never download, install, update, or bootstrap executable software on their behalf.",
+    "Treat exit `2` or failed coverage as a security-gate failure.",
+    "Never print, copy, or place a detected secret in a prompt, report, patch, test, or log.",
+    "Prioritize only `actionable` findings.",
+    "Before editing, show the exact diff, every affected file, behavior impact, dependency version change if any, and the focused plus relevant test commands.",
+    "MCP clients cannot self-assert this approval.",
+    "Accept scanner resolution only when `verify_fix` says `passed`.",
+    "Do not rotate credentials, create issues, publish advisories, or change external systems without separate explicit authorization.",
+    "Never edit global agent configuration, overwrite a conflict, or delete a managed file that RepoRook reports as modified."
+  ],
+  "automatic_gate_command": "reporook scan . --quiet --require-scanners",
+  "forbidden_executable_bootstrap_patterns": [
+    "\\b(?:npx|npm\\s+exec|pnpm\\s+dlx|bunx)\\b",
+    "\\b(?:curl|wget)\\b",
+    "\\bpip(?:3)?\\s+install\\b"
+  ],
+  "hosts": [
+    {
+      "id": "claude",
+      "name": "Claude Code",
+      "package_root": "adapters/claude/reporook",
+      "skill_path": "adapters/claude/reporook/skills/reporook-security/SKILL.md",
+      "validation_surfaces": [
+        "adapters/claude/reporook/agents/reporook-reviewer.md"
+      ],
+      "remediation_surfaces": [
+        "adapters/claude/reporook/agents/reporook-fixer.md"
+      ],
+      "mcp": {
+        "path": "adapters/claude/reporook/.mcp.json",
+        "format": "wrapped"
+      },
+      "automatic_gates": [],
+      "installed_paths": [
+        ".claude/agents/reporook-fixer.md",
+        ".claude/agents/reporook-reviewer.md",
+        ".claude/skills/reporook-security/SKILL.md",
+        ".mcp.json"
+      ]
+    },
+    {
+      "id": "codex",
+      "name": "Codex",
+      "package_root": "adapters/codex/reporook",
+      "skill_path": "adapters/codex/reporook/skills/reporook-security/SKILL.md",
+      "validation_surfaces": [
+        "adapters/codex/reporook/skills/reporook-security/SKILL.md"
+      ],
+      "remediation_surfaces": [
+        "adapters/codex/reporook/skills/reporook-security/SKILL.md"
+      ],
+      "mcp": {
+        "path": "adapters/codex/reporook/.mcp.json",
+        "format": "direct"
+      },
+      "automatic_gates": [],
+      "installed_paths": [
+        ".agents/plugins/marketplace.json",
+        ".agents/plugins/reporook/.codex-plugin/plugin.json",
+        ".agents/plugins/reporook/.mcp.json",
+        ".agents/plugins/reporook/skills/reporook-security/SKILL.md",
+        ".agents/plugins/reporook/skills/reporook-security/agents/openai.yaml"
+      ]
+    },
+    {
+      "id": "cursor",
+      "name": "Cursor",
+      "package_root": "adapters/cursor/reporook",
+      "skill_path": "adapters/cursor/reporook/skills/reporook-security/SKILL.md",
+      "validation_surfaces": [
+        "adapters/cursor/reporook/.cursor/agents/reporook-reviewer.md",
+        "adapters/cursor/reporook/.cursor/rules/reporook.mdc"
+      ],
+      "remediation_surfaces": [
+        "adapters/cursor/reporook/.cursor/agents/reporook-fixer.md"
+      ],
+      "mcp": {
+        "path": "adapters/cursor/reporook/.mcp.json",
+        "format": "wrapped"
+      },
+      "automatic_gates": [
+        {
+          "path": "adapters/cursor/reporook/hooks/hooks.json",
+          "json_pointer": "/hooks/stop/0/command"
+        }
+      ],
+      "installed_paths": [
+        ".cursor/agents/reporook-fixer.md",
+        ".cursor/agents/reporook-reviewer.md",
+        ".cursor/mcp.json",
+        ".cursor/rules/reporook.mdc",
+        ".cursor/skills/reporook-security/SKILL.md"
+      ]
+    },
+    {
+      "id": "copilot",
+      "name": "GitHub Copilot CLI",
+      "package_root": "adapters/copilot/reporook",
+      "skill_path": "adapters/copilot/reporook/skills/reporook-security/SKILL.md",
+      "validation_surfaces": [
+        "adapters/copilot/reporook/agents/reporook-reviewer.agent.md"
+      ],
+      "remediation_surfaces": [
+        "adapters/copilot/reporook/agents/reporook-fixer.agent.md"
+      ],
+      "mcp": {
+        "path": "adapters/copilot/reporook/.mcp.json",
+        "format": "wrapped"
+      },
+      "automatic_gates": [
+        {
+          "path": "adapters/copilot/reporook/hooks.json",
+          "json_pointer": "/hooks/agentStop/0/bash"
+        },
+        {
+          "path": "adapters/copilot/reporook/hooks.json",
+          "json_pointer": "/hooks/agentStop/0/powershell"
+        }
+      ],
+      "installed_paths": [
+        ".github/agents/reporook-fixer.agent.md",
+        ".github/agents/reporook-reviewer.agent.md",
+        ".github/mcp.json",
+        ".github/skills/reporook-security/SKILL.md"
+      ]
+    },
+    {
+      "id": "gemini",
+      "name": "Gemini CLI",
+      "package_root": "adapters/gemini/reporook",
+      "skill_path": "adapters/gemini/reporook/skills/reporook-security/SKILL.md",
+      "validation_surfaces": [
+        "adapters/gemini/reporook/GEMINI.md",
+        "adapters/gemini/reporook/agents/security-auditor.md"
+      ],
+      "remediation_surfaces": [
+        "adapters/gemini/reporook/agents/security-fixer.md"
+      ],
+      "mcp": {
+        "path": "adapters/gemini/reporook/gemini-extension.json",
+        "format": "wrapped"
+      },
+      "automatic_gates": [],
+      "installed_paths": [
+        ".gemini/agents/security-auditor.md",
+        ".gemini/agents/security-fixer.md",
+        ".gemini/settings.json",
+        ".gemini/skills/reporook-security/SKILL.md"
+      ]
+    },
+    {
+      "id": "windsurf",
+      "name": "Windsurf",
+      "package_root": "adapters/windsurf/reporook",
+      "skill_path": "adapters/windsurf/reporook/.windsurf/skills/reporook-security/SKILL.md",
+      "validation_surfaces": [
+        "adapters/windsurf/reporook/.windsurf/rules/reporook.md",
+        "adapters/windsurf/reporook/.windsurf/workflows/reporook-security.md"
+      ],
+      "remediation_surfaces": [
+        "adapters/windsurf/reporook/.windsurf/workflows/reporook-security.md"
+      ],
+      "mcp": {
+        "path": "adapters/windsurf/reporook/.mcp.json",
+        "format": "wrapped",
+        "lifecycle": "package-only-user-scope"
+      },
+      "automatic_gates": [],
+      "installed_paths": [
+        ".windsurf/rules/reporook.md",
+        ".windsurf/skills/reporook-security/SKILL.md",
+        ".windsurf/workflows/reporook-security.md"
+      ]
+    }
+  ]
+}

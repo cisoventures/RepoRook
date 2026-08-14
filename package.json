@@ -21,6 +21,7 @@
   "scripts": {
     "sync:adapters": "node scripts/sync-adapters.mjs",
     "validate:adapters": "node scripts/validate-adapters.mjs",
+    "validate:agent-parity": "node scripts/validate-agent-parity.mjs",
     "validate:contracts": "node scripts/validate-v1-contract.mjs",
     "fixture:prepare": "node scripts/materialize-fixture.mjs",
     "fixture:verify": "node scripts/verify-fixture.mjs",
@@ -33,7 +34,7 @@
     "test:action": "node scripts/run-action-tests.mjs",
     "smoke:packages": "npm run build && node scripts/smoke-packages.mjs",
     "lint": "npm run typecheck --workspaces --if-present",
-    "check": "npm run validate:adapters && npm run lint && npm test",
+    "check": "npm run validate:adapters && npm run validate:agent-parity && npm run lint && npm test",
     "reporook": "node cli/dist/index.js"
   },
   "engines": {
