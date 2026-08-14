@@ -77,7 +77,7 @@ GitHub Actions is the source of truth for loopback HTTP tests that cannot bind i
 - Third-party scanners are bounded child processes, not kernel-sandboxed; disposable least-privileged runners are still recommended.
 - Network egress is scanner-specific and not centrally allowlisted.
 - Private registry/index scans may intentionally expose the corresponding package or image credentials to that scanner child.
-- Native coverage-guided fuzzing and independent Windows link/junction review remain valuable beyond the deterministic cross-platform corpus.
+- Native coverage-guided fuzzing and independent review of less common Windows reparse tags remain valuable beyond the deterministic cross-platform directory-link and junction corpus.
 - Scanner rules and advisory databases remain external supply-chain inputs even when the scanner binary itself is pinned.
 
 ## Deliverable format

@@ -21,7 +21,7 @@ The v1.0-rc.1 beginner path has an executable [acceptance harness](ACCEPTANCE.md
 
 ## v1.0 release gates
 
-1. **Independent security review.** Reproducible offline baseline implemented; an independent reviewer must still run the package, coverage-guided fuzzing, Windows link and junction testing, scanner sandbox and network-egress review, and regression work for accepted findings.
+1. **Independent security review.** Reproducible offline baseline and cross-platform directory-link corpus implemented, including Windows junctions; an independent reviewer must still run the package, extend coverage-guided fuzzing and less-common Windows reparse testing, review scanner sandbox and network egress, and drive regression work for accepted findings.
 2. **Beginner-grade local journey.** A user can connect a repository, understand which checks ran, obtain safe setup guidance, scan, understand the first risk, review an exact patch and test plan, approve it, verify it, and open a draft pull request without mistaking partial coverage for safety.
 3. **Safe automated resolution.** Agent-generated changes remain finding-bound, proposal-hash-bound, explicitly approved, isolated from the local working tree, tested, rescanned, and published only as a draft pull request.
 4. **Stable public contracts.** Release-candidate contract implemented: documented CLI flags and exit codes, MCP tools, configuration and evidence schemas, package entry points, migration behavior, deprecation policy, and the compatibility test matrix are frozen and checked in CI. Promote the candidate to the v1.0 promise at release.
