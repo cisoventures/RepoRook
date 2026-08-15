@@ -58,7 +58,8 @@ function element(tag, attrs = {}, text = "") {
   return node;
 }
 async function api(path, options = {}) {
-  const response = await fetch(path, { credentials: "same-origin", headers: { "content-type": "application/json", ...(options.headers || {}) }, ...options });
+  const token = sessionStorage.getItem("reporook_session");
+  const response = await fetch(path, { credentials: "omit", headers: { "content-type": "application/json", ...(token ? { authorization: "Bearer " + token } : {}), ...(options.headers || {}) }, ...options });
   const body = await response.json().catch(() => ({ error: "The service returned an unreadable response" }));
   if (!response.ok) throw new Error(body.error || "Request failed");
   return body;
@@ -153,10 +154,11 @@ function renderApproval(item) {
   wrapper.append(element("h3", {}, item.finding_id + (item.approved ? " · approved" : " · awaiting approval")));
   wrapper.append(element("p", {}, item.risk_explanation));
   wrapper.append(element("p", { class: "muted" }, item.behavior_impact));
-  wrapper.append(element("pre", {}, item.patch));
+  if (item.publishable) wrapper.append(element("pre", {}, item.patch));
+  else wrapper.append(element("p", { class: "error" }, item.blocked_reason || "This proposal cannot be reviewed or published."));
   wrapper.append(element("p", { class: "muted" }, "Tests: " + item.test_plan.join(" · ")));
   if (item.approved && item.approval_id) wrapper.append(element("p", { class: "muted" }, "Approval receipt: " + item.approval_id));
-  if (!item.approved) {
+  if (!item.approved && item.publishable) {
     const form = element("div", { class: "approval-grid" });
     const name = element("input", { placeholder: "Approver name", maxlength: "100" });
     const reason = element("textarea", { placeholder: "Why this exact patch and test plan are approved", maxlength: "500" });
@@ -204,8 +206,11 @@ async function authenticate() {
   const token = new URLSearchParams(location.hash.slice(1)).get("token");
   if (token) {
     history.replaceState(null, "", location.pathname);
-    await api("/api/session", { method: "POST", body: JSON.stringify({ token }) });
+    const session = await api("/api/session", { method: "POST", body: JSON.stringify({ token }) });
+    if (typeof session.session_token !== "string" || session.session_token.length < 32) throw new Error("The service returned an invalid session credential");
+    sessionStorage.setItem("reporook_session", session.session_token);
   }
+  if (!sessionStorage.getItem("reporook_session")) throw new Error("Dashboard session is missing");
   await refresh();
   if (new URLSearchParams(location.search).get("github") === "connected") {
     history.replaceState(null, "", location.pathname);
@@ -218,8 +223,10 @@ $("onboard-button").addEventListener("click", async () => {
 });
 $("scan-button").addEventListener("click", async () => {
   const allowExternalTargets = $("allow-external-targets").checked;
+  const allowRepositorySuppressions = $("allow-repository-suppressions").checked;
   $("allow-external-targets").checked = false;
-  try { state.job = await api("/api/scan", { method: "POST", body: JSON.stringify({ allow_external_targets: allowExternalTargets }) }); renderJob(); showMessage("Scan started. The dashboard will update when deterministic evidence is ready."); }
+  $("allow-repository-suppressions").checked = false;
+  try { state.job = await api("/api/scan", { method: "POST", body: JSON.stringify({ allow_external_targets: allowExternalTargets, allow_repository_suppressions: allowRepositorySuppressions }) }); renderJob(); showMessage("Scan started. The dashboard will update when deterministic evidence is ready."); }
   catch (error) { showMessage(error.message, true); }
 });
 $("setup-button").addEventListener("click", async () => {
@@ -233,7 +240,12 @@ $("setup-button").addEventListener("click", async () => {
   } catch (error) { showMessage(error.message, true); }
   finally { button.disabled = false; }
 });
-$("github-connect").addEventListener("click", () => { location.assign("/github/connect"); });
+$("github-connect").addEventListener("click", async () => {
+  try {
+    const connection = await api("/api/github/connect", { method: "POST", body: "{}" });
+    location.assign(connection.url);
+  } catch (error) { showMessage(error.message, true); }
+});
 $("github-disconnect").addEventListener("click", async () => {
   if (!confirm("Remove RepoRook's local GitHub App key for this repository? This does not uninstall the App on GitHub.")) return;
   try {
@@ -251,7 +263,7 @@ export function dashboardHtml(): string {
 <body><main class="shell">
 <header><div class="brand"><div class="rook" aria-hidden="true">♜</div><div><h1>RepoRook</h1><p class="muted">Security guidance in plain English, with approval before code changes.</p></div></div><div class="actions"><span id="job" class="muted">Connecting…</span><button id="scan-button" type="button">Run security scan</button></div></header>
 <div id="message" class="notice hidden" role="status"></div>
-<section class="card"><label><input id="allow-external-targets" type="checkbox"> Allow configured container-image registry access for this scan</label><p class="muted">Checked-in configuration cannot grant this permission by itself. RepoRook does not pass generic Trivy username or password environment variables to registry requests.</p></section>
+<section class="card"><label><input id="allow-external-targets" type="checkbox"> Allow configured container-image registry access for this scan</label><p class="muted">Checked-in configuration cannot grant this permission by itself. RepoRook does not pass generic Trivy username or password environment variables to registry requests.</p><label><input id="allow-repository-suppressions" type="checkbox"> Trust this repository's reviewed suppression file for this scan</label><p class="muted">Leave this clear until you have reviewed every entry in reporook-suppressions.json. Repository content cannot suppress findings by itself.</p></section>
 <section id="onboard" class="card hidden"><h2>Finish setup</h2><p>RepoRook detected this project and can create a conservative configuration plus ignore its local evidence directory. It will not install system software or edit application code.</p><button id="onboard-button" type="button">Initialize RepoRook</button></section>
 <section class="grid" aria-label="Repository summary">
   <article class="card wide"><h2 id="repo-name">Repository</h2><p id="repo-path" class="muted"></p><p><span id="configured" class="status"></span></p><p id="stacks"></p></article>

@@ -3,17 +3,20 @@ import { realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs, stringFlag } from "./args.js";
+import { verifyArtifactAuthentication } from "./auth.js";
 import { artifactPath, writeApprovalArtifact, writeArtifacts, writeFindingBaselineArtifact, writePrioritizationArtifact, writeRemediationArtifacts, writeSuppressionArtifact, writeVerificationArtifact } from "./artifacts.js";
 import { approvalMatches, createApprovalReceipt, parseApprovalReceipt } from "./approval.js";
-import { loadConfig } from "./config.js";
+import { authorizeSemgrepConfig, loadConfig } from "./config.js";
 import { diagnose, renderDoctor } from "./doctor.js";
 import { requiredScannerFailure, scanExitCode, scanRepository, VERSION } from "./engine.js";
 import { initializeRepository, renderInitialization } from "./initializer.js";
-import { readBoundedJsonFile } from "./input.js";
+import { readBoundedJsonFile, readBoundedTextFile } from "./input.js";
+import { sha256 } from "./fingerprint.js";
 import { integrationExitCode, manageIntegrations, parseIntegrationHosts, renderIntegration, type IntegrationOperation } from "./integrations.js";
 import { prioritizeFindings } from "./prioritization.js";
 import { createFindingBaseline, createFindingSuppression, readSuppressionFile } from "./policy.js";
 import { createRemediationPlan } from "./remediation.js";
+import { parseFindingsReport } from "./report-validation.js";
 import { renderFinding, renderPrioritization, renderRemediationPlan, renderTerminal, renderVerification } from "./render.js";
 import { toSarif } from "./sarif.js";
 import { setupInstructions } from "./setup.js";
@@ -26,6 +29,7 @@ export { verifyFindingResolution };
 export { initializeRepository, prioritizeFindings, createRemediationPlan };
 export { createFindingBaseline, createFindingSuppression };
 export { approvalMatches, createApprovalReceipt, parseApprovalReceipt };
+export { authenticateArtifact, verifyArtifactAuthentication } from "./auth.js";
 export { parseRemediationProposal } from "./approval.js";
 export { manageIntegrations, parseIntegrationHosts };
 export { detectProject } from "./initializer.js";
@@ -58,7 +62,10 @@ Scan options:
   --head REVISION        Changed-mode head (default HEAD)
   --require-scanners     Treat unavailable applicable scanners as a tool error
   --allow-external-targets
-                         Authorize configured container-image registry access for this invocation
+                         Authorize configured container-image or non-default Semgrep network access for this invocation
+  --allow-repository-suppressions
+                         Trust reviewed repository suppressions for this invocation
+  --semgrep-config RULES Operator-selected Semgrep alias, URL, or repository-local rules file
   --no-cache             Disable scanner cache reads and writes for this scan
   --refresh-cache        Run every scanner and replace successful cache entries
   --cache-ttl MINUTES    Override cache freshness (1-1440 minutes)
@@ -70,6 +77,11 @@ Verify options:
   --input PATH           Baseline findings JSON (default: .reporook/findings.json)
   --verification-output  Verification receipt output
   --approval PATH        Validate and attach a durable approval receipt when present
+
+Approval options:
+  --approved-by NAME     Human approver recorded in the signed receipt
+  --reason TEXT          Human approval reason
+  --proposal-digest HEX  Require the SHA-256 digest of the exact proposed patch
 
 Guided-fix options:
   --input PATH           Baseline findings JSON
@@ -114,6 +126,9 @@ function boundedIntegerFlag(parsed: ReturnType<typeof parseArgs>, name: string, 
 async function runScan(parsed: ReturnType<typeof parseArgs>): Promise<number> {
   const target = resolve(parsed.positionals[0] ?? ".");
   const loaded = await loadConfig(target, stringFlag(parsed.flags, "config"));
+  const allowExternalTargets = parsed.flags["allow-external-targets"] === true;
+  const semgrep = await authorizeSemgrepConfig(target, stringFlag(parsed.flags, "semgrep-config"), allowExternalTargets);
+  loaded.config.semgrepConfig = semgrep.value;
   const failOnValue = stringFlag(parsed.flags, "fail-on")?.toLowerCase() as Severity | undefined;
   if (failOnValue && !severities.includes(failOnValue)) throw new Error(`Invalid --fail-on value: ${failOnValue}`);
   if (failOnValue) loaded.config.failOn = failOnValue;
@@ -126,7 +141,9 @@ async function runScan(parsed: ReturnType<typeof parseArgs>): Promise<number> {
     ...(changedRequested ? { changedBase: typeof changedValue === "string" ? changedValue : "" } : {}),
     changedHead: stringFlag(parsed.flags, "head"),
     requireScanners: parsed.flags["require-scanners"] === true,
-    allowExternalTargets: parsed.flags["allow-external-targets"] === true,
+    allowExternalTargets,
+    authorizedSemgrepConfig: semgrep.receipt,
+    allowRepositorySuppressions: parsed.flags["allow-repository-suppressions"] === true,
     ...(parsed.flags.cache === false ? { cacheEnabled: false } : {}),
     refreshCache: parsed.flags["refresh-cache"] === true,
     ...(cacheTtlMinutes !== undefined ? { cacheTtlMs: cacheTtlMinutes * 60_000 } : {}),
@@ -153,9 +170,11 @@ async function runScan(parsed: ReturnType<typeof parseArgs>): Promise<number> {
 
 async function baselineReport(target: string, input: string): Promise<{ report: ScanReport; path: string }> {
   const path = artifactPath(target, input);
-  const report = await readBoundedJsonFile(path, "Findings artifact") as ScanReport;
-  if (resolve(report.scan_receipt?.target ?? "") !== target) throw new Error("The baseline report belongs to a different repository path");
-  if (!Array.isArray(report.findings) || !report.scan_receipt?.config_hash) throw new Error("The baseline report is not a valid RepoRook findings artifact");
+  const raw = await readBoundedJsonFile(path, "Findings artifact");
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("The baseline report is not a valid RepoRook findings artifact");
+  verifyArtifactAuthentication(target, raw as Record<string, unknown>, "Findings artifact");
+  const report = parseFindingsReport(raw);
+  if (resolve(report.scan_receipt.target) !== target) throw new Error("The baseline report belongs to a different repository path");
   return { report, path };
 }
 
@@ -240,7 +259,14 @@ async function runApprove(parsed: ReturnType<typeof parseArgs>): Promise<number>
   const reason = stringFlag(parsed.flags, "reason");
   if (!approvedBy || !reason) throw new Error("approve requires --approved-by and --reason");
   const plan = await readBoundedJsonFile(planPath, "Remediation plan");
-  const proposal = await readBoundedJsonFile(proposalPath, "Remediation proposal");
+  const proposalText = await readBoundedTextFile(proposalPath, "Remediation proposal");
+  const expectedProposalDigest = stringFlag(parsed.flags, "proposal-digest");
+  if (expectedProposalDigest !== undefined && (!/^[a-f0-9]{64}$/.test(expectedProposalDigest) || sha256(proposalText) !== expectedProposalDigest)) {
+    throw new Error("The proposal changed after it was displayed; review the new exact patch before approving");
+  }
+  let proposal: unknown;
+  try { proposal = JSON.parse(proposalText) as unknown; }
+  catch { throw new Error("Remediation proposal is not valid JSON"); }
   const receipt = createApprovalReceipt(plan, proposal, approvedBy, reason);
   const output = stringFlag(parsed.flags, "approval-output") ?? `${directory}/approval.json`;
   const outputPath = artifactPath(target, output);
@@ -283,9 +309,10 @@ async function runVerify(parsed: ReturnType<typeof parseArgs>): Promise<number> 
   if (!findingId || !/^rr-[a-f0-9]{12}$/.test(findingId)) throw new Error("verify requires a valid finding ID such as rr-0123456789ab");
   const target = resolve(parsed.positionals[1] ?? ".");
   const loaded = await loadConfig(target, stringFlag(parsed.flags, "config"));
-  const previousPath = artifactPath(target, stringFlag(parsed.flags, "input") ?? `${loaded.config.outputDir}/findings.json`);
-  const previous = await readBoundedJsonFile(previousPath, "Baseline findings artifact") as ScanReport;
-  if (resolve(previous.scan_receipt.target) !== target) throw new Error("The baseline report belongs to a different repository path");
+  const allowExternalTargets = parsed.flags["allow-external-targets"] === true;
+  const semgrep = await authorizeSemgrepConfig(target, stringFlag(parsed.flags, "semgrep-config"), allowExternalTargets);
+  loaded.config.semgrepConfig = semgrep.value;
+  const { report: previous, path: previousPath } = await baselineReport(target, stringFlag(parsed.flags, "input") ?? `${loaded.config.outputDir}/findings.json`);
   const original = previous.findings.find((finding) => finding.id === findingId);
   if (!original) throw new Error(`Finding not found: ${findingId}`);
 
@@ -328,7 +355,9 @@ async function runVerify(parsed: ReturnType<typeof parseArgs>): Promise<number> 
     target,
     config: loaded.config,
     requireScanners: parsed.flags["require-scanners"] === true,
-    allowExternalTargets: parsed.flags["allow-external-targets"] === true,
+    allowExternalTargets,
+    authorizedSemgrepConfig: semgrep.receipt,
+    allowRepositorySuppressions: parsed.flags["allow-repository-suppressions"] === true,
     refreshCache: true,
   });
   const verification = verifyFindingResolution(previous, current, findingId, requiredScannerFailure(
@@ -410,8 +439,8 @@ async function main(): Promise<number> {
   if (parsed.command === "explain") {
     const id = parsed.positionals[0];
     if (!id) throw new Error("explain requires a finding ID");
-    const input = artifactPath(resolve("."), stringFlag(parsed.flags, "input") ?? ".reporook/findings.json");
-    const report = await readBoundedJsonFile(input, "Findings artifact") as ScanReport;
+    const target = resolve(".");
+    const { report } = await baselineReport(target, stringFlag(parsed.flags, "input") ?? ".reporook/findings.json");
     const finding = report.findings.find((item) => item.id === id);
     if (!finding) throw new Error(`Finding not found: ${id}`);
     process.stdout.write(`${renderFinding(finding)}\n`);

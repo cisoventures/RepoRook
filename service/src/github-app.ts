@@ -309,31 +309,34 @@ export class GitHubAppIntegration implements RemediationPublisher {
   }
 
   async completeInstallation(installationIdInput: string, state: string): Promise<void> {
-    if (!/^\d{1,20}$/.test(installationIdInput)) throw new Error("GitHub returned an invalid installation identifier");
-    const installationId = Number(installationIdInput);
-    if (!Number.isSafeInteger(installationId) || installationId <= 0) throw new Error("GitHub returned an invalid installation identifier");
     const flow = this.flow(state, "installation");
-    if (!flow.app) throw new Error("GitHub App onboarding state is incomplete");
-    const jwt = appJwt(flow.app, this.now());
-    const repository = encodedRepository(this.repository);
-    const response = await this.fetcher(`${this.apiBase}/repos/${repository}/installation`, { headers: githubHeaders(jwt) });
-    const value = await response.json().catch(() => null) as unknown;
-    if (!response.ok) throw new Error(`The GitHub App is not installed on ${this.repository}: ${this.githubError(value, response.status)}`);
-    const returnedId = Number(object(value, "GitHub repository installation").id);
-    if (returnedId !== installationId) throw new Error("GitHub installation callback did not match the selected repository");
-    const credentials: StoredCredentials = {
-      schema_version: "1.0",
-      repository: this.repository,
-      app_id: flow.app.app_id,
-      app_slug: flow.app.app_slug,
-      installation_id: installationId,
-      private_key: flow.app.private_key,
-      created_at: this.now().toISOString(),
-    };
-    await this.mintToken(credentials);
-    await writeCredentials(this.credentialPath, credentials);
-    this.credentials = credentials;
-    this.flows.delete(state);
+    try {
+      if (!/^\d{1,20}$/.test(installationIdInput)) throw new Error("GitHub returned an invalid installation identifier");
+      const installationId = Number(installationIdInput);
+      if (!Number.isSafeInteger(installationId) || installationId <= 0) throw new Error("GitHub returned an invalid installation identifier");
+      if (!flow.app) throw new Error("GitHub App onboarding state is incomplete");
+      const jwt = appJwt(flow.app, this.now());
+      const repository = encodedRepository(this.repository);
+      const response = await this.fetcher(`${this.apiBase}/repos/${repository}/installation`, { headers: githubHeaders(jwt) });
+      const value = await response.json().catch(() => null) as unknown;
+      if (!response.ok) throw new Error(`The GitHub App is not installed on ${this.repository}: ${this.githubError(value, response.status)}`);
+      const returnedId = Number(object(value, "GitHub repository installation").id);
+      if (returnedId !== installationId) throw new Error("GitHub installation callback did not match the selected repository");
+      const credentials: StoredCredentials = {
+        schema_version: "1.0",
+        repository: this.repository,
+        app_id: flow.app.app_id,
+        app_slug: flow.app.app_slug,
+        installation_id: installationId,
+        private_key: flow.app.private_key,
+        created_at: this.now().toISOString(),
+      };
+      await this.mintToken(credentials);
+      await writeCredentials(this.credentialPath, credentials);
+      this.credentials = credentials;
+    } finally {
+      this.flows.delete(state);
+    }
   }
 
   async disconnect(): Promise<void> {

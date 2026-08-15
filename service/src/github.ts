@@ -321,9 +321,16 @@ export class GitHubPublisher implements RemediationPublisher {
         ].join("\n"),
       }),
     });
+    const pullNumber = Number(pull?.number);
+    if (!Number.isSafeInteger(pullNumber) || pullNumber < 1) throw new Error("GitHub did not return a valid pull request number");
+    if (pull?.draft !== true) {
+      await this.request(`/repos/${repository}/pulls/${pullNumber}`, { method: "PATCH", body: JSON.stringify({ state: "closed" }) }).catch(() => null);
+      await this.request(`/repos/${repository}/git/refs/heads/${encodedRef(branch)}`, { method: "DELETE" }).catch(() => null);
+      throw new Error("GitHub did not create the pull request as a draft; RepoRook closed it and refused to report success");
+    }
     return {
       repository: this.repository,
-      number: Number(pull?.number),
+      number: pullNumber,
       url: text(pull?.html_url, "GitHub pull request URL"),
       branch,
       commit: commitSha,

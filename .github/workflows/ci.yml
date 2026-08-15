@@ -51,11 +51,8 @@ jobs:
           test "$code" -eq 2
           node -e "const r=require('./test-fixtures/vulnerable-app/.reporook/findings.json'); const python=['semgrep','pip-audit','checkov'].map(name=>r.scanners.find(s=>s.name===name)); if(r.coverage_status==='complete'||python.some(s=>s?.available!==false||!s.reason?.includes('repository-owned hash lock'))) process.exit(1)"
       - name: Confirm verification preserves the baseline
-        if: hashFiles('action/python-scanners.requirements.txt') != ''
         run: npm run fixture:verify
       - name: Confirm the guided fix queue and approval boundary
-        if: hashFiles('action/python-scanners.requirements.txt') != ''
         run: npm run fixture:guided
       - name: Confirm new-findings baseline policy
-        if: hashFiles('action/python-scanners.requirements.txt') != ''
         run: npm run fixture:policy

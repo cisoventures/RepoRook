@@ -28,8 +28,20 @@ inputs:
     description: Fail with a tool error when an applicable scanner cannot run.
     default: "true"
   allow-external-targets:
-    description: Authorize configured container-image registry access for this workflow run.
+    description: Authorize configured container-image registry or non-default Semgrep network access for this workflow run.
     default: "false"
+  semgrep-config:
+    description: Operator-selected Semgrep alias, URL, or repository-local rules file. Repository configuration cannot override this value.
+    default: ""
+  allow-repository-suppressions:
+    description: Explicitly trust reviewed repository suppression records for this workflow run.
+    default: "false"
+  upload-sarif:
+    description: Upload SARIF with the workflow token. Disable for untrusted self-scans or when security-events write is unavailable.
+    default: "true"
+  comment-pr:
+    description: Update the pull-request summary with the workflow token. Disable for untrusted self-scans or when pull-requests write is unavailable.
+    default: "true"
 
 outputs:
   exit-code:
@@ -80,17 +92,19 @@ runs:
         INPUT_BASE: ${{ inputs.base }}
         INPUT_REQUIRE_SCANNERS: ${{ inputs.require-scanners }}
         INPUT_ALLOW_EXTERNAL_TARGETS: ${{ inputs.allow-external-targets }}
+        INPUT_SEMGREP_CONFIG: ${{ inputs.semgrep-config }}
+        INPUT_ALLOW_REPOSITORY_SUPPRESSIONS: ${{ inputs.allow-repository-suppressions }}
         PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         HEAD_SHA: ${{ github.sha }}
       run: "$GITHUB_ACTION_PATH/action/run-scan.sh"
     - name: Upload SARIF
-      if: always() && hashFiles('.reporook/results.sarif') != ''
+      if: always() && inputs.upload-sarif == 'true' && hashFiles('.reporook/results.sarif') != ''
       uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
       with:
         sarif_file: .reporook/results.sarif
         category: reporook
     - name: Update pull request summary
-      if: always() && github.event_name == 'pull_request'
+      if: always() && inputs.comment-pr == 'true' && github.event_name == 'pull_request'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}

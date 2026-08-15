@@ -59,6 +59,12 @@ export interface ScanReceipt {
     authorized: true;
     container_images: string[];
   };
+  semgrep_rules?: {
+    selection: string;
+    source: "default" | "invocation";
+    digest: string | null;
+    network: boolean;
+  };
 }
 
 export type ScannerScope = "repository" | "changed-files" | "external-targets" | "not-applicable";
@@ -93,6 +99,7 @@ export interface FindingBaseline {
 export interface FindingSuppression {
   id: string;
   finding_id: string;
+  finding_fingerprint: string;
   owner: string;
   reason: string;
   expires_at: string;
@@ -156,6 +163,11 @@ export interface ScanReport {
   findings: Finding[];
   policy?: PolicyEvaluation;
   scan_receipt: ScanReceipt;
+  authentication: {
+    scheme: "hmac-sha256";
+    key_id: string;
+    digest: string;
+  };
 }
 
 export interface VerificationReport {
@@ -286,6 +298,11 @@ export interface ApprovalReceipt {
     files: string[];
   };
   invalidation_rule: string;
+  authentication: {
+    scheme: "hmac-sha256";
+    key_id: string;
+    digest: string;
+  };
 }
 
 export interface ProjectStack {
@@ -339,6 +356,8 @@ export interface ScanOptions {
   refreshCache?: boolean;
   cacheTtlMs?: number;
   allowExternalTargets?: boolean;
+  allowRepositorySuppressions?: boolean;
+  authorizedSemgrepConfig?: NonNullable<ScanReceipt["semgrep_rules"]>;
 }
 
 export interface ScannerContext {

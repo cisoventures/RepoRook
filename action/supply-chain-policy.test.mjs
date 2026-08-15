@@ -5,8 +5,35 @@ import { access, readFile } from "node:fs/promises";
 test("privileged release workflows do not self-install npm from the registry", async () => {
   const release = await readFile(".github/workflows/release.yml", "utf8");
   assert.doesNotMatch(release, /npm\s+(?:install|i)\s+--global/);
-  assert.match(release, /staged trusted publishing requires npm 11\.15\.0 or later/);
+  assert.match(release, /does not support trusted staged publishing/);
+  assert.match(release, /validate-and-pack:/);
+  assert.match(release, /release:\n    needs: validate-and-pack/);
+  assert.match(release, /test "\$GITHUB_SHA" = "\$main_commit"/);
+  assert.match(release, /npm stage publish[^\n]+--ignore-scripts/g);
+  assert.equal((release.match(/persist-credentials: false/g) ?? []).length, 1);
+  const privileged = release.slice(release.indexOf("\n  release:"));
+  assert.doesNotMatch(privileged, /npm ci|npm run check|npm pack|node scripts\//);
+  assert.doesNotMatch(privileged, /uses: \.\//);
+  assert.doesNotMatch(privileged, /actions\/checkout|git fetch|require\('\.\//);
   await assert.rejects(access(".github/workflows/bootstrap-service-v0.9.0.yml"), /ENOENT/);
+});
+
+test("the repository self-scan executes pull-request code without write permissions", async () => {
+  const workflow = await readFile(".github/workflows/reporook-example.yml", "utf8");
+  assert.match(workflow, /permissions:\n  contents: read/);
+  assert.doesNotMatch(workflow, /pull-requests: write|security-events: write/);
+  assert.match(workflow, /persist-credentials: false/);
+  assert.match(workflow, /upload-sarif: "false"/);
+  assert.match(workflow, /comment-pr: "false"/);
+});
+
+test("fixture security journeys cannot be skipped by a missing optional scanner lock", async () => {
+  const workflow = await readFile(".github/workflows/ci.yml", "utf8");
+  for (const command of ["fixture:verify", "fixture:guided", "fixture:policy"]) {
+    const line = workflow.indexOf(`run: npm run ${command}`);
+    assert.ok(line >= 0);
+    assert.doesNotMatch(workflow.slice(Math.max(0, line - 120), line), /hashFiles/);
+  }
 });
 
 test("CodeQL action components stay on one immutable release", async () => {

@@ -26,6 +26,7 @@
         ".": [
           "VERSION",
           "approvalMatches",
+          "authenticateArtifact",
           "createApprovalReceipt",
           "createFindingBaseline",
           "createFindingSuppression",
@@ -41,6 +42,7 @@
           "scanRepository",
           "severities",
           "toSarif",
+          "verifyArtifactAuthentication",
           "verifyFindingResolution"
         ],
         "./schema": [
@@ -115,6 +117,7 @@
     "flags": [
       "--allow-external-targets",
       "--allow-no-coverage",
+      "--allow-repository-suppressions",
       "--apply",
       "--approval",
       "--approval-output",
@@ -136,12 +139,14 @@
       "--owner",
       "--prompt-output",
       "--proposal",
+      "--proposal-digest",
       "--proposal-output",
       "--quiet",
       "--reason",
       "--refresh-cache",
       "--require-scanners",
       "--sarif-output",
+      "--semgrep-config",
       "--verification-output",
       "--version"
     ],
@@ -192,11 +197,11 @@
       },
       {
         "name": "scan_changes",
-        "input_schema_sha256": "sha256:4167c4366781e4134d02d0f44b335f7a03f833a5cbe676e6a080be091018e0f1"
+        "input_schema_sha256": "sha256:82d20af9f4de05d5696488f53833d7e7b599a274115944aa4e93e9d2d56dfbd1"
       },
       {
         "name": "scan_repository",
-        "input_schema_sha256": "sha256:cd6a0f4de2290a3dbd824167420426aeafb7d7084a7daf1733fa55e2957cbea5"
+        "input_schema_sha256": "sha256:41940c5851a576d9db0de8e1acdd32c0d610dbfcf8437eebf8da49e6dcc5e26b"
       },
       {
         "name": "suppress_finding",
@@ -204,7 +209,7 @@
       },
       {
         "name": "verify_fix",
-        "input_schema_sha256": "sha256:d27c226af185fbd89520036764d5b2f28ce251e160bb684646b56c78296bf1b1"
+        "input_schema_sha256": "sha256:3eb11c67a329a343a120aa7d8ba2a2de6a2f98147cd156ffe8609f50e88606b5"
       }
     ]
   },
@@ -286,7 +291,7 @@
     {
       "path": "schemas/approval-receipt.schema.json",
       "id": "https://reporook.dev/schemas/approval-receipt-1.0.json",
-      "sha256": "sha256:d7a113ca229d3b6ba52fc6e4e58b5be95c8ca341db3f683b339ab9b64fbcc1f2"
+      "sha256": "sha256:7ce8dab538e9a8c5b8ea54fab86344af77927410b7e2d8b056d9022d6c498d38"
     },
     {
       "path": "schemas/baseline.schema.json",
@@ -296,7 +301,7 @@
     {
       "path": "schemas/findings.schema.json",
       "id": "https://reporook.dev/schemas/findings-1.0.json",
-      "sha256": "sha256:3bb82dbf3b2eb8119c9f77cb39ff39d30e50731af28666b34a72c0c7c256a8b4"
+      "sha256": "sha256:0d5ddbb492d4581bf4f5f56e75b66bdbace3d589f155d7735374ef5d7dda947b"
     },
     {
       "path": "schemas/organization-policy.schema.json",
@@ -326,7 +331,7 @@
     {
       "path": "schemas/suppressions.schema.json",
       "id": "https://reporook.dev/schemas/suppressions-1.0.json",
-      "sha256": "sha256:ed0b297f39c2bb9e44dac9675190c8bf4ebc68780cc766275355a651828c1307"
+      "sha256": "sha256:14c3f556bf54ece82ecacdc7ad3dbc5a7bb3e06e562d3df953aa2e3bb1222ffd"
     },
     {
       "path": "schemas/verification.schema.json",
@@ -338,12 +343,16 @@
     "inputs": {
       "base": "",
       "allow-external-targets": "false",
+      "allow-repository-suppressions": "false",
+      "comment-pr": "true",
       "config": "",
       "fail-on": "high",
       "github-token": "${{ github.token }}",
       "mode": "diff",
       "path": ".",
-      "require-scanners": "true"
+      "require-scanners": "true",
+      "semgrep-config": "",
+      "upload-sarif": "true"
     },
     "outputs": [
       "exit-code",

@@ -1,11 +1,13 @@
 import { stat } from "node:fs/promises";
 import { resolve } from "node:path";
+import { authenticateArtifact } from "./auth.js";
 import { cacheEligible, readScannerCache, scannerCacheKey, writeScannerCache } from "./cache.js";
 import { sha256 } from "./fingerprint.js";
 import { gitChangedFiles, gitCommit } from "./git.js";
 import { inConfiguredScope } from "./incremental.js";
 import { evaluatePolicy } from "./policy.js";
 import { meetsThreshold, sortBySeverity } from "./severity.js";
+import { defaultConfig } from "./config.js";
 import { GitleaksScanner } from "./scanners/gitleaks.js";
 import { CheckovScanner } from "./scanners/checkov.js";
 import { NpmAuditScanner } from "./scanners/npm-audit.js";
@@ -44,6 +46,30 @@ function deduplicate(findings: Finding[]): Finding[] {
   return sortBySeverity([...byFingerprint.values()]);
 }
 
+function untrustedText(value: string, maximum: number): string {
+  const normalized = value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "�");
+  return normalized.length <= maximum ? normalized : `${normalized.slice(0, maximum - 1)}…`;
+}
+
+function boundFinding(finding: Finding): Finding {
+  return {
+    ...finding,
+    scanner: untrustedText(finding.scanner, 100),
+    rule: untrustedText(finding.rule, 500),
+    plain_summary: untrustedText(finding.plain_summary, 1_000),
+    description: untrustedText(finding.description, 4_000),
+    remediation_hint: untrustedText(finding.remediation_hint, 4_000),
+    references: finding.references.slice(0, 20).map((reference) => untrustedText(reference, 2_000)),
+    metadata: {
+      ...finding.metadata,
+      cwe: finding.metadata.cwe.slice(0, 100).map((value) => untrustedText(value, 200)),
+      cve: finding.metadata.cve.slice(0, 100).map((value) => untrustedText(value, 200)),
+      ...(finding.metadata.fixed_versions ? { fixed_versions: finding.metadata.fixed_versions.slice(0, 100).map((value) => untrustedText(value, 200)) } : {}),
+      ...(finding.metadata.tags ? { tags: finding.metadata.tags.slice(0, 100).map((value) => untrustedText(value, 200)) } : {}),
+    },
+  };
+}
+
 function coverage(statuses: ScannerStatus[]): "complete" | "partial" | "failed" {
   const applicable = statuses.filter((scanner) => scanner.applicable);
   if (!applicable.length) return "failed";
@@ -71,6 +97,16 @@ export async function scanRepository(options: ScanOptions, scanners: ScannerAdap
     && scanners.some((scanner) => scanner.name === "trivy-image");
   if (scansExternalImages && !options.allowExternalTargets) {
     throw new Error("Configured containerImages are external registry targets. Review them, then rerun with --allow-external-targets to authorize registry access for this invocation.");
+  }
+  const semgrepRules = options.authorizedSemgrepConfig ?? {
+    selection: defaultConfig.semgrepConfig,
+    source: "default" as const,
+    digest: null,
+    network: true,
+  };
+  if (options.config.semgrepConfig !== semgrepRules.selection) throw new Error("Semgrep rules were not selected by the trusted invocation");
+  if (semgrepRules.source === "invocation" && semgrepRules.network && semgrepRules.selection !== defaultConfig.semgrepConfig && !options.allowExternalTargets) {
+    throw new Error("Non-default Semgrep network rules require explicit external-target authorization");
   }
   const commit = await gitCommit(target);
   const changed_files = options.changedBase !== undefined ? await gitChangedFiles(target, options.changedBase || undefined, options.changedHead) : undefined;
@@ -163,17 +199,25 @@ export async function scanRepository(options: ScanOptions, scanners: ScannerAdap
     return { ...run, scope: scannerScope };
   }));
 
-  const statuses = runs.map((run) => run.status);
+  const statuses = runs.map((run) => ({
+    ...run.status,
+    name: untrustedText(run.status.name, 100),
+    ...(run.status.version === null ? {} : { version: untrustedText(run.status.version, 200) }),
+    ...(run.status.reason ? { reason: untrustedText(run.status.reason, 1_000) } : {}),
+  }));
   const required = new Set([...options.config.requiredScanners, ...(options.requireScanners ? statuses.filter((item) => item.applicable).map((item) => item.name) : [])]);
   for (const scanner of statuses) {
     if (required.has(scanner.name) && scanner.applicable && scanner.status !== "ok") {
       scanner.reason = `${scanner.reason ?? "scanner did not complete"}; scanner is required`;
     }
   }
-  const findings = deduplicate(filterFindings(runs.flatMap((run) => run.findings), options.config, changed_files));
-  const policy = await evaluatePolicy(target, findings, options.config);
+  const findings = deduplicate(filterFindings(runs.flatMap((run) => run.findings), options.config, changed_files).map(boundFinding));
+  for (const scanner of statuses) {
+    scanner.finding_count = findings.filter((finding) => finding.scanner === scanner.name).length;
+  }
+  const policy = await evaluatePolicy(target, findings, options.config, new Date(), { allowRepositorySuppressions: options.allowRepositorySuppressions });
   const completed_at = new Date().toISOString();
-  return {
+  const report: Omit<ScanReport, "authentication"> = {
     schema_version: "1.0",
     tool: { name: "reporook", version: VERSION },
     target: { path: target, commit },
@@ -190,11 +234,13 @@ export async function scanRepository(options: ScanOptions, scanners: ScannerAdap
       scanner_versions: Object.fromEntries(statuses.map((scanner) => [scanner.name, scanner.version])),
       started_at,
       completed_at,
+      semgrep_rules: semgrepRules,
       ...(changed_files ? { changed_files } : {}),
       ...(changed_files !== undefined ? { scanner_scopes: Object.fromEntries(runs.map((run) => [run.status.name, run.scope])) } : {}),
       ...(scansExternalImages ? { external_targets: { authorized: true as const, container_images: [...options.config.containerImages] } } : {}),
     },
   };
+  return authenticateArtifact(target, report as unknown as Record<string, unknown>) as unknown as ScanReport;
 }
 
 export function requiredScannerFailure(report: ScanReport, requiredScanners: string[], requireAllApplicable: boolean): boolean {

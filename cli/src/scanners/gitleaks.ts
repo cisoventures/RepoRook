@@ -14,11 +14,14 @@ export function parseGitleaks(raw: unknown, target: string, history = false): Fi
     const result = record(item);
     const rule = text(result.RuleID, "gitleaks.unknown");
     const file = repoRelative(target, text(result.File));
-    const sourceFingerprint = text(result.Fingerprint).replace(/:\d+$/g, "") || text(result.Description);
+    const occurrenceFingerprint = text(result.Fingerprint) || text(result.Description);
+    const verificationSource = occurrenceFingerprint.replace(/:\d+$/g, "");
     const sourceCommit = text(result.Commit);
-    const ids = findingFingerprint(["gitleaks", rule, file, sourceFingerprint]);
+    const ids = findingFingerprint(["gitleaks", rule, file, occurrenceFingerprint]);
+    const verificationFingerprint = findingFingerprint(["gitleaks", rule, verificationSource]).fingerprint;
     return {
       ...ids,
+      verification_fingerprint: verificationFingerprint,
       scanner: "gitleaks",
       rule,
       severity: "critical",

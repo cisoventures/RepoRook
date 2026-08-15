@@ -1,9 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { authenticateArtifact } from "reporook";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { prioritizeViaCli, remediationPlanViaCli, runRepoRook, scanViaCli } from "../dist/cli.js";
+
+process.env.REPOROOK_AUTH_KEY ??= "reporook-test-authentication-key-32-bytes-minimum";
 
 test("verification can inspect a valid failed-coverage report without calling it a successful scan", async () => {
   const target = await mkdtemp(join(tmpdir(), "reporook-mcp-incomplete-"));
@@ -27,11 +30,11 @@ test("guided-fix MCP helpers return CLI priority and remediation artifacts", asy
     fingerprint: `sha256:${"a".repeat(64)}`, references: [], metadata: { cwe: [], cve: [], package: null, raw_severity: "HIGH" },
   };
   const now = new Date().toISOString();
-  const report = {
+  const report = authenticateArtifact(target, {
     schema_version: "1.0", tool: { name: "reporook", version: "0.3.0" }, target: { path: target, commit: null }, generated_at: now,
-    coverage_status: "complete", summary: { critical: 0, high: 1, medium: 0, low: 0, total: 1 }, scanners: [], findings: [finding],
-    scan_receipt: { target, commit: null, config_hash: "sha256:config", scanner_versions: {}, started_at: now, completed_at: now },
-  };
+    coverage_status: "complete", summary: { critical: 0, high: 1, medium: 0, low: 0, total: 1 }, scanners: [{ name: "semgrep", applicable: true, available: true, version: "1", status: "ok", finding_count: 1, duration_ms: 1 }], findings: [finding],
+    scan_receipt: { target, commit: null, config_hash: `sha256:${"c".repeat(64)}`, scanner_versions: { semgrep: "1" }, started_at: now, completed_at: now },
+  });
   const reportPath = join(target, ".reporook", "findings.json");
   try {
     await mkdir(join(target, ".reporook"));

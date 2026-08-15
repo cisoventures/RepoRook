@@ -9,7 +9,6 @@ import { runRepoRook, type CliRunner } from "./runner.js";
 import { dashboardCss, dashboardHtml, dashboardJs } from "./ui.js";
 
 const maxBodyBytes = 64 * 1024;
-const sessionCookie = "reporook_session";
 
 export interface DashboardServerOptions {
   repository: string;
@@ -75,12 +74,11 @@ function manifestForm(response: ServerResponse, action: string, manifest: string
   response.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect RepoRook to GitHub</title><link rel="stylesheet" href="/assets/app.css"></head><body><main class="shell"><section class="card"><h1>Connect only ${escapeHtml(repository)}</h1><p>GitHub will create a private App and ask where to install it. Choose <strong>Only select repositories</strong>, then select <strong>${escapeHtml(repository)}</strong>.</p><p class="muted">Requested repository permissions: metadata read, contents write, pull requests write. No organization, account, workflow, webhook, or user authorization is requested.</p><form action="${escapeHtml(action)}" method="post"><input type="hidden" name="manifest" value="${escapeHtml(manifest)}"><button type="submit">Continue to GitHub</button></form></section></main></body></html>`);
 }
 
-function redirect(response: ServerResponse, location: string, sessionToken?: string): void {
+function redirect(response: ServerResponse, location: string): void {
   securityHeaders(response);
   response.statusCode = 303;
   response.setHeader("location", location);
   response.setHeader("cache-control", "no-store");
-  if (sessionToken) response.setHeader("set-cookie", `${sessionCookie}=${sessionToken}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200`);
   response.end();
 }
 
@@ -100,15 +98,6 @@ async function body(request: IncomingMessage): Promise<Record<string, unknown>> 
   catch { throw new HttpError(400, "Request body must contain valid JSON"); }
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) throw new HttpError(400, "Request body must be a JSON object");
   return parsed as Record<string, unknown>;
-}
-
-function cookies(request: IncomingMessage): Map<string, string> {
-  const output = new Map<string, string>();
-  for (const part of (request.headers.cookie ?? "").split(";")) {
-    const index = part.indexOf("=");
-    if (index > 0) output.set(part.slice(0, index).trim(), part.slice(index + 1).trim());
-  }
-  return output;
 }
 
 function equalSecret(left: string, right: string): boolean {
@@ -143,11 +132,12 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
   const store = await RepositoryStore.open(options.repository);
   const cli = options.cliRunner ?? runRepoRook;
   const bootstrapToken = options.bootstrapToken ?? randomBytes(32).toString("base64url");
-  const sessionToken = options.sessionToken ?? randomBytes(32).toString("base64url");
+  let sessionToken = options.sessionToken ?? randomBytes(32).toString("base64url");
   if (options.publisher && options.githubApp) throw new Error("Configure either a static GitHub publisher or guided GitHub App onboarding, not both");
   const publisher = options.publisher;
   const githubApp = options.githubApp;
   const publishingFindings = new Set<string>();
+  let connectBridge: { token: string; expiresAt: number; action: string; manifest: string } | null = null;
   let origin = "";
   let job: ScanJob = { status: "idle", started_at: null, finished_at: null, exit_code: null, message: "Ready" };
 
@@ -158,7 +148,8 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
       if (request.headers.host !== expectedHost) throw new HttpError(421, "Unexpected Host header");
       const url = new URL(request.url ?? "/", origin);
       const method = request.method ?? "GET";
-      const hasSession = equalSecret(cookies(request).get(sessionCookie) ?? "", sessionToken);
+      const authorization = request.headers.authorization ?? "";
+      const hasSession = authorization.startsWith("Bearer ") && equalSecret(authorization.slice(7), sessionToken);
       const isMutation = method !== "GET" && method !== "HEAD";
       if (isMutation && url.pathname !== "/api/session" && request.headers.origin !== origin) throw new HttpError(403, "Origin check failed");
 
@@ -169,8 +160,8 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
         if (request.headers.origin !== origin) throw new HttpError(403, "Origin check failed");
         const input = await body(request);
         if (typeof input.token !== "string" || !equalSecret(input.token, bootstrapToken)) throw new HttpError(401, "Invalid dashboard token");
-        response.setHeader("set-cookie", `${sessionCookie}=${sessionToken}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200`);
-        return json(response, 200, { authenticated: true });
+        sessionToken = randomBytes(32).toString("base64url");
+        return json(response, 200, { authenticated: true, session_token: sessionToken });
       }
       if (method === "GET" && url.pathname === "/github/manifest/callback") {
         if (!githubApp) throw new HttpError(404, "Guided GitHub App onboarding is not available");
@@ -180,14 +171,29 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
       if (method === "GET" && url.pathname === "/github/install/callback") {
         if (!githubApp) throw new HttpError(404, "Guided GitHub App onboarding is not available");
         await githubApp.completeInstallation(url.searchParams.get("installation_id") ?? "", url.searchParams.get("state") ?? "");
-        return redirect(response, "/?github=connected", sessionToken);
+        return redirect(response, "/?github=connected");
+      }
+      if (method === "GET" && url.pathname === "/github/connect/start") {
+        const bridge = connectBridge;
+        connectBridge = null;
+        if (!bridge || Date.now() > bridge.expiresAt || !equalSecret(url.searchParams.get("token") ?? "", bridge.token)) {
+          throw new HttpError(401, "GitHub connection link is invalid or expired");
+        }
+        if (!githubApp) throw new HttpError(404, "No GitHub repository was detected; restart with --github-repo OWNER/REPOSITORY");
+        return manifestForm(response, bridge.action, bridge.manifest, githubApp.repository);
       }
       if (!hasSession) throw new HttpError(401, "Dashboard session required");
-      if (method === "GET" && url.pathname === "/github/connect") {
+      if (method === "POST" && url.pathname === "/api/logout") {
+        sessionToken = randomBytes(32).toString("base64url");
+        return json(response, 200, { authenticated: false });
+      }
+      if (method === "POST" && url.pathname === "/api/github/connect") {
         if (!githubApp) throw new HttpError(404, "No GitHub repository was detected; restart with --github-repo OWNER/REPOSITORY");
-        if (githubApp.status().enabled) return redirect(response, "/?github=connected");
-        const request = githubApp.beginManifest(origin);
-        return manifestForm(response, request.action, request.manifest, githubApp.repository);
+        if (githubApp.status().enabled) return json(response, 200, { url: "/?github=connected" });
+        const manifestRequest = githubApp.beginManifest(origin);
+        const token = randomBytes(32).toString("base64url");
+        connectBridge = { token, expiresAt: Date.now() + 60_000, action: manifestRequest.action, manifest: manifestRequest.manifest };
+        return json(response, 200, { url: `/github/connect/start?token=${encodeURIComponent(token)}` });
       }
       if (method === "GET" && url.pathname === "/api/status") {
         const publishing = githubApp
@@ -222,9 +228,10 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
       if (method === "POST" && url.pathname === "/api/scan") {
         const input = await body(request);
         const allowExternalTargets = optionalBooleanValue(input.allow_external_targets, "allow_external_targets");
+        const allowRepositorySuppressions = optionalBooleanValue(input.allow_repository_suppressions, "allow_repository_suppressions");
         if (job.status === "running") throw new HttpError(409, "A scan is already running");
         job = { status: "running", started_at: new Date().toISOString(), finished_at: null, exit_code: null, message: "Scanner evidence is being collected" };
-        void cli(["scan", store.target, "--require-scanners", "--quiet", ...(allowExternalTargets ? ["--allow-external-targets"] : [])]).then((result) => {
+        void cli(["scan", store.target, "--require-scanners", "--quiet", ...(allowExternalTargets ? ["--allow-external-targets"] : []), ...(allowRepositorySuppressions ? ["--allow-repository-suppressions"] : [])]).then((result) => {
           const completed = result.code === 0 || result.code === 1;
           const failedMessage = result.stderr.trim().slice(0, 1_000)
             || "Scan incomplete: one or more required scanners did not run. Review coverage details and scanner setup instructions.";
@@ -258,7 +265,7 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
         if (!equalSecret(digest, currentDigest)) throw new HttpError(409, "The proposal changed after it was displayed; review the new exact patch before approving");
         const approvedBy = stringValue(input.approved_by, "approved_by", 2, 100);
         const reason = stringValue(input.reason, "reason", 10, 500);
-        const result = await cli(["approve", findingId, store.target, "--approved-by", approvedBy, "--reason", reason, "--format", "json"]);
+        const result = await cli(["approve", `--approved-by=${approvedBy}`, `--reason=${reason}`, `--proposal-digest=${digest}`, "--format", "json", "--", findingId, store.target]);
         if (result.code !== 0) throw new HttpError(422, result.stderr.trim() || "RepoRook could not record the approval");
         return json(response, 200, JSON.parse(result.stdout) as unknown);
       }

@@ -1,6 +1,7 @@
 import { constants } from "node:fs";
 import { lstat, open, realpath, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { verifyArtifactAuthentication } from "reporook";
 import { assertFindingsReportConsistency, parseFindingsReport } from "reporook/report-validation";
 import type { Finding, ScanReport } from "reporook/schema";
 
@@ -63,7 +64,10 @@ async function boundedText(source: RepositoryFile, label: string, maximumBytes: 
 
 export async function readReport(target: string, requested: string): Promise<ScanReport> {
   const source = await repositoryFile(target, requested, "Findings artifact");
-  const report = parseFindingsReport(JSON.parse(await boundedText(source, "Findings artifact", maximumReportBytes)) as unknown);
+  const raw = JSON.parse(await boundedText(source, "Findings artifact", maximumReportBytes)) as unknown;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("Findings artifact must be an object");
+  verifyArtifactAuthentication(source.root, raw as Record<string, unknown>, "Findings artifact");
+  const report = parseFindingsReport(raw);
   const claimedRoot = await realpath(resolve(report.target.path)).catch(() => null);
   if (claimedRoot !== source.root) throw new Error("Findings report is bound to a different repository target");
   assertFindingsReportConsistency(report);

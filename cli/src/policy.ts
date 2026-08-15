@@ -24,7 +24,7 @@ const baselineToolKeys = new Set(["name", "version"]);
 const baselineSourceKeys = new Set(["commit", "config_hash", "generated_at"]);
 const baselineFindingKeys = new Set(["finding_id", "fingerprint", "scanner", "rule", "severity", "file"]);
 const suppressionFileKeys = new Set(["schema_version", "suppressions"]);
-const suppressionKeys = new Set(["id", "finding_id", "owner", "reason", "expires_at", "created_at"]);
+const suppressionKeys = new Set(["id", "finding_id", "finding_fingerprint", "owner", "reason", "expires_at", "created_at"]);
 
 function record(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be an object`);
@@ -141,12 +141,20 @@ function parseSuppression(value: unknown, index: number): FindingSuppression {
   if (!/^rrs-[a-f0-9]{12}$/.test(id)) throw new Error(`${label}.id must look like rrs-0123456789ab`);
   const findingId = nonEmpty(input.finding_id, `${label}.finding_id`);
   if (!/^rr-[a-f0-9]{12}$/.test(findingId)) throw new Error(`${label}.finding_id is invalid`);
+  const findingFingerprint = nonEmpty(input.finding_fingerprint, `${label}.finding_fingerprint`);
+  if (!/^sha256:[a-f0-9]{64}$/.test(findingFingerprint)) throw new Error(`${label}.finding_fingerprint is invalid`);
+  const owner = nonEmpty(input.owner, `${label}.owner`);
+  const reason = nonEmpty(input.reason, `${label}.reason`);
+  const expiresAt = isoDate(input.expires_at, `${label}.expires_at`);
+  const expectedId = `rrs-${sha256([findingId, findingFingerprint, owner, reason, expiresAt].join("\0")).slice(0, 12)}`;
+  if (id !== expectedId) throw new Error(`${label}.id does not match its finding, owner, reason, and expiry`);
   return {
     id,
     finding_id: findingId,
-    owner: nonEmpty(input.owner, `${label}.owner`),
-    reason: nonEmpty(input.reason, `${label}.reason`),
-    expires_at: isoDate(input.expires_at, `${label}.expires_at`),
+    finding_fingerprint: findingFingerprint,
+    owner,
+    reason,
+    expires_at: expiresAt,
     created_at: isoDate(input.created_at, `${label}.created_at`),
   };
 }
@@ -209,6 +217,7 @@ export function createFindingSuppression(
   return {
     id: `rrs-${sha256(identity).slice(0, 12)}`,
     finding_id: finding.id,
+    finding_fingerprint: finding.fingerprint,
     owner: normalizedOwner,
     reason: normalizedReason,
     expires_at: expiresAt,
@@ -236,16 +245,21 @@ export async function evaluatePolicy(
   findings: Finding[],
   config: RepoRookConfig,
   now = new Date(),
+  options: { allowRepositorySuppressions?: boolean } = {},
 ): Promise<PolicyEvaluation> {
   const baselineInput = await optionalJson(target, config.baselineFile, "Baseline file");
   const suppressionInput = await optionalJson(target, config.suppressionsFile, "Suppression file");
   const baseline = baselineInput.value === null ? null : parseFindingBaseline(baselineInput.value);
+  if (suppressionInput.value !== null && !options.allowRepositorySuppressions) {
+    throw new Error("Repository-authored suppressions require explicit --allow-repository-suppressions approval for this invocation");
+  }
   const suppressionFile = suppressionInput.value === null ? null : parseSuppressionFile(suppressionInput.value);
   const baselineFingerprints = new Set(baseline?.findings.map((finding) => finding.fingerprint) ?? []);
   const suppressionsByFinding = new Map((suppressionFile?.suppressions ?? []).map((item) => [item.finding_id, item]));
   const evaluatedAt = now.toISOString();
   const results: FindingPolicyResult[] = findings.map((finding) => {
-    const suppression = suppressionsByFinding.get(finding.id) ?? null;
+    const selectedSuppression = suppressionsByFinding.get(finding.id) ?? null;
+    const suppression = selectedSuppression?.finding_fingerprint === finding.fingerprint ? selectedSuppression : null;
     const activeSuppression = suppression && Date.parse(suppression.expires_at) > now.getTime() ? suppression : null;
     const expiredSuppression = suppression && !activeSuppression ? suppression : null;
     const baselineDisposition = baseline === null ? "not-configured" : baselineFingerprints.has(finding.fingerprint) ? "existing" : "new";

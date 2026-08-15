@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { createApprovalReceipt } from "reporook";
 import { GitHubPublisher } from "../dist/github.js";
 
+process.env.REPOROOK_AUTH_KEY ??= "reporook-test-authentication-key-32-bytes-minimum";
+
 const sourceCommit = "a".repeat(40);
 const findingId = "rr-0123456789ab";
 const planId = "rrp-0123456789ab";
@@ -76,7 +78,9 @@ function githubMock(options = {}) {
     if (method === "POST" && url.pathname.endsWith("/git/trees")) return response({ sha: "new-tree" }, 201);
     if (method === "POST" && url.pathname.endsWith("/git/commits")) return response({ sha: "new-commit" }, 201);
     if (method === "POST" && url.pathname.endsWith("/git/refs")) return response({ ref: body.ref, object: { sha: body.sha } }, 201);
-    if (method === "POST" && url.pathname.endsWith("/pulls")) return response({ number: 21, html_url: "https://github.com/cisoventures/RepoRook/pull/21" }, 201);
+    if (method === "POST" && url.pathname.endsWith("/pulls")) return response({ number: 21, html_url: "https://github.com/cisoventures/RepoRook/pull/21", draft: options.pullDraft ?? true }, 201);
+    if (method === "PATCH" && url.pathname.endsWith("/pulls/21")) return response({ number: 21, state: "closed" });
+    if (method === "DELETE" && url.pathname.includes("/git/refs/heads/reporook/")) return new Response(null, { status: 204 });
     return response({ message: `Unexpected request: ${method} ${url.pathname}` }, 500);
   };
   return { calls, fetch };
@@ -128,4 +132,12 @@ test("GitHub publisher rejects a receipt whose source scan was altered", async (
   const publisher = new GitHubPublisher({ repository: "cisoventures/RepoRook", token: "github-installation-token-value", fetch: mock.fetch });
   await assert.rejects(publisher.publish(input), /approval receipt no longer matches/);
   assert.equal(mock.calls.length, 0);
+});
+
+test("GitHub publisher rejects and closes a pull request not confirmed draft", async () => {
+  const mock = githubMock({ pullDraft: false });
+  const publisher = new GitHubPublisher({ repository: "cisoventures/RepoRook", token: "github-installation-token-value", fetch: mock.fetch });
+  await assert.rejects(publisher.publish(publication()), /did not create the pull request as a draft/);
+  assert.ok(mock.calls.some((call) => call.method === "PATCH" && call.path.endsWith("/pulls/21")));
+  assert.ok(mock.calls.some((call) => call.method === "DELETE" && call.path.includes("/git/refs/heads/reporook/")));
 });

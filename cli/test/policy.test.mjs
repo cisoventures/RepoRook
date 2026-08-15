@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { defaultConfig, loadConfig, normalizeConfig, parseOrganizationPolicy, parseSimpleYaml } from "../dist/config.js";
+import { authenticateArtifact } from "../dist/auth.js";
 import { scanExitCode } from "../dist/engine.js";
 import {
   createFindingBaseline,
@@ -16,6 +17,7 @@ import {
 } from "../dist/policy.js";
 
 const execute = promisify(execFile);
+process.env.REPOROOK_AUTH_KEY ??= "reporook-test-authentication-key-32-bytes-minimum";
 
 function finding(id, overrides = {}) {
   return {
@@ -50,13 +52,13 @@ function report(target, findings, policy) {
       low: findings.filter((item) => item.severity === "low").length,
       total: findings.length,
     },
-    scanners: [],
+    scanners: [{ name: "semgrep", applicable: true, available: true, version: "1", status: "ok", finding_count: findings.length, duration_ms: 1 }],
     findings,
     ...(policy ? { policy } : {}),
     scan_receipt: {
       target,
       commit: "abc123",
-      config_hash: "sha256:config",
+      config_hash: `sha256:${"c".repeat(64)}`,
       scanner_versions: { semgrep: "1" },
       started_at: generatedAt,
       completed_at: generatedAt,
@@ -177,17 +179,18 @@ test("policy evaluation separates new, baseline, suppressed, expired, and below-
     const baseline = createFindingBaseline(report(target, [existing]), now);
     await writeFile(join(target, "reporook-baseline.json"), `${JSON.stringify(baseline, null, 2)}\n`);
     const activeSuppression = createFindingSuppression(report(target, [suppressed]), suppressed.id, "security-team", "Accepted until the replacement lands.", "2026-08-01", now);
-    const expiredSuppression = {
-      ...createFindingSuppression(report(target, [expired]), expired.id, "platform-team", "Legacy path scheduled for removal.", "2026-07-25", new Date("2026-07-20T12:00:00.000Z")),
-      expires_at: "2026-07-23T23:59:59.999Z",
-    };
+    const expiredSuppression = createFindingSuppression(
+      report(target, [expired]), expired.id, "platform-team", "Legacy path scheduled for removal.",
+      "2026-07-23T23:59:59.999Z", new Date("2026-07-20T12:00:00.000Z"),
+    );
     await writeFile(join(target, "reporook-suppressions.json"), `${JSON.stringify({ schema_version: "1.0", suppressions: [activeSuppression, expiredSuppression] }, null, 2)}\n`);
     const config = {
       ...structuredClone(defaultConfig),
       failOn: "high",
       pathPolicies: { "src/auth/**": "low" },
     };
-    const policy = await evaluatePolicy(target, [existing, pathActionable, suppressed, belowThreshold, expired], config, now);
+    await assert.rejects(() => evaluatePolicy(target, [existing, pathActionable, suppressed, belowThreshold, expired], config, now), /explicit --allow-repository-suppressions/);
+    const policy = await evaluatePolicy(target, [existing, pathActionable, suppressed, belowThreshold, expired], config, now, { allowRepositorySuppressions: true });
     assert.deepEqual(policy.summary, {
       new: 4,
       existing: 1,
@@ -212,9 +215,12 @@ test("policy evaluation separates new, baseline, suppressed, expired, and below-
 test("suppression files require durable ownership, reasons, and expirations", () => {
   assert.throws(() => parseSuppressionFile({
     schema_version: "1.0",
-    suppressions: [{ id: "rrs-111111111111", finding_id: "rr-111111111111", reason: "temporary", expires_at: "2026-08-01", created_at: "2026-07-24" }],
+    suppressions: [{ id: "rrs-111111111111", finding_id: "rr-111111111111", finding_fingerprint: `sha256:${"a".repeat(64)}`, reason: "temporary", expires_at: "2026-08-01", created_at: "2026-07-24" }],
   }), /owner must be a non-empty string/);
   assert.throws(() => parseSuppressionFile({ schema_version: "1.0", suppressions: [], typo: true }), /unknown field/);
+  const source = report("/repo", [finding("rr-111111111111")]);
+  const valid = createFindingSuppression(source, "rr-111111111111", "security-team", "Temporary exception", "2026-08-01", new Date("2026-07-24T00:00:00.000Z"));
+  assert.throws(() => parseSuppressionFile({ schema_version: "1.0", suppressions: [{ ...valid, owner: "attacker" }] }), /does not match/);
 });
 
 test("baseline parsing rejects malformed IDs, fingerprints, and unknown nested fields", () => {
@@ -262,9 +268,21 @@ test("CLI creates reviewable baseline and suppression artifacts", async () => {
   const target = await mkdtemp(join(tmpdir(), "reporook-policy-cli-"));
   const selected = finding("rr-abcdefabcdef");
   try {
-    await mkdir(join(target, ".reporook"));
+    await Promise.all([mkdir(join(target, ".git")), mkdir(join(target, ".reporook"))]);
     const completeReport = report(target, [selected]);
-    await writeFile(join(target, ".reporook", "findings.json"), `${JSON.stringify({ ...completeReport, coverage_status: "partial" }, null, 2)}\n`);
+    const partialReport = authenticateArtifact(target, {
+      ...completeReport,
+      coverage_status: "partial",
+      scanners: [
+        ...completeReport.scanners,
+        { name: "gitleaks", applicable: true, available: false, version: null, status: "skipped", finding_count: 0, duration_ms: 0, reason: "fixture unavailable" },
+      ],
+      scan_receipt: {
+        ...completeReport.scan_receipt,
+        scanner_versions: { ...completeReport.scan_receipt.scanner_versions, gitleaks: null },
+      },
+    });
+    await writeFile(join(target, ".reporook", "findings.json"), `${JSON.stringify(partialReport, null, 2)}\n`);
     const entry = resolve("dist/index.js");
     await assert.rejects(
       execute(process.execPath, [entry, "baseline", target]),
@@ -273,7 +291,7 @@ test("CLI creates reviewable baseline and suppression artifacts", async () => {
         return true;
       },
     );
-    await writeFile(join(target, ".reporook", "findings.json"), `${JSON.stringify(completeReport, null, 2)}\n`);
+    await writeFile(join(target, ".reporook", "findings.json"), `${JSON.stringify(authenticateArtifact(target, completeReport), null, 2)}\n`);
     const baseline = await execute(process.execPath, [entry, "baseline", target]);
     assert.match(baseline.stdout, /baseline created/i);
     const baselineFile = JSON.parse(await readFile(join(target, "reporook-baseline.json"), "utf8"));

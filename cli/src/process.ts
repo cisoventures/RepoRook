@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { existsSync, statSync } from "node:fs";
+import { delimiter, isAbsolute, relative, resolve, sep } from "node:path";
 
 export interface CommandResult {
   code: number;
@@ -9,6 +11,29 @@ export interface CommandResult {
 }
 
 export interface CommandOptions { cwd?: string; env?: NodeJS.ProcessEnv; unsetEnv?: string[]; timeoutMs?: number; maxOutputBytes?: number }
+
+export function resolveCommandPath(command: string, env: NodeJS.ProcessEnv, cwd?: string, platform = process.platform): string | null {
+  if (isAbsolute(command)) return command;
+  if (command.includes("/") || command.includes("\\") || command.includes("\0")) return null;
+  const pathValue = platform === "win32" ? env.Path ?? env.PATH ?? "" : env.PATH ?? "";
+  const extensions = platform === "win32" ? (env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean) : [""];
+  const names = platform === "win32" && !extensions.some((extension) => command.toLowerCase().endsWith(extension.toLowerCase()))
+    ? extensions.map((extension) => `${command}${extension.toLowerCase()}`)
+    : [command];
+  for (const entry of pathValue.split(platform === "win32" ? ";" : delimiter)) {
+    if (!entry || !isAbsolute(entry)) continue;
+    for (const name of names) {
+      const candidate = resolve(entry, name);
+      if (platform === "win32" && cwd) {
+        const traversal = relative(resolve(cwd), candidate);
+        if (!traversal || (!traversal.startsWith(`..${sep}`) && traversal !== ".." && !isAbsolute(traversal))) continue;
+      }
+      try { if (existsSync(candidate) && statSync(candidate).isFile()) return candidate; }
+      catch { /* Try the next PATH entry. */ }
+    }
+  }
+  return null;
+}
 
 export async function runCommand(
   command: string,
@@ -27,7 +52,12 @@ export async function runCommand(
     const maxOutputBytes = options.maxOutputBytes ?? 50 * 1024 * 1024;
     const env = { ...process.env, ...options.env };
     for (const name of options.unsetEnv ?? []) delete env[name];
-    const child = spawn(command, args, {
+    const executable = resolveCommandPath(command, env, options.cwd);
+    if (!executable) {
+      resolve({ code: 127, stdout: "", stderr: `Command is not available on the sanitized executable search path: ${command}`, duration_ms: Date.now() - started, missing: true });
+      return;
+    }
+    const child = spawn(executable, args, {
       cwd: options.cwd,
       env,
       stdio: ["ignore", "pipe", "pipe"],

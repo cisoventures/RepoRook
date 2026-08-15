@@ -11,17 +11,74 @@ on:
         type: string
 
 permissions:
-  contents: write
-  id-token: write
+  contents: read
 
 jobs:
-  release:
+  validate-and-pack:
     runs-on: ubuntu-latest
-    environment: npm-release
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26.5.0
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - name: Resolve and validate release version
+        shell: bash
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            version="$REQUESTED_VERSION"
+            [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          else
+            [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          test "$version" = "$(node -p "require('./cli/package.json').version")"
+          test "$version" = "$(node -p "require('./mcp-server/package.json').version")"
+          test "$version" = "$(node -p "require('./service/package.json').version")"
+          echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Pack and smoke-test npm distributions without credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir release
+          npm pack --workspace reporook --pack-destination release
+          npm pack --workspace @reporook/mcp-server --pack-destination release
+          npm pack --workspace @reporook/service --pack-destination release
+          node scripts/smoke-packages.mjs release
+          tar -czf "release/reporook-adapters-v${RELEASE_VERSION}.tar.gz" adapters
+          (cd release && sha256sum -- * > SHA256SUMS)
+      - name: Upload inert, validated release payload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: reporook-release-${{ github.sha }}
+          path: release/
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    needs: validate-and-pack
+    runs-on: ubuntu-latest
+    environment: npm-release
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Require the exact current main commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          main_commit="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+          test "$GITHUB_SHA" = "$main_commit"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 26.5.0
@@ -32,70 +89,72 @@ jobs:
         run: |
           set -euo pipefail
           npm_version="$(npm --version)"
-          if [[ ! "$npm_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "Unrecognized npm version: $npm_version" >&2
-            exit 2
-          fi
+          [[ "$npm_version" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)(-[0-9A-Za-z.-]+)?$ ]]
           major="${BASH_REMATCH[1]}"
           minor="${BASH_REMATCH[2]}"
           if (( major < 11 || (major == 11 && minor < 15) )); then
-            echo "The npm bundled with the selected Node.js toolchain is $npm_version; staged trusted publishing requires npm 11.15.0 or later." >&2
-            echo "Refusing to download and execute a replacement package manager inside the release job." >&2
+            echo "The bundled npm $npm_version does not support trusted staged publishing." >&2
             exit 2
           fi
-      - run: npm ci --ignore-scripts
-      - run: npm run check
-      - name: Resolve release version
+      - name: Resolve release identity
         shell: bash
         env:
           REQUESTED_VERSION: ${{ inputs.version }}
         run: |
+          set -euo pipefail
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
             version="$REQUESTED_VERSION"
             [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
             tag="v${version}"
           else
             tag="$GITHUB_REF_NAME"
+            [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
             version="${tag#v}"
           fi
           echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
           echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
-      - name: Confirm tag and package versions agree
+      - name: Download validated release payload
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: reporook-release-${{ github.sha }}
+          path: release
+      - name: Verify release payload shape and hashes
         shell: bash
         run: |
-          test "$RELEASE_VERSION" = "$(node -p "require('./cli/package.json').version")"
-          test "$RELEASE_VERSION" = "$(node -p "require('./mcp-server/package.json').version")"
-          test "$RELEASE_VERSION" = "$(node -p "require('./service/package.json').version")"
-      - name: Pack npm distributions
-        run: |
-          mkdir release
-          npm pack --workspace reporook --pack-destination release
-          npm pack --workspace @reporook/mcp-server --pack-destination release
-          npm pack --workspace @reporook/service --pack-destination release
-      - name: Install and execute packed distributions
-        run: node scripts/smoke-packages.mjs release
-      - name: Create the release tag for a manual release
-        if: github.event_name == 'workflow_dispatch'
+          set -euo pipefail
+          test "$(find release -maxdepth 1 -type f | wc -l | tr -d ' ')" = 5
+          test -f "release/reporook-${RELEASE_VERSION}.tgz"
+          test -f "release/reporook-mcp-server-${RELEASE_VERSION}.tgz"
+          test -f "release/reporook-service-${RELEASE_VERSION}.tgz"
+          test -f "release/reporook-adapters-${RELEASE_TAG}.tar.gz"
+          (cd release && sha256sum --check SHA256SUMS)
+      - name: Create or verify the release tag through the GitHub API
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          existing="$(git rev-parse --verify --quiet "refs/tags/${RELEASE_TAG}^{commit}" || true)"
+          set -euo pipefail
+          existing="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha' 2>/dev/null || true)"
           if [[ -n "$existing" ]]; then
             test "$existing" = "$GITHUB_SHA"
           else
-            git tag "$RELEASE_TAG" "$GITHUB_SHA"
-            git push origin "refs/tags/$RELEASE_TAG"
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" -f "ref=refs/tags/${RELEASE_TAG}" -f "sha=${GITHUB_SHA}" >/dev/null
           fi
-      - name: Stage npm distributions through trusted publishing
+      - name: Stage inert npm tarballs through trusted publishing
         shell: bash
         run: |
-          npm stage publish "./release/reporook-${RELEASE_VERSION}.tgz" --access public
-          npm stage publish "./release/reporook-mcp-server-${RELEASE_VERSION}.tgz" --access public
-          npm stage publish "./release/reporook-service-${RELEASE_VERSION}.tgz" --access public
-      - name: Archive native adapters
-        run: tar -czf release/reporook-adapters-${RELEASE_TAG}.tar.gz adapters
-      - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
-        with:
-          draft: true
-          tag_name: ${{ env.RELEASE_TAG }}
-          target_commitish: ${{ github.sha }}
-          files: release/*
+          set -euo pipefail
+          cleanup_notice() {
+            echo "One or more packages may remain in npm's staged-publishing review queue." >&2
+            echo "Inspect and reject any incomplete ${RELEASE_VERSION} entries for reporook, @reporook/mcp-server, and @reporook/service in the npm Staged Packages page before retrying." >&2
+          }
+          trap cleanup_notice ERR
+          npm stage publish "./release/reporook-${RELEASE_VERSION}.tgz" --access public --ignore-scripts
+          npm stage publish "./release/reporook-mcp-server-${RELEASE_VERSION}.tgz" --access public --ignore-scripts
+          npm stage publish "./release/reporook-service-${RELEASE_VERSION}.tgz" --access public --ignore-scripts
+          trap - ERR
+      - name: Create a draft GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$RELEASE_TAG" release/* --draft --target "$GITHUB_SHA" --title "$RELEASE_TAG"

@@ -1,6 +1,6 @@
 import { mkdtemp, open, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join, relative } from "node:path";
+import { basename, join, relative, resolve } from "node:path";
 import { findingFingerprint } from "../fingerprint.js";
 import { scopedChangedFiles } from "../incremental.js";
 import { repoRelative } from "../path-utils.js";
@@ -84,7 +84,8 @@ function reports(raw: unknown): Record<string, unknown>[] {
 function checkovPath(result: Record<string, unknown>, target: string): string {
   const absolute = text(result.file_abs_path);
   if (absolute) return repoRelative(target, absolute);
-  return text(result.repo_file_path, text(result.file_path, "unknown")).replace(/^[/\\]+/, "").replaceAll("\\", "/");
+  const reported = text(result.repo_file_path, text(result.file_path, "unknown"));
+  return repoRelative(target, resolve(target, reported.replaceAll("\\", "/")));
 }
 
 export function parseCheckov(raw: unknown, target: string): Finding[] {

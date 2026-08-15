@@ -10,7 +10,7 @@ Requirements: Node.js 20 or later and the scanners appropriate for the repositor
 reporook-service --repo .
 ```
 
-The command prints a private URL such as `http://127.0.0.1:7377/#token=...`. Open it on the same machine. The fragment token is not sent in the initial HTTP request; dashboard JavaScript exchanges it for an HTTP-only, same-site session cookie and removes it from the address bar.
+The command prints a private URL such as `http://127.0.0.1:7377/#token=...`. Open it on the same machine. The fragment token is not sent in the initial HTTP request; dashboard JavaScript exchanges it for an in-memory bearer session, stores that credential in origin-scoped `sessionStorage`, and removes the bootstrap token from the address bar. The browser sends the bearer only in explicit `Authorization` headers to this exact origin, so another loopback port cannot receive it as a cookie.
 
 The dashboard can:
 
@@ -90,7 +90,7 @@ The v0.7 local service:
 
 - binds only to the literal loopback addresses `127.0.0.1` or `::1`;
 - checks the `Host` header and same-origin header on mutations;
-- uses a random bootstrap token and random in-memory session;
+- uses a random bootstrap token and random in-memory bearer session scoped by the browser to the exact loopback origin;
 - applies a restrictive Content Security Policy and disables framing;
 - limits request bodies to 64 KiB and read artifacts to 10 MiB;
 - rejects `.reporook` artifact paths containing symbolic links;

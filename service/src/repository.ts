@@ -1,21 +1,25 @@
 import { createHash } from "node:crypto";
-import { lstat, readFile, readdir, realpath, stat } from "node:fs/promises";
+import { constants } from "node:fs";
+import { lstat, open, readdir, realpath, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   approvalMatches,
   detectProject,
   parseApprovalReceipt,
   parseRemediationProposal,
+  verifyArtifactAuthentication,
   type Finding,
   type PrioritizationReport,
   type ProjectProfile,
   type RemediationPlan,
   type ScanReport,
 } from "reporook";
+import { parseFindingsReport } from "reporook/report-validation";
 import type { RemediationPublication } from "./github.js";
 
 const configCandidates = ["reporook.yml", "reporook.yaml", ".reporook.yml", ".reporook.json"];
 const maxArtifactBytes = 10 * 1024 * 1024;
+const maxPublishPatchBytes = 512 * 1024;
 
 export interface DashboardFinding {
   id: string;
@@ -40,6 +44,8 @@ export interface ApprovalItem {
   test_plan: string[];
   approved: boolean;
   approval_id: string | null;
+  publishable: boolean;
+  blocked_reason: string | null;
 }
 
 export interface DashboardSnapshot {
@@ -98,12 +104,38 @@ export class RepositoryStore {
 
   private async readArtifact(relativePath: string): Promise<{ raw: string; value: unknown } | null> {
     const path = await this.artifact(relativePath);
-    const metadata = await stat(path).catch(() => null);
+    const metadata = await lstat(path).catch(() => null);
     if (!metadata) return null;
-    if (!metadata.isFile()) throw new Error(`Artifact is not a regular file: ${relativePath}`);
+    if (!metadata.isFile() || metadata.isSymbolicLink()) throw new Error(`Artifact is not a regular file: ${relativePath}`);
     if (metadata.size > maxArtifactBytes) throw new Error(`Artifact exceeds the 10 MiB dashboard limit: ${relativePath}`);
-    const raw = await readFile(path, "utf8");
-    return { raw, value: JSON.parse(raw) as unknown };
+    const noFollow = typeof constants.O_NOFOLLOW === "number" ? constants.O_NOFOLLOW : 0;
+    const handle = await open(path, constants.O_RDONLY | noFollow);
+    try {
+      const opened = await handle.stat();
+      if (!opened.isFile()) throw new Error(`Artifact is not a regular file: ${relativePath}`);
+      if (opened.size > maxArtifactBytes) throw new Error(`Artifact exceeds the 10 MiB dashboard limit: ${relativePath}`);
+      const canonical = await realpath(path);
+      const traversal = relative(this.target, canonical);
+      if (traversal === ".." || traversal.startsWith(`..${sep}`) || isAbsolute(traversal)) throw new Error("Artifact path resolves outside the repository");
+      const current = await stat(canonical);
+      if (opened.dev !== current.dev || opened.ino !== current.ino) throw new Error(`Artifact changed while it was being opened: ${relativePath}`);
+      const chunks: Buffer[] = [];
+      let total = 0;
+      while (total <= maxArtifactBytes) {
+        const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, maxArtifactBytes + 1 - total));
+        const { bytesRead } = await handle.read(buffer, 0, buffer.length, null);
+        if (bytesRead === 0) break;
+        chunks.push(buffer.subarray(0, bytesRead));
+        total += bytesRead;
+      }
+      if (total > maxArtifactBytes) throw new Error(`Artifact exceeds the 10 MiB dashboard limit: ${relativePath}`);
+      let raw: string;
+      try { raw = new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks, total)); }
+      catch { throw new Error(`Artifact must contain valid UTF-8 text: ${relativePath}`); }
+      return { raw, value: JSON.parse(raw) as unknown };
+    } finally {
+      await handle.close();
+    }
   }
 
   async proposalDigest(findingId: string): Promise<string> {
@@ -142,6 +174,8 @@ export class RepositoryStore {
       const proposal = await this.readArtifact(`.reporook/remediations/${findingId}/proposal.json`);
       if (!proposal || proposal.value === null || typeof proposal.value !== "object" || Array.isArray(proposal.value)) continue;
       const value = proposal.value as Record<string, unknown>;
+      const patch = typeof value.patch === "string" ? value.patch : "";
+      const publishable = Buffer.byteLength(patch, "utf8") <= maxPublishPatchBytes;
       const approval = await this.readArtifact(`.reporook/remediations/${findingId}/approval.json`);
       const plan = await this.readArtifact(`.reporook/remediations/${findingId}/plan.json`);
       let approvalId: string | null = null;
@@ -149,7 +183,7 @@ export class RepositoryStore {
         try {
           const parsedProposal = parseRemediationProposal(proposal.value);
           const parsedApproval = parseApprovalReceipt(approval.value);
-          if (approvalMatches(parsedApproval, plan.value, parsedProposal)) approvalId = parsedApproval.approval_id;
+          if (publishable && approvalMatches(parsedApproval, plan.value, parsedProposal)) approvalId = parsedApproval.approval_id;
         } catch {
           approvalId = null;
         }
@@ -160,10 +194,12 @@ export class RepositoryStore {
         risk_explanation: cleanText(value.risk_explanation, 4_000),
         behavior_impact: cleanText(value.behavior_impact, 4_000),
         files: stringList(value.files, 100),
-        patch: cleanText(value.patch, 200_000),
+        patch: publishable ? patch : "",
         test_plan: stringList(value.test_plan, 100),
         approved: approvalId !== null,
         approval_id: approvalId,
+        publishable,
+        blocked_reason: publishable ? null : "Proposal patch exceeds the 512 KiB review and publishing limit; split it into smaller independently reviewed remediations.",
       });
     }
     return output;
@@ -176,7 +212,12 @@ export class RepositoryStore {
     }))).some(Boolean);
     const reportArtifact = await this.readArtifact(".reporook/findings.json");
     const priorityArtifact = await this.readArtifact(".reporook/priorities.json");
-    const report = reportArtifact?.value as ScanReport | undefined;
+    let report: ScanReport | undefined;
+    if (reportArtifact) {
+      if (!reportArtifact.value || typeof reportArtifact.value !== "object" || Array.isArray(reportArtifact.value)) throw new Error("Findings artifact must be an object");
+      verifyArtifactAuthentication(this.target, reportArtifact.value as Record<string, unknown>, "Findings artifact");
+      report = parseFindingsReport(reportArtifact.value);
+    }
     const priorities = priorityArtifact?.value as PrioritizationReport | undefined;
     const priorityByFinding = new Map((priorities?.priorities ?? []).map((item) => [item.finding_id, item.priority]));
     const policyByFinding = new Map((report?.policy?.findings ?? []).map((item) => [item.finding_id, item.disposition]));

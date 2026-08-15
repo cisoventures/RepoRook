@@ -7,10 +7,15 @@ import { runCommand } from "../process.js";
 import type { Finding, ScannerAdapter, ScannerContext, ScannerResult } from "../types.js";
 import { array, errored, jsonFromOutput, pythonScannerExecutionBlocked, record, scannerParseError, scannerVersion, successful, text, unavailable, unverifiedPythonScannerReason } from "./shared.js";
 
+const maximumRequirementFiles = 20;
+const maximumAggregateRuntimeMs = 120_000;
+
 async function requirementFiles(target: string): Promise<string[]> {
   let names: string[] = [];
   try { names = await readdir(target); } catch { return []; }
-  return names.filter((name) => /^requirements.*\.txt$/i.test(name)).map((name) => join(target, name));
+  const matched = names.filter((name) => /^requirements.*\.txt$/i.test(name)).sort();
+  if (matched.length > maximumRequirementFiles) throw new Error(`pip-audit supports at most ${maximumRequirementFiles} root requirements files per scan`);
+  return matched.map((name) => join(target, name));
 }
 
 async function exists(path: string): Promise<boolean> { try { await access(path); return true; } catch { return false; } }
@@ -71,6 +76,7 @@ export class PipAuditScanner implements ScannerAdapter {
   async version() { return pythonScannerExecutionBlocked() ? null : scannerVersion("pip-audit"); }
 
   async run(context: ScannerContext): Promise<ScannerResult> {
+    const started = Date.now();
     if (pythonScannerExecutionBlocked()) return unavailable(this.name, 0, unverifiedPythonScannerReason);
     const version = context.scannerVersion !== undefined ? context.scannerVersion : await scannerVersion("pip-audit");
     if (!version) return unavailable(this.name, 0, "pip-audit is not installed; run `reporook setup`");
@@ -80,7 +86,9 @@ export class PipAuditScanner implements ScannerAdapter {
     const findings: Finding[] = [];
     let duration_ms = 0;
     for (const invocation of invocations) {
-      const result = await runCommand("pip-audit", invocation.args, { cwd: context.target });
+      const remaining = maximumAggregateRuntimeMs - (Date.now() - started);
+      if (remaining <= 0) return errored(this.name, version, duration_ms, "pip-audit exceeded the aggregate 120 second scan limit");
+      const result = await runCommand("pip-audit", invocation.args, { cwd: context.target, timeoutMs: remaining });
       duration_ms += result.duration_ms;
       if (result.missing) return unavailable(this.name, duration_ms, "pip-audit is not installed");
       try {

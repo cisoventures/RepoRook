@@ -68,6 +68,14 @@ const contractHosts = contract.hosts.map((host) => host.id);
 assertEqual("agent host list", implementationHosts, contractHosts);
 assertEqual("unique agent host list", [...new Set(contractHosts)], contractHosts);
 
+const implementedPaths = Object.fromEntries(implementationHosts.map((host) => [host, []]));
+for (const match of integrationSource.matchAll(/(?:file|jsonMember)\("([a-z]+)",\s*(?:"[^"]+",\s*)?"([^"]+)"/g)) {
+  implementedPaths[match[1]]?.push(match[2]);
+}
+for (const match of integrationSource.matchAll(/host:\s*"([a-z]+)",\s*path:\s*"([^"]+)"/g)) {
+  implementedPaths[match[1]]?.push(match[2]);
+}
+
 const forbiddenPatterns = contract.forbidden_executable_bootstrap_patterns.map((pattern) => new RegExp(pattern, "i"));
 for (const host of contract.hosts) {
   const packagedSkill = await readText(host.skill_path);
@@ -84,13 +92,13 @@ for (const host of contract.hosts) {
     assert(!pattern.test(packageText), `${host.name} package may bootstrap executable software: ${pattern}`);
   }
 
-  const validationText = [canonicalSkill, ...await Promise.all(host.validation_surfaces.map((path) => readText(path)))].join("\n");
-  assert(/(?:deterministic|RepoRook) evidence/i.test(validationText), `${host.name} validation surface lost deterministic evidence provenance`);
+  const validationText = (await Promise.all(host.validation_surfaces.map((path) => readText(path)))).join("\n");
+  assert(/deterministic/i.test(validationText) && /evidence/i.test(validationText), `${host.name} validation surface lost deterministic evidence provenance`);
   assert(/coverage/i.test(validationText), `${host.name} validation surface lost coverage handling`);
   assert(/(?:uncertainty|proof gap|hypothesis)/i.test(validationText), `${host.name} validation surface lost uncertainty handling`);
   assert(/(?:secret material|secret value|detected secret)/i.test(validationText), `${host.name} validation surface lost secret redaction`);
 
-  const remediationText = [canonicalSkill, ...await Promise.all(host.remediation_surfaces.map((path) => readText(path)))].join("\n");
+  const remediationText = (await Promise.all(host.remediation_surfaces.map((path) => readText(path)))).join("\n");
   assert(/approv/i.test(remediationText), `${host.name} remediation surface lost explicit approval`);
   assert(/exact (?:diff|patch|proposal)/i.test(remediationText), `${host.name} remediation surface lost exact proposal binding`);
   assert(/verif/i.test(remediationText), `${host.name} remediation surface lost verification`);
@@ -109,6 +117,7 @@ for (const host of contract.hosts) {
   const installedPaths = [...host.installed_paths].sort();
   assertEqual(`${host.name} unique installed paths`, [...new Set(installedPaths)], installedPaths);
   assert(installedPaths.every((path) => !path.startsWith("/") && !path.split("/").includes("..")), `${host.name} has a non-repository-local install path`);
+  assertEqual(`${host.name} implementation install paths`, [...implementedPaths[host.id]].sort(), installedPaths);
 }
 
 process.stdout.write(`Validated ${contract.hosts.length} native agent packages across ${checks} parity checks.\n`);

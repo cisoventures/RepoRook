@@ -1,4 +1,5 @@
 import { isAbsolute, posix } from "node:path";
+import { authenticateArtifact, verifyArtifactAuthentication } from "./auth.js";
 import { sha256 } from "./fingerprint.js";
 import type { ApprovalReceipt, RemediationPlan, RemediationProposal, ScanReceipt } from "./types.js";
 import { VERSION } from "./version.js";
@@ -7,11 +8,11 @@ const proposalKeys = new Set([
   "schema_version", "plan_id", "finding_id", "created_at", "risk_explanation", "behavior_impact", "files", "patch", "test_plan",
 ]);
 const receiptKeys = new Set([
-  "schema_version", "tool", "approval_id", "status", "approved_at", "approved_by", "reason", "finding_id", "plan_id", "source_scan", "bindings", "invalidation_rule",
+  "schema_version", "tool", "approval_id", "status", "approved_at", "approved_by", "reason", "finding_id", "plan_id", "source_scan", "bindings", "invalidation_rule", "authentication",
 ]);
 const toolKeys = new Set(["name", "version"]);
 const receiptBindingKeys = new Set(["plan_hash", "proposal_hash", "patch_hash", "test_plan_hash", "files"]);
-const scanReceiptKeys = new Set(["target", "commit", "config_hash", "scanner_versions", "started_at", "completed_at", "changed_files", "scanner_scopes"]);
+const scanReceiptKeys = new Set(["target", "commit", "config_hash", "scanner_versions", "started_at", "completed_at", "changed_files", "scanner_scopes", "semgrep_rules"]);
 const approvalInvalidationRule = "This approval is invalid if its attribution, plan, exact patch, file list, or test plan changes.";
 
 function record(value: unknown, label: string): Record<string, unknown> {
@@ -96,7 +97,19 @@ function parseScanReceipt(value: unknown, label: string): ScanReceipt {
       scannerScopes[name] = scope;
     }
   }
-  return {
+  let semgrepRules: ScanReceipt["semgrep_rules"];
+  if (input.semgrep_rules !== undefined) {
+    const rules = record(input.semgrep_rules, `${label}.semgrep_rules`);
+    exactKeys(rules, new Set(["selection", "source", "digest", "network"]), `${label}.semgrep_rules`);
+    const selection = nonEmpty(rules.selection, `${label}.semgrep_rules.selection`);
+    const source = nonEmpty(rules.source, `${label}.semgrep_rules.source`);
+    const digestValue = rules.digest === null ? null : nonEmpty(rules.digest, `${label}.semgrep_rules.digest`);
+    if ((source !== "default" && source !== "invocation") || typeof rules.network !== "boolean" || (digestValue !== null && !/^sha256:[a-f0-9]{64}$/.test(digestValue))) {
+      throw new Error(`${label}.semgrep_rules is invalid`);
+    }
+    semgrepRules = { selection, source, digest: digestValue, network: rules.network };
+  }
+  const receipt = {
     target: nonEmpty(input.target, `${label}.target`),
     commit,
     config_hash: nonEmpty(input.config_hash, `${label}.config_hash`),
@@ -105,7 +118,9 @@ function parseScanReceipt(value: unknown, label: string): ScanReceipt {
     completed_at: timestamp(input.completed_at, `${label}.completed_at`),
     ...(changedFiles ? { changed_files: changedFiles } : {}),
     ...(scannerScopes ? { scanner_scopes: scannerScopes } : {}),
+    ...(semgrepRules ? { semgrep_rules: semgrepRules } : {}),
   };
+  return receipt;
 }
 
 export function parseRemediationProposal(value: unknown): RemediationProposal {
@@ -180,7 +195,7 @@ export function createApprovalReceipt(
     test_plan_hash: digest(proposal.test_plan),
     files: proposal.files,
   };
-  return {
+  const receipt = {
     schema_version: "1.0",
     tool: { name: "reporook", version: VERSION },
     approval_id: approvalIdentifier(plan.plan_id, bindings.proposal_hash, actor, approvalReason, approvedAt),
@@ -194,6 +209,7 @@ export function createApprovalReceipt(
     bindings,
     invalidation_rule: approvalInvalidationRule,
   };
+  return authenticateArtifact(sourceScan.target, receipt as unknown as Record<string, unknown>) as unknown as ApprovalReceipt;
 }
 
 export function parseApprovalReceipt(value: unknown): ApprovalReceipt {
@@ -222,6 +238,13 @@ export function parseApprovalReceipt(value: unknown): ApprovalReceipt {
   const approvedBy = nonEmpty(input.approved_by, "Approval receipt approved_by");
   const reason = nonEmpty(input.reason, "Approval receipt reason");
   const invalidationRule = nonEmpty(input.invalidation_rule, "Approval receipt invalidation_rule");
+  const authentication = record(input.authentication, "Approval receipt authentication");
+  exactKeys(authentication, new Set(["scheme", "key_id", "digest"]), "Approval receipt authentication");
+  const keyId = nonEmpty(authentication.key_id, "Approval receipt authentication.key_id");
+  const authenticationDigest = nonEmpty(authentication.digest, "Approval receipt authentication.digest");
+  if (authentication.scheme !== "hmac-sha256" || !/^sha256:[a-f0-9]{64}$/.test(keyId) || !/^sha256:[a-f0-9]{64}$/.test(authenticationDigest)) {
+    throw new Error("Approval receipt authentication is invalid");
+  }
   if (approvalId !== approvalIdentifier(planId, String(bindings.proposal_hash), approvedBy, reason, approvedAt)) {
     throw new Error("Approval receipt ID does not match its approval attribution and proposal binding");
   }
@@ -245,6 +268,7 @@ export function parseApprovalReceipt(value: unknown): ApprovalReceipt {
       files,
     },
     invalidation_rule: invalidationRule,
+    authentication: { scheme: "hmac-sha256", key_id: keyId, digest: authenticationDigest },
   };
 }
 
@@ -254,6 +278,7 @@ export function approvalMatches(receipt: ApprovalReceipt, planValue: unknown, pr
     const plan = validateRemediationPlan(planValue);
     const proposal = parseRemediationProposal(proposalValue);
     const sourceScan = parseScanReceipt(plan.source_scan, "Remediation plan source_scan");
+    verifyArtifactAuthentication(sourceScan.target, parsedReceipt as unknown as Record<string, unknown>, "Approval receipt");
     return parsedReceipt.status === "approved"
       && parsedReceipt.plan_id === plan.plan_id
       && parsedReceipt.finding_id === plan.finding.id

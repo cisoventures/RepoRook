@@ -50,6 +50,7 @@ export function artifactPath(target: string, output: string): string {
   if (traversal === ".." || traversal.startsWith(`..${sep}`) || isAbsolute(traversal)) {
     throw new Error("Artifact path resolves outside the repository");
   }
+  if (traversal.split(sep).includes(".git")) throw new Error("Artifact paths must not use .git");
   rejectSymbolicLinks(root, path);
   return path;
 }
@@ -65,6 +66,11 @@ export async function writeArtifacts(
   const prioritiesPath = artifactPath(target, resolve(dirname(outputDir), "priorities.json"));
   const promptPath = artifactPath(target, resolve(dirname(outputDir), "agent-prompt.txt"));
   const selectedPaths = [outputDir, receiptPath, prioritiesPath, promptPath, ...(sarifPath ? [sarifPath] : [])];
+  for (const path of selectedPaths) {
+    if (!relative(resolve(target), path).split(sep).includes(".reporook")) {
+      throw new Error("RepoRook scan evidence must stay in a .reporook directory");
+    }
+  }
   if (new Set(selectedPaths).size !== selectedPaths.length) throw new Error("Scan artifact paths must be distinct");
   const findingsReference = options.output ?? ".reporook/findings.json";
   await writeJson(outputDir, report);

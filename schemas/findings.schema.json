@@ -3,7 +3,7 @@
   "$id": "https://reporook.dev/schemas/findings-1.0.json",
   "title": "RepoRook Findings",
   "type": "object",
-  "required": ["schema_version", "tool", "target", "generated_at", "coverage_status", "summary", "scanners", "findings", "scan_receipt"],
+  "required": ["schema_version", "tool", "target", "generated_at", "coverage_status", "summary", "scanners", "findings", "scan_receipt", "authentication"],
   "properties": {
     "schema_version": { "const": "1.0" },
     "tool": {
@@ -41,9 +41,20 @@
       "items": { "$ref": "#/$defs/finding" }
     },
     "policy": { "$ref": "https://reporook.dev/schemas/policy-evaluation-1.0.json" },
-    "scan_receipt": { "$ref": "#/$defs/receipt" }
+    "scan_receipt": { "$ref": "#/$defs/receipt" },
+    "authentication": { "$ref": "#/$defs/authentication" }
   },
   "$defs": {
+    "authentication": {
+      "type": "object",
+      "required": ["scheme", "key_id", "digest"],
+      "properties": {
+        "scheme": { "const": "hmac-sha256" },
+        "key_id": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+      },
+      "additionalProperties": false
+    },
     "scanner": {
       "type": "object",
       "required": ["name", "applicable", "available", "version", "status", "finding_count", "duration_ms"],
@@ -119,6 +130,17 @@
           "properties": {
             "authorized": { "const": true },
             "container_images": { "type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+          },
+          "additionalProperties": false
+        },
+        "semgrep_rules": {
+          "type": "object",
+          "required": ["selection", "source", "digest", "network"],
+          "properties": {
+            "selection": { "type": "string", "minLength": 1 },
+            "source": { "enum": ["default", "invocation"] },
+            "digest": { "type": ["string", "null"], "pattern": "^sha256:[a-f0-9]{64}$" },
+            "network": { "type": "boolean" }
           },
           "additionalProperties": false
         }

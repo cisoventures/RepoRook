@@ -376,10 +376,17 @@ export function normalizeConfig(parsedValue: unknown): RepoRookConfig {
     throw new Error("trivy-image cannot be required without at least one containerImages entry");
   }
 
+  const semgrepConfig = stringValue(aliased(parsed, "semgrepConfig", "semgrep-config"), "semgrepConfig", defaultConfig.semgrepConfig);
+  if (semgrepConfig !== defaultConfig.semgrepConfig) {
+    throw new Error("Repository configuration cannot select Semgrep rules; use the operator-controlled --semgrep-config option");
+  }
+  const outputDir = stringValue(aliased(parsed, "outputDir", "output-dir"), "outputDir", defaultConfig.outputDir).replaceAll("\\", "/").replace(/\/$/, "");
+  if (outputDir !== ".reporook") throw new Error("outputDir must remain .reporook so all RepoRook consumers read the same fresh evidence generation");
+
   return {
     failOn,
-    outputDir: stringValue(aliased(parsed, "outputDir", "output-dir"), "outputDir", defaultConfig.outputDir),
-    semgrepConfig: stringValue(aliased(parsed, "semgrepConfig", "semgrep-config"), "semgrepConfig", defaultConfig.semgrepConfig),
+    outputDir,
+    semgrepConfig,
     paths: stringList(parsed.paths, "paths", defaultConfig.paths),
     ignore: stringList(parsed.ignore, "ignore", defaultConfig.ignore),
     requiredScanners,
@@ -395,6 +402,25 @@ export function normalizeConfig(parsedValue: unknown): RepoRookConfig {
     organizationPolicyFile: optionalString(aliased(parsed, "organizationPolicy", "organization-policy"), "organizationPolicy"),
     organizationPolicy: null,
   };
+}
+
+export async function authorizeSemgrepConfig(target: string, requested: string | undefined, allowExternalTargets: boolean): Promise<{
+  value: string;
+  receipt: NonNullable<import("./types.js").ScanReceipt["semgrep_rules"]>;
+}> {
+  if (requested === undefined || requested === defaultConfig.semgrepConfig) {
+    return { value: defaultConfig.semgrepConfig, receipt: { selection: defaultConfig.semgrepConfig, source: requested === undefined ? "default" : "invocation", digest: null, network: true } };
+  }
+  if (requested.length > 2048 || requested.includes("\0") || /[\r\n]/.test(requested)) throw new Error("--semgrep-config must be a bounded single-line value");
+  const network = /^(?:https?:\/\/|[pr]\/)/i.test(requested);
+  if (network) {
+    if (!allowExternalTargets) throw new Error("Non-default Semgrep network rules require --allow-external-targets for this invocation");
+    return { value: requested, receipt: { selection: requested, source: "invocation", digest: null, network: true } };
+  }
+  const path = await configurationPath(target, requested, true);
+  if (!path) throw new Error("Semgrep rules file does not exist");
+  const contents = await readBoundedTextFile(path, "Semgrep rules file", maximumConfigurationBytes);
+  return { value: path, receipt: { selection: requested, source: "invocation", digest: `sha256:${sha256(contents)}`, network: false } };
 }
 
 export async function loadConfig(target: string, requestedPath?: string): Promise<{ config: RepoRookConfig; hash: string; path: string | null }> {

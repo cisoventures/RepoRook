@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createApprovalReceipt } from "reporook";
+import { authenticateArtifact, createApprovalReceipt } from "reporook";
 import { GitHubPublisher } from "../dist/github.js";
 import { startDashboardServer } from "../dist/server.js";
 
@@ -12,6 +12,7 @@ const planId = "rrp-0123456789ab";
 const sourceCommit = "a".repeat(40);
 const originalSource = "export const ready = false;\n";
 const fixedSource = "export const ready = true;\n";
+process.env.REPOROOK_AUTH_KEY ??= "reporook-test-authentication-key-32-bytes-minimum";
 
 function scanReceipt(repository, scannerVersions) {
   return {
@@ -25,7 +26,7 @@ function scanReceipt(repository, scannerVersions) {
 }
 
 function partialReport(repository) {
-  return {
+  return authenticateArtifact(repository, {
     schema_version: "1.0",
     tool: { name: "reporook", version: "0.9.3" },
     target: { path: repository, commit: sourceCommit },
@@ -34,16 +35,15 @@ function partialReport(repository) {
     summary: { critical: 0, high: 0, medium: 0, low: 0, total: 0 },
     scanners: [
       { name: "gitleaks", applicable: true, available: true, version: "8.28.0", status: "ok", finding_count: 0, duration_ms: 1 },
-      { name: "semgrep", applicable: true, available: false, version: null, status: "unavailable", finding_count: 0, duration_ms: 0, reason: "Semgrep is not installed; review setup instructions before continuing." },
+      { name: "semgrep", applicable: true, available: false, version: null, status: "skipped", finding_count: 0, duration_ms: 0, reason: "Semgrep is not installed; review setup instructions before continuing." },
     ],
     findings: [],
-    policy: { findings: [] },
-    scan_receipt: scanReceipt(repository, { gitleaks: "8.28.0" }),
-  };
+    scan_receipt: scanReceipt(repository, { gitleaks: "8.28.0", semgrep: null }),
+  });
 }
 
 function completeReport(repository) {
-  return {
+  return authenticateArtifact(repository, {
     schema_version: "1.0",
     tool: { name: "reporook", version: "0.9.3" },
     target: { path: repository, commit: sourceCommit },
@@ -67,11 +67,10 @@ function completeReport(repository) {
       description: "SHOULD_NOT_LEAK",
       remediation_hint: "Use a fixed executable and validate every argument.",
       references: [],
-      metadata: { raw_secret: "SHOULD_NOT_LEAK" },
+      metadata: { cwe: [], cve: [], package: null, raw_severity: "SHOULD_NOT_LEAK" },
     }],
-    policy: { findings: [{ finding_id: findingId, disposition: "actionable" }] },
     scan_receipt: scanReceipt(repository, { gitleaks: "8.28.0", semgrep: "1.130.0" }),
-  };
+  });
 }
 
 function priorities(repository) {
@@ -166,7 +165,7 @@ function githubMock() {
     if (method === "POST" && url.pathname.endsWith("/git/commits")) return response({ sha: "new-commit" }, 201);
     if (method === "POST" && url.pathname.endsWith("/git/refs")) return response({ ref: body.ref, object: { sha: body.sha } }, 201);
     if (method === "POST" && url.pathname.endsWith("/pulls")) {
-      return response({ number: 31, html_url: "https://github.com/cisoventures/RepoRook/pull/31" }, 201);
+      return response({ number: 31, html_url: "https://github.com/cisoventures/RepoRook/pull/31", draft: true }, 201);
     }
     return response({ message: `Unexpected request: ${method} ${url.pathname}` }, 500);
   };
@@ -192,12 +191,14 @@ async function session(dashboard) {
     body: JSON.stringify({ token: "beginner-bootstrap-token" }),
   });
   assert.equal(response.status, 200);
-  return response.headers.get("set-cookie").split(";", 1)[0];
+  assert.equal(response.headers.get("set-cookie"), null);
+  const result = await response.json();
+  return `Bearer ${result.session_token}`;
 }
 
 async function waitForJob(dashboard, cookie) {
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    const response = await fetch(`${dashboard.origin}/api/job`, { headers: { cookie } });
+    const response = await fetch(`${dashboard.origin}/api/job`, { headers: { authorization: cookie } });
     assert.equal(response.status, 200);
     const job = await response.json();
     if (job.status !== "running") return job;
@@ -246,8 +247,8 @@ test("beginner journey fails closed, binds approval, and opens only a repository
     }
     if (args[0] === "approve") {
       const { plan, proposal } = remediation(repository);
-      const approvedBy = args[args.indexOf("--approved-by") + 1];
-      const reason = args[args.indexOf("--reason") + 1];
+      const approvedBy = args.find((value) => value.startsWith("--approved-by="))?.slice("--approved-by=".length);
+      const reason = args.find((value) => value.startsWith("--reason="))?.slice("--reason=".length);
       const approval = createApprovalReceipt(plan, proposal, approvedBy, reason, new Date("2026-07-28T00:02:00.000Z"));
       const path = join(repository, ".reporook", "remediations", findingId, "approval.json");
       await writeFile(path, `${JSON.stringify(approval, null, 2)}\n`);
@@ -277,11 +278,12 @@ test("beginner journey fails closed, binds approval, and opens only a repository
   try {
     assert.equal((await fetch(`${dashboard.origin}/api/status`)).status, 401);
     const cookie = await session(dashboard);
-    const headers = { "content-type": "application/json", origin: dashboard.origin, cookie };
+    const headers = { "content-type": "application/json", origin: dashboard.origin, authorization: cookie };
     const status = async () => {
-      const response = await fetch(`${dashboard.origin}/api/status`, { headers: { cookie } });
-      assert.equal(response.status, 200);
-      return await response.json();
+      const response = await fetch(`${dashboard.origin}/api/status`, { headers: { authorization: cookie } });
+      const raw = await response.text();
+      assert.equal(response.status, 200, raw);
+      return JSON.parse(raw);
     };
 
     assert.equal((await status()).repository.configured, false);
@@ -290,7 +292,7 @@ test("beginner journey fails closed, binds approval, and opens only a repository
     assert.equal((await status()).repository.configured, true);
 
     const beforeSetup = (await readdir(repository)).sort();
-    const setupResponse = await fetch(`${dashboard.origin}/api/setup`, { headers: { cookie } });
+    const setupResponse = await fetch(`${dashboard.origin}/api/setup`, { headers: { authorization: cookie } });
     assert.equal(setupResponse.status, 200);
     const setup = await setupResponse.json();
     assert.deepEqual({
@@ -314,7 +316,7 @@ test("beginner journey fails closed, binds approval, and opens only a repository
     const incomplete = await status();
     assert.equal(incomplete.scan.coverage_status, "partial");
     assert.equal(incomplete.findings.length, 0);
-    assert.equal(incomplete.scan.scanners.find((scanner) => scanner.name === "semgrep").status, "unavailable");
+    assert.equal(incomplete.scan.scanners.find((scanner) => scanner.name === "semgrep").status, "skipped");
 
     assert.equal((await fetch(`${dashboard.origin}/api/scan`, { method: "POST", headers, body: "{}" })).status, 202);
     const completeJob = await waitForJob(dashboard, cookie);

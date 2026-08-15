@@ -1,16 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createApprovalReceipt } from "reporook";
+import { authenticateArtifact, createApprovalReceipt } from "reporook";
 import { startDashboardServer } from "../dist/server.js";
 import { RepositoryStore } from "../dist/repository.js";
 import { dashboardHtml, dashboardJs } from "../dist/ui.js";
 import { createDirectoryLink, removeDirectoryLink } from "../../test-support/path-links.mjs";
 
 const findingId = "rr-0123456789ab";
+process.env.REPOROOK_AUTH_KEY ??= "reporook-test-authentication-key-32-bytes-minimum";
 
 async function fixture() {
   const repository = await mkdtemp(join(tmpdir(), "reporook-service-test-"));
@@ -18,7 +19,7 @@ async function fixture() {
   await mkdir(join(repository, ".reporook", "remediations", findingId), { recursive: true });
   await writeFile(join(repository, "app.js"), "export const ready = true;\n");
   await writeFile(join(repository, "reporook.yml"), "failOn: high\n");
-  const report = {
+  const unsignedReport = {
     schema_version: "1.0",
     tool: { name: "reporook", version: "0.9.3" },
     target: { path: repository, commit: "a".repeat(40) },
@@ -29,11 +30,23 @@ async function fixture() {
     findings: [{
       id: findingId, fingerprint: "sha256:" + "b".repeat(64), scanner: "semgrep", rule: "test-rule", severity: "high",
       file: "app.js", line: 1, end_line: 1, plain_summary: "Untrusted input reaches a command.", description: "LEAK_ME",
-      remediation_hint: "Validate the input and avoid shell execution.", references: [], metadata: { raw_secret: "LEAK_ME" },
+      remediation_hint: "Validate the input and avoid shell execution.", references: [],
+      metadata: { cwe: ["CWE-78"], cve: [], package: null, raw_severity: "HIGH" },
     }],
-    policy: { findings: [{ finding_id: findingId, disposition: "actionable" }] },
-    scan_receipt: { schema_version: "1.0", scan_id: "scan-test", target: repository, commit: "a".repeat(40), config_hash: "sha256:" + "c".repeat(64), scanners: [] },
+    policy: {
+      evaluated_at: "2026-07-25T00:00:00.000Z", policy_hash: "sha256:" + "d".repeat(64),
+      baseline: { configured: false, path: "reporook-baseline.json", source_commit: null, finding_count: 0 },
+      suppressions: { configured: false, path: "reporook-suppressions.json", active: 0, expired: 0 },
+      path_policies: {},
+      summary: { new: 1, existing: 0, actionable: 1, below_threshold: 0, suppressed: 0, expired_suppressions: 0 },
+      findings: [{ finding_id: findingId, baseline: "not-configured", disposition: "actionable", effective_fail_on: "high", matched_path_policy: null, suppression: null, expired_suppression: null }],
+    },
+    scan_receipt: {
+      target: repository, commit: "a".repeat(40), config_hash: "sha256:" + "c".repeat(64),
+      scanner_versions: { semgrep: "1" }, started_at: "2026-07-25T00:00:00.000Z", completed_at: "2026-07-25T00:00:00.000Z",
+    },
   };
+  const report = authenticateArtifact(repository, unsignedReport);
   const priorities = {
     schema_version: "1.0", tool: { name: "reporook", version: "0.9.3" }, generated_at: report.generated_at,
     coverage_status: "complete", source_scan: report.scan_receipt,
@@ -58,7 +71,10 @@ async function session(dashboard) {
     body: JSON.stringify({ token: "bootstrap-test-token" }),
   });
   assert.equal(response.status, 200);
-  return response.headers.get("set-cookie").split(";", 1)[0];
+  assert.equal(response.headers.get("set-cookie"), null);
+  const result = await response.json();
+  assert.equal(result.authenticated, true);
+  return `Bearer ${result.session_token}`;
 }
 
 async function approvedPublicationFixture() {
@@ -128,6 +144,27 @@ test("repository snapshots expose plain evidence without raw scanner metadata", 
   }
 });
 
+test("oversized proposals are never truncated into an approvable patch", async () => {
+  const { repository, proposal } = await fixture();
+  try {
+    const oversized = {
+      ...proposal,
+      patch: `${proposal.patch}${"#".repeat(512 * 1024)}`,
+    };
+    await writeFile(
+      join(repository, ".reporook", "remediations", findingId, "proposal.json"),
+      `${JSON.stringify(oversized)}\n`,
+    );
+    const snapshot = await (await RepositoryStore.open(repository)).snapshot();
+    assert.equal(snapshot.approvals[0].publishable, false);
+    assert.equal(snapshot.approvals[0].patch, "");
+    assert.equal(snapshot.approvals[0].approved, false);
+    assert.match(snapshot.approvals[0].blocked_reason, /exceeds the 512 KiB/);
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
 test("service artifact boundaries reject linked directories including Windows junctions", async () => {
   const repository = await mkdtemp(join(tmpdir(), "reporook-service-junction-repository-"));
   const outside = await mkdtemp(join(tmpdir(), "reporook-service-junction-outside-"));
@@ -156,6 +193,9 @@ test("dashboard explains incomplete coverage and offers non-installing setup gui
   assert.match(html, /allow-external-targets/);
   assert.match(dashboardJs, /allow_external_targets/);
   assert.match(dashboardJs, /allow-external-targets"\)\.checked = false/);
+  assert.match(html, /allow-repository-suppressions/);
+  assert.match(dashboardJs, /allow_repository_suppressions/);
+  assert.match(dashboardJs, /allow-repository-suppressions"\)\.checked = false/);
 });
 
 test("dashboard requires its fragment token and exposes only redacted finding fields", async (context) => {
@@ -166,7 +206,7 @@ test("dashboard requires its fragment token and exposes only redacted finding fi
     const unauthenticated = await fetch(`${dashboard.origin}/api/status`);
     assert.equal(unauthenticated.status, 401);
     const cookie = await session(dashboard);
-    const response = await fetch(`${dashboard.origin}/api/status`, { headers: { cookie } });
+    const response = await fetch(`${dashboard.origin}/api/status`, { headers: { authorization: cookie } });
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-security-policy"), /default-src 'none'/);
     const raw = await response.text();
@@ -176,6 +216,18 @@ test("dashboard requires its fragment token and exposes only redacted finding fi
     assert.equal(snapshot.scan.coverage_status, "complete");
     assert.equal(snapshot.findings[0].policy_status, "actionable");
     assert.equal(snapshot.approvals[0].finding_id, findingId);
+
+    const rotated = await session(dashboard);
+    assert.notEqual(rotated, cookie);
+    assert.equal((await fetch(`${dashboard.origin}/api/status`, { headers: { authorization: cookie } })).status, 401);
+    assert.equal((await fetch(`${dashboard.origin}/api/status`, { headers: { authorization: rotated } })).status, 200);
+    const logout = await fetch(`${dashboard.origin}/api/logout`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: dashboard.origin, authorization: rotated },
+      body: "{}",
+    });
+    assert.equal(logout.status, 200);
+    assert.equal((await fetch(`${dashboard.origin}/api/status`, { headers: { authorization: rotated } })).status, 401);
   } finally {
     await dashboard.close();
     await rm(repository, { recursive: true, force: true });
@@ -199,7 +251,7 @@ test("approval rejects stale proposal content and records only an exact reviewed
     const cookie = await session(dashboard);
     const request = async (digest) => await fetch(`${dashboard.origin}/api/approve`, {
       method: "POST",
-      headers: { "content-type": "application/json", origin: dashboard.origin, cookie },
+      headers: { "content-type": "application/json", origin: dashboard.origin, authorization: cookie },
       body: JSON.stringify({ finding_id: findingId, proposal_digest: digest, approved_by: "Security owner", reason: "Reviewed the exact patch and focused test plan" }),
     });
     assert.equal((await request("0".repeat(64))).status, 409);
@@ -207,7 +259,9 @@ test("approval rejects stale proposal content and records only an exact reviewed
     const proposalRaw = await readFile(join(repository, ".reporook", "remediations", findingId, "proposal.json"), "utf8");
     const digest = createHash("sha256").update(proposalRaw).digest("hex");
     assert.equal((await request(digest)).status, 200);
-    assert.deepEqual(calls[0].slice(0, 2), ["approve", findingId]);
+    assert.equal(calls[0][0], "approve");
+    assert.ok(calls[0].includes(`--proposal-digest=${digest}`));
+    assert.deepEqual(calls[0].slice(-3), ["--", findingId, await realpath(repository)]);
   } finally {
     await dashboard.close();
     await rm(repository, { recursive: true, force: true });
@@ -226,12 +280,12 @@ test("scan execution is single-flight and preserves RepoRook exit semantics", as
   if (!dashboard) { await rm(repository, { recursive: true, force: true }); return; }
   try {
     const cookie = await session(dashboard);
-    const options = { method: "POST", headers: { "content-type": "application/json", origin: dashboard.origin, cookie }, body: "{}" };
+    const options = { method: "POST", headers: { "content-type": "application/json", origin: dashboard.origin, authorization: cookie }, body: "{}" };
     assert.equal((await fetch(`${dashboard.origin}/api/scan`, options)).status, 202);
     assert.equal((await fetch(`${dashboard.origin}/api/scan`, options)).status, 409);
     release();
     await new Promise((resolve) => setTimeout(resolve, 10));
-    const job = await (await fetch(`${dashboard.origin}/api/job`, { headers: { cookie } })).json();
+    const job = await (await fetch(`${dashboard.origin}/api/job`, { headers: { authorization: cookie } })).json();
     assert.equal(job.status, "completed");
     assert.equal(job.exit_code, 1);
     assert.match(job.message, /actionable findings/);
@@ -241,7 +295,7 @@ test("scan execution is single-flight and preserves RepoRook exit semantics", as
   }
 });
 
-test("service forwards external target approval only from an explicit boolean request", async (context) => {
+test("service forwards sensitive scan approvals only from explicit boolean requests", async (context) => {
   const { repository } = await fixture();
   const calls = [];
   const runner = async (args) => {
@@ -254,16 +308,19 @@ test("service forwards external target approval only from an explicit boolean re
     const cookie = await session(dashboard);
     const send = async (body) => await fetch(`${dashboard.origin}/api/scan`, {
       method: "POST",
-      headers: { "content-type": "application/json", origin: dashboard.origin, cookie },
+      headers: { "content-type": "application/json", origin: dashboard.origin, authorization: cookie },
       body: JSON.stringify(body),
     });
-    assert.equal((await send({ allow_external_targets: true })).status, 202);
+    assert.equal((await send({ allow_external_targets: true, allow_repository_suppressions: true })).status, 202);
     await new Promise((resolve) => setTimeout(resolve, 10));
     assert.match(calls[0].join(" "), /--allow-external-targets/);
+    assert.match(calls[0].join(" "), /--allow-repository-suppressions/);
     assert.equal((await send({})).status, 202);
     await new Promise((resolve) => setTimeout(resolve, 10));
     assert.doesNotMatch(calls[1].join(" "), /--allow-external-targets/);
+    assert.doesNotMatch(calls[1].join(" "), /--allow-repository-suppressions/);
     assert.equal((await send({ allow_external_targets: "yes" })).status, 400);
+    assert.equal((await send({ allow_repository_suppressions: "yes" })).status, 400);
   } finally {
     await dashboard.close();
     await rm(repository, { recursive: true, force: true });
@@ -282,7 +339,7 @@ test("scanner setup instructions are session-protected and never install softwar
   try {
     assert.equal((await fetch(`${dashboard.origin}/api/setup`)).status, 401);
     const cookie = await session(dashboard);
-    const response = await fetch(`${dashboard.origin}/api/setup`, { headers: { cookie } });
+    const response = await fetch(`${dashboard.origin}/api/setup`, { headers: { authorization: cookie } });
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), {
       instructions: "Review first\nbrew install semgrep",
@@ -314,7 +371,7 @@ test("draft PR publishing requires a separate confirmation and a current exact a
     const cookie = await session(dashboard);
     const send = async (confirmation, proposalDigest = digest) => await fetch(`${dashboard.origin}/api/publish`, {
       method: "POST",
-      headers: { "content-type": "application/json", origin: dashboard.origin, cookie },
+      headers: { "content-type": "application/json", origin: dashboard.origin, authorization: cookie },
       body: JSON.stringify({ finding_id: findingId, proposal_digest: proposalDigest, confirmation }),
     });
     assert.equal((await send("yes")).status, 400);
@@ -360,10 +417,17 @@ test("guided GitHub App callbacks use one repository and restore the local sessi
   if (!dashboard) { await rm(repository, { recursive: true, force: true }); return; }
   try {
     const cookie = await session(dashboard);
-    const status = await (await fetch(`${dashboard.origin}/api/status`, { headers: { cookie } })).json();
+    const status = await (await fetch(`${dashboard.origin}/api/status`, { headers: { authorization: cookie } })).json();
     assert.deepEqual(status.publishing, { enabled: false, connectable: true, repository: "cisoventures/RepoRook", mode: "guided-app", app: null });
 
-    const connect = await fetch(`${dashboard.origin}/github/connect`, { headers: { cookie } });
+    const connectRequest = await fetch(`${dashboard.origin}/api/github/connect`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: dashboard.origin, authorization: cookie },
+      body: "{}",
+    });
+    assert.equal(connectRequest.status, 200);
+    const bridge = await connectRequest.json();
+    const connect = await fetch(`${dashboard.origin}${bridge.url}`);
     assert.equal(connect.status, 200);
     assert.match(connect.headers.get("content-security-policy"), /form-action https:\/\/github\.com/);
     const connectHtml = await connect.text();
@@ -378,11 +442,11 @@ test("guided GitHub App callbacks use one repository and restore the local sessi
     const installCallback = await fetch(`${dashboard.origin}/github/install/callback?installation_id=12345&state=state-value`, { redirect: "manual" });
     assert.equal(installCallback.status, 303);
     assert.equal(installCallback.headers.get("location"), "/?github=connected");
-    assert.match(installCallback.headers.get("set-cookie"), /HttpOnly; SameSite=Strict/);
+    assert.equal(installCallback.headers.get("set-cookie"), null);
 
     const disconnect = await fetch(`${dashboard.origin}/api/github/disconnect`, {
       method: "POST",
-      headers: { "content-type": "application/json", origin: dashboard.origin, cookie },
+      headers: { "content-type": "application/json", origin: dashboard.origin, authorization: cookie },
       body: JSON.stringify({ confirmation: "disconnect repository-only GitHub App" }),
     });
     assert.equal(disconnect.status, 200);
