@@ -41,7 +41,7 @@ Suggested urgency:
 
 ## 5. Release safely
 
-- Patch the latest supported pre-1.0 minor and update every affected package version consistently.
+- Patch the latest supported `1.x` line and update every affected package version consistently.
 - Use the existing reviewed GitHub release and npm trusted-publishing workflow; do not introduce a temporary broad token.
 - Prepare upgrade and mitigation instructions before public disclosure.
 - When appropriate, request a CVE through the private GitHub advisory and coordinate timing and credit with the reporter.

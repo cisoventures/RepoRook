@@ -229,6 +229,13 @@ $("scan-button").addEventListener("click", async () => {
   try { state.job = await api("/api/scan", { method: "POST", body: JSON.stringify({ allow_external_targets: allowExternalTargets, allow_repository_suppressions: allowRepositorySuppressions }) }); renderJob(); showMessage("Scan started. The dashboard will update when deterministic evidence is ready."); }
   catch (error) { showMessage(error.message, true); }
 });
+$("logout-button").addEventListener("click", async () => {
+  try { await api("/api/logout", { method: "POST", body: "{}" }); }
+  finally {
+    sessionStorage.removeItem("reporook_session");
+    location.replace("/");
+  }
+});
 $("setup-button").addEventListener("click", async () => {
   const button = $("setup-button");
   button.disabled = true;
@@ -261,7 +268,7 @@ export function dashboardHtml(): string {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RepoRook Service</title><link rel="stylesheet" href="/assets/app.css"></head>
 <body><main class="shell">
-<header><div class="brand"><div class="rook" aria-hidden="true">♜</div><div><h1>RepoRook</h1><p class="muted">Security guidance in plain English, with approval before code changes.</p></div></div><div class="actions"><span id="job" class="muted">Connecting…</span><button id="scan-button" type="button">Run security scan</button></div></header>
+<header><div class="brand"><div class="rook" aria-hidden="true">♜</div><div><h1>RepoRook</h1><p class="muted">Security guidance in plain English, with approval before code changes.</p></div></div><div class="actions"><span id="job" class="muted">Connecting…</span><button id="scan-button" type="button">Run security scan</button><button id="logout-button" class="secondary" type="button">End session</button></div></header>
 <div id="message" class="notice hidden" role="status"></div>
 <section class="card"><label><input id="allow-external-targets" type="checkbox"> Allow configured container-image registry access for this scan</label><p class="muted">Checked-in configuration cannot grant this permission by itself. RepoRook does not pass generic Trivy username or password environment variables to registry requests.</p><label><input id="allow-repository-suppressions" type="checkbox"> Trust this repository's reviewed suppression file for this scan</label><p class="muted">Leave this clear until you have reviewed every entry in reporook-suppressions.json. Repository content cannot suppress findings by itself.</p></section>
 <section id="onboard" class="card hidden"><h2>Finish setup</h2><p>RepoRook detected this project and can create a conservative configuration plus ignore its local evidence directory. It will not install system software or edit application code.</p><button id="onboard-button" type="button">Initialize RepoRook</button></section>

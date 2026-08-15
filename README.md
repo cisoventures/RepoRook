@@ -16,7 +16,7 @@ RepoRook supplies deterministic evidence with a plain-English explanation for ev
 
 Requirements: Node.js 20 or later. RepoRook orchestrates Semgrep, Gitleaks, `npm audit`, `pip-audit`, OSV-Scanner, Checkov, and Trivy when applicable.
 
-By default Semgrep downloads the public `p/default` rule bundle and runs it with metrics disabled. Set `semgrepConfig` to a pinned local rules file when you need fully offline or byte-for-byte reproducible source scans.
+By default Semgrep downloads the public `p/default` rule bundle and runs it with metrics disabled. A trusted caller can select a pinned local rules file with `--semgrep-config PATH` (or the matching Action input) for fully offline or byte-for-byte reproducible source scans. Checked-in configuration cannot choose different rules by itself.
 
 Install RepoRook yourself once after reviewing the packages:
 
@@ -72,13 +72,16 @@ jobs:
   security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-      - uses: cisoventures/RepoRook@v0.9.3
+          persist-credentials: false
+      - uses: cisoventures/RepoRook@d4efe3df3cedb49c7af7bc5162fca820be8684aa # v1.0.0 source pin
         with:
           fail-on: high
           mode: diff
+          # Set true only after reviewing reporook-suppressions.json.
+          allow-repository-suppressions: false
 ```
 
 The Action installs pinned scanners, updates one PR comment with policy dispositions and the guided fix queue, uploads SARIF, preserves the full scan and priority receipts, and enforces the configured threshold after reporting.
@@ -105,7 +108,7 @@ Create `reporook.yml`:
 ```yaml
 failOn: high
 outputDir: .reporook
-semgrepConfig: p/default # or a pinned local Semgrep rules file
+semgrepConfig: p/default # repository configuration may retain only this safe default
 gitHistory: false # opt in only when you intend to scan past commits
 containerImages: [] # explicit refs only; RepoRook never guesses or builds images
 cacheEnabled: true # successful scanner checkpoints only
@@ -132,11 +135,13 @@ pathPolicies:
   src/payments/**: medium
 ```
 
-Configuration is validated strictly: unknown scanner names, invalid value types, unknown keys, a scanner that is both required and disabled, and a path rule that weakens the global threshold are errors rather than silent fallbacks. Configuration files must be regular, non-symbolic-link files inside the repository and are capped at 1 MiB; an explicitly requested missing file is an error rather than a fallback to defaults. Baseline and suppression files are repository-relative, reviewable JSON. Missing policy files fail safe by making findings actionable rather than hiding them.
+Configuration is validated strictly: unknown scanner names, invalid value types, unknown keys, a scanner that is both required and disabled, and a path rule that weakens the global threshold are errors rather than silent fallbacks. Configuration files must be regular, non-symbolic-link files inside the repository and are capped at 1 MiB; an explicitly requested missing file is an error rather than a fallback to defaults. Baseline and suppression files are repository-relative, reviewable JSON. A checked-in suppression file is ignored unless the trusted invocation explicitly passes `--allow-repository-suppressions` (or the matching MCP, service, or Action option). Missing or unauthorized policy files fail safe by making findings actionable rather than hiding them.
 
 An optional organization policy is a committed, repository-relative YAML or JSON profile. It sets a minimum global threshold, required scanners, and sensitive-path thresholds. Repository configuration may tighten those values but cannot weaken them or disable a profile-required scanner. RepoRook validates the file without following symbolic links and binds its content hash into policy evidence and the scan receipt. See [team policy](docs/TEAM_POLICY.md).
 
 Checkov runs with uploads and external downloads disabled and ignores repository-supplied Checkov configuration. Trivy requires both an explicit `containerImages` target and per-invocation authorization with `--allow-external-targets`; checked-in configuration cannot grant registry access by itself. RepoRook strips generic `TRIVY_USERNAME` and `TRIVY_PASSWORD` values from Trivy and supports private registries through host-scoped Docker credentials. Tags work, but immutable digest references are safer. Git-history scanning is off by default because it expands scope and runtime. See [Infrastructure, container, and history scanning](docs/INFRASTRUCTURE.md).
+
+Non-default Semgrep aliases, URLs, and local files are also operator choices supplied with `--semgrep-config`; remote selections require `--allow-external-targets`. RepoRook records the selection, source, network status, and a digest for local rules in the scan receipt.
 
 Successful per-scanner results are checkpointed under `.reporook/cache/` only for a clean Git commit and reused for at most 15 minutes by default. The key binds the commit, RepoRook and scanner versions, normalized configuration, and changed-file scope, while a host-local HMAC key outside the repository prevents repository content from forging a successful checkpoint. Dirty relevant files, authentication failures, configuration or version changes, stale or malformed records, `--refresh-cache`, and `verify` all force a fresh scanner run. Errors and unavailable scanners are never cached. Use `--no-cache` for a cache-free scan or `--cache-ttl MINUTES` for a bounded one-run freshness override.
 
@@ -153,11 +158,13 @@ Changed-file scans plan work per adapter. Semgrep, OSV-Scanner, `npm audit`, `pi
 - `.reporook/agent-review.json`: optional, separately attributed host-agent analysis
 - `.reporook/remediations/FINDING_ID/plan.json`: finding- and source-scan-bound remediation requirements
 - `.reporook/remediations/FINDING_ID/proposal.json`: exact diff, file list, behavior impact, and test-plan template
-- `.reporook/remediations/FINDING_ID/approval.json`: durable hashes binding the approved plan, patch, files, and tests
+- `.reporook/remediations/FINDING_ID/approval.json`: an authenticated receipt binding the approved plan, exact patch, files, and tests
 - `.reporook/remediations/FINDING_ID/fix-prompt.txt`: copy-ready exact-preview and approval workflow
 - `.reporook/verifications/FINDING_ID/verification.json`: preserved before/after scanner-resolution receipt
 
 The v1 schemas are in [`schemas/`](schemas/). Finding IDs intentionally exclude line numbers so inserting code above a finding does not change its identity.
+
+Findings and approvals are authenticated with a repository-bound HMAC before CLI, MCP, or service consumers trust them. The default key lives outside the repository at `$XDG_CACHE_HOME/reporook/artifact-auth-key` or `~/.cache/reporook/artifact-auth-key` with owner-only permissions. Automation crossing process or container boundaries may inject the same secret `REPOROOK_AUTH_KEY` (at least 32 bytes); never commit or print it.
 
 ## Agent integrations
 
@@ -207,7 +214,7 @@ Native packages live under [`adapters/`](adapters/). Every host receives the sam
 | RepoRook priority | Deterministic severity-based scheduling guidance for a reported finding |
 | Team-policy disposition | Deterministic new/baseline/suppressed/below-threshold decision, kept separate from scanner evidence |
 | Remediation plan | A finding- and scan-bound workflow requiring an exact patch, test plan, and approval |
-| Approval receipt | Durable hashes proving which plan, patch, files, and tests a named approver accepted |
+| Approval receipt | Host-authenticated evidence of which plan, exact patch, files, and tests a named approver accepted |
 | Native-agent validated | A named host security reviewer validated context or attack path |
 | Agent hypothesis | Reasoning that has not been deterministically reproduced |
 | Scanner resolution passed | The original stable finding is absent after the patch |
@@ -224,8 +231,8 @@ npm run fixture:prepare
 node cli/dist/index.js scan test-fixtures/vulnerable-app --require-scanners
 ```
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), the [v1 compatibility policy](docs/COMPATIBILITY.md), [`docs/HARDENING.md`](docs/HARDENING.md), [`docs/SANDBOXING.md`](docs/SANDBOXING.md), the [`external review package`](docs/SECURITY_REVIEW.md), the [`security response runbook`](docs/SECURITY_RESPONSE.md), [`docs/SERVICE.md`](docs/SERVICE.md), [`docs/TEAM_POLICY.md`](docs/TEAM_POLICY.md), [`docs/ADAPTERS.md`](docs/ADAPTERS.md), [`docs/AGENT_SETUP.md`](docs/AGENT_SETUP.md), the [`roadmap`](docs/ROADMAP.md), and [`CONTRIBUTING.md`](CONTRIBUTING.md).
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), the [v1 compatibility policy](docs/COMPATIBILITY.md), [`docs/HARDENING.md`](docs/HARDENING.md), [`docs/SANDBOXING.md`](docs/SANDBOXING.md), the [`external review package`](docs/SECURITY_REVIEW.md), the [v1 remediation ledger](docs/SECURITY_REMEDIATION.md), the [`security response runbook`](docs/SECURITY_RESPONSE.md), [`docs/SERVICE.md`](docs/SERVICE.md), [`docs/TEAM_POLICY.md`](docs/TEAM_POLICY.md), [`docs/ADAPTERS.md`](docs/ADAPTERS.md), [`docs/AGENT_SETUP.md`](docs/AGENT_SETUP.md), the [`roadmap`](docs/ROADMAP.md), and [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Project status
 
-The repository contains the v0.9 hardening baseline: hostile configuration and path boundaries, deterministic parser fuzzing, bounded scanner, MCP, service, and integration inputs, fail-closed malformed-output handling, documented sandbox expectations, an external-review package, and a security response runbook. It builds on the v0.8 scale-and-reliability architecture and the local no-code service's one-repository GitHub App boundary. The v1 release-candidate public surface is captured in [`contracts/v1.json`](contracts/v1.json) and enforced during tests; it becomes the stable compatibility promise when v1.0 ships. Independent external review and remote multi-user service operation remain future work.
+The v1 source has a stable machine-checked public contract in [`contracts/v1.json`](contracts/v1.json), six-host agent parity, and remediations for the accepted findings from its independent external review. Release remains gated on an independent regression re-review of those remediations and the protected CI/release checks. Remote multi-user service operation remains outside v1; the included service is loopback-only and repository-scoped.

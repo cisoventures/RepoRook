@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Security fixes are applied to the latest released minor version. This project is pre-1.0; pin releases in CI and review changelogs before upgrading.
+Security fixes are applied to the latest supported `1.x` release. Pin GitHub Actions by full commit SHA, keep npm versions exact in security-sensitive automation, and review changelogs before upgrading.
 
 ## Reporting a vulnerability
 
@@ -30,12 +30,14 @@ The project is community-maintained with no SLA. Maintainers will coordinate val
 - Never preserve or print raw detected secret values.
 - Never call partial or failed coverage clean.
 - Never let host-agent opinions silently alter deterministic findings.
+- Never trust a findings or approval artifact solely because repository-controlled JSON matches a schema; verify host authentication and repository binding first.
 - Never apply application patches from the CLI or MCP server.
 - Never let the CLI, MCP server, local service, generated agent configuration, or hooks download, install, or update executable software. Setup surfaces display instructions only.
 - Generated integrations invoke only already-installed `reporook` and `reporook-mcp` binaries. A missing binary must fail visibly instead of falling back to a package bootstrapper such as `npx`.
 - Never report a fix as verified unless the original scanner completed under an equivalent configuration.
 - Keep finding and artifact paths inside the selected repository.
 - Use argument arrays rather than shell interpolation for scanner execution.
+- Never let checked-in configuration choose non-default Semgrep network rules, authorize external targets, or activate repository suppressions without a trusted per-invocation decision.
 - Restrict scanner downloads to explicit CI Action execution on an ephemeral runner; pin and checksum every downloaded CI scanner binary before execution. Python scanners require a repository-owned, fully resolved `--require-hashes` lock and wheel-only installation; without it, the Action must not install or execute them and required coverage fails closed.
 
 ## Reportable findings

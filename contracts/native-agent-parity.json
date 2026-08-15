@@ -1,6 +1,6 @@
 {
   "contract_version": "1.0",
-  "status": "release-candidate",
+  "status": "stable",
   "canonical_skill": "adapters/shared/skills/reporook-security/SKILL.md",
   "required_skill_assertions": [
     "Never merge those trust levels silently.",

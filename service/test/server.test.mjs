@@ -196,6 +196,8 @@ test("dashboard explains incomplete coverage and offers non-installing setup gui
   assert.match(html, /allow-repository-suppressions/);
   assert.match(dashboardJs, /allow_repository_suppressions/);
   assert.match(dashboardJs, /allow-repository-suppressions"\)\.checked = false/);
+  assert.match(html, /logout-button/);
+  assert.match(dashboardJs, /sessionStorage\.removeItem\("reporook_session"\)/);
 });
 
 test("dashboard requires its fragment token and exposes only redacted finding fields", async (context) => {
@@ -217,17 +219,21 @@ test("dashboard requires its fragment token and exposes only redacted finding fi
     assert.equal(snapshot.findings[0].policy_status, "actionable");
     assert.equal(snapshot.approvals[0].finding_id, findingId);
 
-    const rotated = await session(dashboard);
-    assert.notEqual(rotated, cookie);
-    assert.equal((await fetch(`${dashboard.origin}/api/status`, { headers: { authorization: cookie } })).status, 401);
-    assert.equal((await fetch(`${dashboard.origin}/api/status`, { headers: { authorization: rotated } })).status, 200);
+    assert.equal((await fetch(`${dashboard.origin}/api/status`, { headers: { authorization: "Bearer session-test-token" } })).status, 401);
+    const replay = await fetch(`${dashboard.origin}/api/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: dashboard.origin },
+      body: JSON.stringify({ token: "bootstrap-test-token" }),
+    });
+    assert.equal(replay.status, 401);
+    assert.equal((await fetch(`${dashboard.origin}/api/status`, { headers: { authorization: cookie } })).status, 200);
     const logout = await fetch(`${dashboard.origin}/api/logout`, {
       method: "POST",
-      headers: { "content-type": "application/json", origin: dashboard.origin, authorization: rotated },
+      headers: { "content-type": "application/json", origin: dashboard.origin, authorization: cookie },
       body: "{}",
     });
     assert.equal(logout.status, 200);
-    assert.equal((await fetch(`${dashboard.origin}/api/status`, { headers: { authorization: rotated } })).status, 401);
+    assert.equal((await fetch(`${dashboard.origin}/api/status`, { headers: { authorization: cookie } })).status, 401);
   } finally {
     await dashboard.close();
     await rm(repository, { recursive: true, force: true });

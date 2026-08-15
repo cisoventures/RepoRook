@@ -137,13 +137,16 @@ jobs:
   security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-      - uses: cisoventures/RepoRook@v0.9.3
+          persist-credentials: false
+      - uses: cisoventures/RepoRook@d4efe3df3cedb49c7af7bc5162fca820be8684aa # v1.0.0 source pin
         with:
           fail-on: high
           mode: diff
+          # Set true only after reviewing reporook-suppressions.json.
+          allow-repository-suppressions: false
 ```
 
 The Action installs pinned scanners, comments with policy dispositions and the guided fix queue, uploads SARIF, preserves scan and priority receipts, and fails closed when required coverage is unavailable.

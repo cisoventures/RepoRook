@@ -18,6 +18,17 @@ test("privileged release workflows do not self-install npm from the registry", a
   await assert.rejects(access(".github/workflows/bootstrap-service-v0.9.0.yml"), /ENOENT/);
 });
 
+test("published Action examples use immutable source revisions", async () => {
+  const paths = ["README.md", "action/README.md", "docs/QUICKSTART.md"];
+  for (const path of paths) {
+    const document = await readFile(path, "utf8");
+    assert.doesNotMatch(document, /uses:\s+[^\s]+@(?:v|main|master|latest)/);
+    assert.match(document, /actions\/checkout@[0-9a-f]{40} # v7/);
+    assert.match(document, /cisoventures\/RepoRook@d4efe3df3cedb49c7af7bc5162fca820be8684aa # v1\.0\.0 source pin/);
+    assert.match(document, /persist-credentials: false/);
+  }
+});
+
 test("the repository self-scan executes pull-request code without write permissions", async () => {
   const workflow = await readFile(".github/workflows/reporook-example.yml", "utf8");
   assert.match(workflow, /permissions:\n  contents: read/);

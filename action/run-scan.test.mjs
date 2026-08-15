@@ -74,7 +74,7 @@ test("stale or hostile findings cannot inject Action outputs", { skip: process.p
   }
 });
 
-test("external target approval is forwarded only by the explicit Action input", { skip: process.platform === "win32" }, async () => {
+test("operator scan authority is forwarded only by explicit Action inputs", { skip: process.platform === "win32" }, async () => {
   const root = await mkdtemp(join(tmpdir(), "reporook-action-external-targets-"));
   const actionRoot = join(root, "action-root");
   const workspace = join(root, "workspace");
@@ -86,8 +86,16 @@ test("external target approval is forwarded only by the explicit Action input", 
     const stub = join(actionRoot, "cli", "dist", "index.js");
     await writeFile(stub, "#!/usr/bin/env node\nrequire('node:fs').writeFileSync(process.env.REPOROOK_TEST_ARGS, JSON.stringify(process.argv.slice(2)));\n");
     await chmod(stub, 0o755);
-    await execute("bash", [resolve("action/run-scan.sh")], { env: { ...process.env, GITHUB_ACTION_PATH: actionRoot, GITHUB_WORKSPACE: workspace, GITHUB_OUTPUT: output, INPUT_MODE: "full", INPUT_ALLOW_EXTERNAL_TARGETS: "true", REPOROOK_TEST_ARGS: argsPath } });
-    assert.ok(JSON.parse(await readFile(argsPath, "utf8")).includes("--allow-external-targets"));
+    await execute("bash", [resolve("action/run-scan.sh")], { env: { ...process.env, GITHUB_ACTION_PATH: actionRoot, GITHUB_WORKSPACE: workspace, GITHUB_OUTPUT: output, INPUT_MODE: "full", INPUT_ALLOW_EXTERNAL_TARGETS: "true", INPUT_ALLOW_REPOSITORY_SUPPRESSIONS: "true", INPUT_SEMGREP_CONFIG: "security/semgrep.yml", REPOROOK_TEST_ARGS: argsPath } });
+    const approved = JSON.parse(await readFile(argsPath, "utf8"));
+    assert.ok(approved.includes("--allow-external-targets"));
+    assert.ok(approved.includes("--allow-repository-suppressions"));
+    assert.equal(approved[approved.indexOf("--semgrep-config") + 1], "security/semgrep.yml");
+
+    await execute("bash", [resolve("action/run-scan.sh")], { env: { ...process.env, GITHUB_ACTION_PATH: actionRoot, GITHUB_WORKSPACE: workspace, GITHUB_OUTPUT: output, INPUT_MODE: "full", INPUT_ALLOW_EXTERNAL_TARGETS: "yes", INPUT_ALLOW_REPOSITORY_SUPPRESSIONS: "yes", REPOROOK_TEST_ARGS: argsPath } });
+    const denied = JSON.parse(await readFile(argsPath, "utf8"));
+    assert.equal(denied.includes("--allow-external-targets"), false);
+    assert.equal(denied.includes("--allow-repository-suppressions"), false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

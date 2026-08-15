@@ -1,6 +1,6 @@
 # Team policy
 
-RepoRook v0.5 keeps scanner evidence separate from team decisions. Findings remain unchanged in `.reporook/findings.json`; the adjacent `policy` object records whether each finding is actionable, already baselined, temporarily suppressed, or below the effective threshold.
+RepoRook v1 keeps scanner evidence separate from team decisions. Findings remain unchanged in `.reporook/findings.json`; the adjacent `policy` object records whether each finding is actionable, already baselined, temporarily suppressed, or below the effective threshold.
 
 ## Gate only new findings
 
@@ -26,7 +26,15 @@ reporook suppress FINDING_ID . \
   --expires 2026-08-31
 ```
 
-This writes or updates `reporook-suppressions.json`. Commit the file so reviewers can audit the decision. Expired suppressions never disappear: RepoRook reports them as expired and evaluates matching findings normally. Suppression does not mean fixed.
+This writes or updates `reporook-suppressions.json`. Each suppression binds the finding ID and full evidence fingerprint, so a changed finding cannot inherit an old exception. Commit the file so reviewers can audit the decision. Expired suppressions never disappear: RepoRook reports them as expired and evaluates matching findings normally. Suppression does not mean fixed.
+
+A repository cannot activate its own exceptions. After reviewing the committed file, a trusted invocation must opt in for that scan:
+
+```bash
+reporook scan . --require-scanners --allow-repository-suppressions
+```
+
+The equivalent controls are `allow_repository_suppressions: true` in MCP, the unchecked dashboard control, and `allow-repository-suppressions: true` in the Action. Without that explicit choice, matching findings remain actionable.
 
 ## Tighten sensitive paths
 
@@ -86,7 +94,7 @@ reporook approve FINDING_ID . \
   --reason "Reviewed the exact patch and regression plan"
 ```
 
-The resulting `approval.json` hashes the plan, proposal, patch, file list, and test plan. Any change invalidates the receipt. `reporook verify` validates and attaches the receipt when present, while still reporting functional tests separately from scanner resolution.
+The resulting `approval.json` binds the plan, proposal, patch, file list, test plan, approver, and reason, then authenticates that receipt with RepoRook's host-local HMAC key. Any change, copied receipt, or repository substitution invalidates it. The default key is created at `$XDG_CACHE_HOME/reporook/artifact-auth-key` or `~/.cache/reporook/artifact-auth-key` with owner-only permissions; automation may supply a secret `REPOROOK_AUTH_KEY` of at least 32 bytes. Never commit or print that key. `reporook verify` validates and attaches the receipt when present, while still reporting functional tests separately from scanner resolution.
 
 ## Exit behavior
 

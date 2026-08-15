@@ -14,7 +14,7 @@ Every subprocess is launched directly with an argument array and `shell: false`.
 | npm audit | Reads the root lockfile and npm configuration | Registry access is normally required | Direct `npm audit --json`; bounded output and runtime | Private-registry credentials available to npm remain available to this child process |
 | pip-audit | Reads root Python requirements or lock data | Package-index and advisory access may be required | Explicit input and JSON output; bounded output and runtime | Index configuration and credentials available to pip tooling remain in scope |
 | OSV-Scanner | Reads explicitly discovered complementary lockfiles | OSV/advisory access may be required | Explicit `--lockfile` arguments; bounded discovery, output, and runtime | Advisory freshness and availability remain external dependencies |
-| Checkov | Reads selected infrastructure and workflow files; writes only a trusted temporary config | External policy, module, and result-upload access is disabled | Repository config ignored; uploads/downloads disabled; API and VCS tokens removed from the child environment | Built-in local policy coverage is scanner-owned and pre-1.0 |
+| Checkov | Reads selected infrastructure and workflow files; writes only a trusted temporary config | External policy, module, and result-upload access is disabled | Repository config ignored; uploads/downloads disabled; API and VCS tokens removed from the child environment | Built-in local policy coverage remains scanner-owned |
 | Trivy image | Reads only explicitly configured and invocation-authorized image references; cache is in a private temporary directory | Registry and vulnerability-database access are normally required | Default-deny `--allow-external-targets` gate; trusted temporary config/cache; generic Trivy username/password stripped; bounded image count/output/runtime | Private registry access should use Docker's host-scoped credential configuration |
 
 ## Host boundaries
@@ -29,4 +29,4 @@ The MCP server accepts at most 1 MiB per JSON-RPC message. It caps one RepoRook 
 - Prefer pinned scanner versions, pinned local Semgrep rules, immutable container digests, and read-only network egress to required registries and advisory services.
 - Treat scanner installation and advisory/rule databases as supply-chain inputs. RepoRook's GitHub Action checks downloaded native binaries against repository-owned digests. Python scanners are installed only from a repository-owned, fully resolved pip hash lock in wheel-only mode; releases without that lock leave them unavailable and required coverage fails closed.
 
-These expectations are part of the v0.9 hardening contract and should be reviewed again before v1.0 or whenever a scanner gains a new execution or network capability.
+These expectations are part of the v1 security contract and must be reviewed whenever a scanner gains a new execution or network capability.

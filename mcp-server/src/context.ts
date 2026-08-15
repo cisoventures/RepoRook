@@ -7,6 +7,8 @@ import type { Finding, ScanReport } from "reporook/schema";
 
 const maximumReportBytes = 10 * 1024 * 1024;
 const maximumSourceBytes = 1024 * 1024;
+const maximumContextBytes = 64 * 1024;
+const maximumContextLineCharacters = 2_000;
 
 export type FindingRecord = Finding;
 
@@ -90,8 +92,16 @@ export async function codeContext(target: string, finding: FindingRecord, radius
   const lines = source.split(/\r?\n/);
   const start = Math.max(1, Number(finding.line || 1) - radius);
   const end = Math.min(lines.length, Number(finding.line || 1) + radius);
-  const selected = lines.slice(start - 1, end).map((line, index) => `${String(start + index).padStart(5, " ")} | ${line}`).join("\n");
-  return { start_line: start, end_line: end, code: selected };
+  const selected = lines.slice(start - 1, end).map((line, index) => {
+    const neutralized = line.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "�");
+    const bounded = neutralized.length <= maximumContextLineCharacters ? neutralized : `${neutralized.slice(0, maximumContextLineCharacters - 1)}…`;
+    return `${String(start + index).padStart(5, " ")} | ${bounded}`;
+  }).join("\n");
+  const bytes = Buffer.from(selected, "utf8");
+  const code = bytes.byteLength <= maximumContextBytes
+    ? selected
+    : `${new TextDecoder("utf-8").decode(bytes.subarray(0, maximumContextBytes - 3))}…`;
+  return { start_line: start, end_line: end, code };
 }
 
 export async function findingContext(target: string, finding: FindingRecord, radius = 8): Promise<{ start_line: number; end_line: number; code: string } | null> {

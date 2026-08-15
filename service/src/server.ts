@@ -132,6 +132,7 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
   const store = await RepositoryStore.open(options.repository);
   const cli = options.cliRunner ?? runRepoRook;
   const bootstrapToken = options.bootstrapToken ?? randomBytes(32).toString("base64url");
+  let bootstrapAvailable = true;
   let sessionToken = options.sessionToken ?? randomBytes(32).toString("base64url");
   if (options.publisher && options.githubApp) throw new Error("Configure either a static GitHub publisher or guided GitHub App onboarding, not both");
   const publisher = options.publisher;
@@ -159,7 +160,8 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
       if (method === "POST" && url.pathname === "/api/session") {
         if (request.headers.origin !== origin) throw new HttpError(403, "Origin check failed");
         const input = await body(request);
-        if (typeof input.token !== "string" || !equalSecret(input.token, bootstrapToken)) throw new HttpError(401, "Invalid dashboard token");
+        if (!bootstrapAvailable || typeof input.token !== "string" || !equalSecret(input.token, bootstrapToken)) throw new HttpError(401, "Invalid or already used dashboard token");
+        bootstrapAvailable = false;
         sessionToken = randomBytes(32).toString("base64url");
         return json(response, 200, { authenticated: true, session_token: sessionToken });
       }

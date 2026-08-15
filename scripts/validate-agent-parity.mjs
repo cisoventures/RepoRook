@@ -17,6 +17,8 @@ function assertEqual(label, actual, expected) {
   assert(isDeepStrictEqual(actual, expected), `${label} drifted:\nexpected ${JSON.stringify(expected, null, 2)}\nactual   ${JSON.stringify(actual, null, 2)}`);
 }
 
+assertEqual("agent parity contract status", contract.status, "stable");
+
 function absolute(path) {
   const target = resolve(root, path);
   const traversal = relative(root, target);

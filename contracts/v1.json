@@ -1,6 +1,6 @@
 {
   "contract_version": "1.0",
-  "status": "release-candidate",
+  "status": "stable",
   "packages": [
     {
       "path": "cli/package.json",
