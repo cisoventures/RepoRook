@@ -141,7 +141,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: cisoventures/RepoRook@d4efe3df3cedb49c7af7bc5162fca820be8684aa # v1.0.0 source pin
+      - uses: cisoventures/RepoRook@755ff83b9d341b2b9a1cb528dd068545c1e136fc # v1.0.0 source pin
         with:
           fail-on: high
           mode: diff
