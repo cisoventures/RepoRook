@@ -74,6 +74,28 @@ process.stdout.write("{}\\n");
   }
 });
 
+test("external target approval reaches the CLI only when explicitly requested", async () => {
+  const { root, child, responses } = await serverWithStub(`
+import { appendFileSync } from "node:fs";
+appendFileSync(process.env.REPOROOK_TEST_ROOT + "/calls.txt", process.argv.slice(2).join(" ") + "\\n");
+process.stdout.write(JSON.stringify(${JSON.stringify(validReport("__TARGET__"))}.replaceAll("__TARGET__", process.env.REPOROOK_TEST_ROOT)) + "\\n");
+`);
+  try {
+    child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "scan_repository", arguments: { path: root, allow_external_targets: true } } })}\n`);
+    child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "scan_repository", arguments: { path: root } } })}\n`);
+    await waitFor(responses, 2);
+    child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "verify_fix", arguments: { finding_id: "rr-0123456789ab", repository_path: root, allow_external_targets: true } } })}\n`);
+    await waitFor(responses, 3);
+    const calls = (await readFile(join(root, "calls.txt"), "utf8")).trim().split("\n");
+    assert.equal(calls.filter((call) => call.includes("--allow-external-targets")).length, 2);
+    assert.equal(calls.filter((call) => !call.includes("--allow-external-targets")).length, 1);
+    assert.ok(calls.some((call) => call.startsWith("verify ") && call.includes("--allow-external-targets")));
+  } finally {
+    child.kill("SIGTERM");
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("stdio tool calls have a hard in-flight concurrency bound", async () => {
   const { root, child, responses } = await serverWithStub(`
 await new Promise((resolve) => setTimeout(resolve, 150));

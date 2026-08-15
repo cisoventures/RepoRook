@@ -27,7 +27,16 @@ requiredScanners:
   - trivy-image
 ```
 
-Trivy may use a local Docker-compatible image or pull from its configured registry sources. Pulling can require network access and registry credentials, so adding the target is an explicit scope decision. Prefer an immutable digest over a moving tag. Container findings remain visible in full and diff scans because they are external artifacts, not current repository paths.
+Repository configuration selects the image but does not authorize registry access. Review the configured targets and approve them for one invocation:
+
+```bash
+reporook scan . --allow-external-targets
+reporook verify FINDING_ID . --allow-external-targets
+```
+
+Without that flag RepoRook exits `2` before any scanner runs. The MCP tools use the default-false `allow_external_targets` argument, the local service exposes an unchecked approval box for each scan, and the Action uses the default-false `allow-external-targets` input. Automatic agent hooks never add the approval flag.
+
+Trivy may use a local Docker-compatible image or pull from its configured registry sources. Pulling can require network access and registry credentials. RepoRook always removes the generic `TRIVY_USERNAME` and `TRIVY_PASSWORD` environment variables from Trivy version probes and scans because Trivy can send them to every registry it encounters. For a private registry, authenticate that specific host with Docker (for example, `docker login ghcr.io`) and let Trivy use the resulting host-scoped Docker configuration. Prefer an immutable digest over a moving tag. The receipt records the exact authorized image references under `scan_receipt.external_targets`; container findings remain visible in full and diff scans because they are external artifacts, not current repository paths.
 
 ## Opt-in Git history
 
@@ -43,4 +52,4 @@ Historical findings remain visible in a diff scan because their source is an old
 
 ## Coverage behavior
 
-An applicable missing or crashed scanner makes coverage partial or failed. `--require-scanners` turns any applicable scanner failure into exit `2`. `trivy-image` is non-applicable when `containerImages` is empty, and configuration rejects making it required without at least one target.
+An applicable missing or crashed scanner makes coverage partial or failed. `--require-scanners` turns any applicable scanner failure into exit `2`. `trivy-image` is non-applicable when `containerImages` is empty, configuration rejects making it required without at least one target, and a configured target without invocation-time authorization fails before execution.

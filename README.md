@@ -136,7 +136,7 @@ Configuration is validated strictly: unknown scanner names, invalid value types,
 
 An optional organization policy is a committed, repository-relative YAML or JSON profile. It sets a minimum global threshold, required scanners, and sensitive-path thresholds. Repository configuration may tighten those values but cannot weaken them or disable a profile-required scanner. RepoRook validates the file without following symbolic links and binds its content hash into policy evidence and the scan receipt. See [team policy](docs/TEAM_POLICY.md).
 
-Checkov runs with uploads and external downloads disabled and ignores repository-supplied Checkov configuration. Trivy runs only when `containerImages` contains an explicit target; tags work, but immutable digest references are safer. Git-history scanning is off by default because it expands scope and runtime. See [Infrastructure, container, and history scanning](docs/INFRASTRUCTURE.md).
+Checkov runs with uploads and external downloads disabled and ignores repository-supplied Checkov configuration. Trivy requires both an explicit `containerImages` target and per-invocation authorization with `--allow-external-targets`; checked-in configuration cannot grant registry access by itself. RepoRook strips generic `TRIVY_USERNAME` and `TRIVY_PASSWORD` values from Trivy and supports private registries through host-scoped Docker credentials. Tags work, but immutable digest references are safer. Git-history scanning is off by default because it expands scope and runtime. See [Infrastructure, container, and history scanning](docs/INFRASTRUCTURE.md).
 
 Successful per-scanner results are checkpointed under `.reporook/cache/` only for a clean Git commit and reused for at most 15 minutes by default. The key binds the commit, RepoRook and scanner versions, normalized configuration, and changed-file scope, while a host-local HMAC key outside the repository prevents repository content from forging a successful checkpoint. Dirty relevant files, authentication failures, configuration or version changes, stale or malformed records, `--refresh-cache`, and `verify` all force a fresh scanner run. Errors and unavailable scanners are never cached. Use `--no-cache` for a cache-free scan or `--cache-ttl MINUTES` for a bounded one-run freshness override.
 
@@ -147,7 +147,7 @@ Changed-file scans plan work per adapter. Semgrep, OSV-Scanner, `npm audit`, `pi
 - `.reporook/findings.json`: deterministic normalized findings, including a jargon-free `plain_summary`
 - `.reporook/findings.json#policy`: new/baseline/suppressed/below-threshold disposition without modifying scanner evidence
 - `.reporook/results.sarif`: GitHub-compatible projection
-- `.reporook/scan-receipt.json`: commit, configuration hash, scanner versions, and coverage
+- `.reporook/scan-receipt.json`: commit, configuration hash, scanner versions, coverage, and any explicitly authorized external image targets
 - `.reporook/priorities.json`: deterministic fix-now, fix-next, and review-later queue
 - `.reporook/agent-prompt.txt`: copy-ready, approval-based instructions for any coding agent
 - `.reporook/agent-review.json`: optional, separately attributed host-agent analysis

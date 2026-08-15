@@ -26,7 +26,7 @@ export function strings(value: unknown): string[] {
 
 export async function scannerVersion(
   command: string,
-  options: Pick<CommandOptions, "env" | "timeoutMs"> = {},
+  options: Pick<CommandOptions, "env" | "unsetEnv" | "timeoutMs"> = {},
   args: string[] = ["--version"],
 ): Promise<string | null> {
   return await commandVersion(command, args, options);

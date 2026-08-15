@@ -55,6 +55,10 @@ export interface ScanReceipt {
   completed_at: string;
   changed_files?: string[];
   scanner_scopes?: Record<string, ScannerScope>;
+  external_targets?: {
+    authorized: true;
+    container_images: string[];
+  };
 }
 
 export type ScannerScope = "repository" | "changed-files" | "external-targets" | "not-applicable";
@@ -334,6 +338,7 @@ export interface ScanOptions {
   cacheEnabled?: boolean;
   refreshCache?: boolean;
   cacheTtlMs?: number;
+  allowExternalTargets?: boolean;
 }
 
 export interface ScannerContext {

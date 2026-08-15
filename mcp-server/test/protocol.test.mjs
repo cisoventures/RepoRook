@@ -31,6 +31,9 @@ test("stdio server negotiates MCP and exposes all tools", async () => {
   assert.equal(responses[1].result.tools.some((tool) => /install|download|setup|update_software/.test(tool.name)), false);
   assert.match(responses[0].result.instructions, /exact patch and test plan/);
   assert.equal(responses[1].result.tools.find((tool) => tool.name === "verify_fix").inputSchema.properties.require_scanners.default, true);
+  for (const name of ["scan_repository", "scan_changes", "verify_fix"]) {
+    assert.equal(responses[1].result.tools.find((tool) => tool.name === name).inputSchema.properties.allow_external_targets.default, false);
+  }
   assert.ok(responses[1].result.tools.find((tool) => tool.name === "create_findings_baseline").inputSchema.required.includes("confirmed"));
   assert.ok(responses[1].result.tools.find((tool) => tool.name === "get_policy_status").inputSchema.required.includes("repository_path"));
   assert.ok(responses[1].result.tools.find((tool) => tool.name === "list_findings").inputSchema.required.includes("repository_path"));

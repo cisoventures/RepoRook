@@ -4,7 +4,7 @@
 
 `schemas/policy-evaluation.schema.json` is the separate deterministic team decision layer. It marks each stable finding as new, existing in the reviewed baseline, actively suppressed, or below its effective global/path threshold. `schemas/baseline.schema.json` and `schemas/suppressions.schema.json` define the committed review inputs; suppressions require an owner, reason, and expiry.
 
-In changed-file mode, `scan_receipt.scanner_scopes` records whether each adapter ran over the repository, selected changed files, explicit external targets, or no applicable target. This makes incremental execution independently reviewable. When an organization profile is active, `policy.organization_policy` records its name, repository-relative path, and content hash; the same hash contributes to `scan_receipt.config_hash`.
+In changed-file mode, `scan_receipt.scanner_scopes` records whether each adapter ran over the repository, selected changed files, explicit external targets, or no applicable target. When an invocation authorizes configured container images, `scan_receipt.external_targets` records `authorized: true` and the exact image references. Absence of that field is never evidence of authorization. This makes incremental and external execution independently reviewable. When an organization profile is active, `policy.organization_policy` records its name, repository-relative path, and content hash; the same hash contributes to `scan_receipt.config_hash`.
 
 `schemas/agent-review.schema.json` is the stochastic sidecar. Every review names its host, source scan, finding ID, validation status, evidence, and confidence. A host agent may reject or validate a finding but may not rewrite the original artifact or claim scanner resolution.
 

@@ -28,6 +28,8 @@ RepoRook follows semantic versioning for the covered public surfaces:
 
 Before v1.0, an intentional release-candidate contract change must update the implementation, `contracts/v1.json`, relevant documentation, tests, and changelog in the same pull request. The compatibility failure is not a snapshot-update instruction: reviewers must decide whether the change is additive, a migration, or an unintended break.
 
+The external-target authorization gate is an intentional pre-v1 security migration. Existing repositories with `containerImages` must add `--allow-external-targets` (CLI), `allow_external_targets: true` (MCP), the per-scan service checkbox, or `allow-external-targets: true` (Action) only at a trusted invocation boundary. Checked-in configuration alone no longer starts registry requests. Private registries must use host-scoped Docker credentials rather than generic Trivy username/password environment variables. Removing the flag restores the fail-closed behavior and is the safe rollback.
+
 ## Deprecation and migration
 
 After v1.0, a deprecated surface is announced in the changelog and its user-facing documentation. When practical, the old surface emits a clear warning and remains functional for at least one minor release. Removal occurs only in a major release.

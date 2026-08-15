@@ -7,6 +7,7 @@ button { border: 0; border-radius: .65rem; padding: .7rem 1rem; background: #64d
 button.secondary { background: #1c2a42; color: #d8e4ff; border: 1px solid #33486b; }
 button:disabled { opacity: .5; cursor: wait; }
 input, textarea { width: 100%; color: #edf2ff; background: #0d1627; border: 1px solid #304364; border-radius: .55rem; padding: .7rem; }
+input[type="checkbox"] { width: auto; accent-color: #64d7a0; }
 textarea { min-height: 5rem; resize: vertical; }
 code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 pre { overflow: auto; max-height: 24rem; padding: 1rem; background: #070b14; border: 1px solid #263653; border-radius: .65rem; white-space: pre-wrap; }
@@ -216,7 +217,9 @@ $("onboard-button").addEventListener("click", async () => {
   catch (error) { showMessage(error.message, true); }
 });
 $("scan-button").addEventListener("click", async () => {
-  try { state.job = await api("/api/scan", { method: "POST", body: "{}" }); renderJob(); showMessage("Scan started. The dashboard will update when deterministic evidence is ready."); }
+  const allowExternalTargets = $("allow-external-targets").checked;
+  $("allow-external-targets").checked = false;
+  try { state.job = await api("/api/scan", { method: "POST", body: JSON.stringify({ allow_external_targets: allowExternalTargets }) }); renderJob(); showMessage("Scan started. The dashboard will update when deterministic evidence is ready."); }
   catch (error) { showMessage(error.message, true); }
 });
 $("setup-button").addEventListener("click", async () => {
@@ -248,6 +251,7 @@ export function dashboardHtml(): string {
 <body><main class="shell">
 <header><div class="brand"><div class="rook" aria-hidden="true">♜</div><div><h1>RepoRook</h1><p class="muted">Security guidance in plain English, with approval before code changes.</p></div></div><div class="actions"><span id="job" class="muted">Connecting…</span><button id="scan-button" type="button">Run security scan</button></div></header>
 <div id="message" class="notice hidden" role="status"></div>
+<section class="card"><label><input id="allow-external-targets" type="checkbox"> Allow configured container-image registry access for this scan</label><p class="muted">Checked-in configuration cannot grant this permission by itself. RepoRook does not pass generic Trivy username or password environment variables to registry requests.</p></section>
 <section id="onboard" class="card hidden"><h2>Finish setup</h2><p>RepoRook detected this project and can create a conservative configuration plus ignore its local evidence directory. It will not install system software or edit application code.</p><button id="onboard-button" type="button">Initialize RepoRook</button></section>
 <section class="grid" aria-label="Repository summary">
   <article class="card wide"><h2 id="repo-name">Repository</h2><p id="repo-path" class="muted"></p><p><span id="configured" class="status"></span></p><p id="stacks"></p></article>

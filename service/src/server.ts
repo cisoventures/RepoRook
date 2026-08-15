@@ -124,6 +124,12 @@ function stringValue(input: unknown, label: string, minimum: number, maximum: nu
   return value;
 }
 
+function optionalBooleanValue(input: unknown, label: string): boolean {
+  if (input === undefined) return false;
+  if (typeof input !== "boolean") throw new HttpError(400, `${label} must be true or false`);
+  return input;
+}
+
 class HttpError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
 }
@@ -214,10 +220,11 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
         return json(response, 200, JSON.parse(result.stdout) as unknown);
       }
       if (method === "POST" && url.pathname === "/api/scan") {
-        await body(request);
+        const input = await body(request);
+        const allowExternalTargets = optionalBooleanValue(input.allow_external_targets, "allow_external_targets");
         if (job.status === "running") throw new HttpError(409, "A scan is already running");
         job = { status: "running", started_at: new Date().toISOString(), finished_at: null, exit_code: null, message: "Scanner evidence is being collected" };
-        void cli(["scan", store.target, "--require-scanners", "--quiet"]).then((result) => {
+        void cli(["scan", store.target, "--require-scanners", "--quiet", ...(allowExternalTargets ? ["--allow-external-targets"] : [])]).then((result) => {
           const completed = result.code === 0 || result.code === 1;
           const failedMessage = result.stderr.trim().slice(0, 1_000)
             || "Scan incomplete: one or more required scanners did not run. Review coverage details and scanner setup instructions.";
