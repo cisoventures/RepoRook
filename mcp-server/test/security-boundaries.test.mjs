@@ -81,10 +81,10 @@ appendFileSync(process.env.REPOROOK_TEST_ROOT + "/calls.txt", process.argv.slice
 process.stdout.write(JSON.stringify(${JSON.stringify(validReport("__TARGET__"))}.replaceAll("__TARGET__", process.env.REPOROOK_TEST_ROOT)) + "\\n");
 `);
   try {
-    child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "scan_repository", arguments: { path: "__ROOT__", allow_external_targets: true } } }).replace("__ROOT__", root)}\n`);
-    child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "scan_repository", arguments: { path: "__ROOT__" } } }).replace("__ROOT__", root)}\n`);
+    child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "scan_repository", arguments: { path: root, allow_external_targets: true } } })}\n`);
+    child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "scan_repository", arguments: { path: root } } })}\n`);
     await waitFor(responses, 2);
-    child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "verify_fix", arguments: { finding_id: "rr-0123456789ab", repository_path: "__ROOT__", allow_external_targets: true } } }).replace("__ROOT__", root)}\n`);
+    child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "verify_fix", arguments: { finding_id: "rr-0123456789ab", repository_path: root, allow_external_targets: true } } })}\n`);
     await waitFor(responses, 3);
     const calls = (await readFile(join(root, "calls.txt"), "utf8")).trim().split("\n");
     assert.equal(calls.filter((call) => call.includes("--allow-external-targets")).length, 2);
