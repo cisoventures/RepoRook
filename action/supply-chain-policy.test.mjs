@@ -9,6 +9,26 @@ test("privileged release workflows do not self-install npm from the registry", a
   await assert.rejects(access(".github/workflows/bootstrap-service-v0.9.0.yml"), /ENOENT/);
 });
 
+test("CodeQL action components stay on one immutable release", async () => {
+  const codeqlWorkflow = await readFile(".github/workflows/codeql.yml", "utf8");
+  const action = await readFile("action.yml", "utf8");
+  const dependabot = await readFile(".github/dependabot.yml", "utf8");
+  const references = [...`${codeqlWorkflow}\n${action}`.matchAll(
+    /github\/codeql-action\/(init|analyze|upload-sarif)@([0-9a-f]{40}) # v(\d+\.\d+\.\d+)/g,
+  )];
+
+  assert.deepEqual(
+    references.map((match) => match[1]).sort(),
+    ["analyze", "init", "upload-sarif"],
+  );
+  assert.equal(new Set(references.map((match) => match[2])).size, 1);
+  assert.equal(new Set(references.map((match) => match[3])).size, 1);
+  assert.match(
+    dependabot,
+    /groups:\s+codeql-actions:\s+patterns:\s+- "github\/codeql-action\/\*"/,
+  );
+});
+
 test("Python scanner installation is hash-locked, wheel-only, and disabled without the lock", async () => {
   const installer = await readFile("action/install-python-scanners.sh", "utf8");
   const aggregate = await readFile("action/install-scanners.sh", "utf8");
