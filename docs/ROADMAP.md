@@ -17,13 +17,15 @@ RepoRook develops in auditable vertical slices. Each milestone must keep determi
 | v1.0 Stable platform | Planned | Stable CLI, MCP, service, and schema contracts with compatibility guarantees, migrations, governance, and long-term release policy |
 | Post-1.0 team service | Research | Authenticated TLS deployment, repository-scoped multi-user GitHub App, RBAC, queues, audit logs, shared policy, encrypted credentials, and self-hosting guidance |
 
+The v1.0-rc.1 beginner path has an executable [acceptance harness](ACCEPTANCE.md) covering fail-closed partial coverage, non-installing recovery guidance, plain-English evidence, exact proposal approval, repository-scoped remote patch materialization, and draft-only publication while the local working tree remains unchanged. The v1 release-candidate surface now has a machine-readable [`contracts/v1.json`](../contracts/v1.json) snapshot, an executable CI compatibility gate, and a documented [compatibility and migration policy](COMPATIBILITY.md). Native-agent parity has a separate six-host [contract](../contracts/native-agent-parity.json) and executable gate. The external-review package now has a machine-readable scope plus an offline, tamper-evident baseline command; actual independent security review remains the open release gate.
+
 ## v1.0 release gates
 
-1. **Independent security review.** Run the reproducible review package, coverage-guided fuzzing, Windows link and junction testing, scanner sandbox and network-egress review, and regression work for accepted findings.
+1. **Independent security review.** Reproducible offline baseline and cross-platform directory-link corpus implemented, including Windows junctions; an independent reviewer must still run the package, extend coverage-guided fuzzing and less-common Windows reparse testing, review scanner sandbox and network egress, and drive regression work for accepted findings.
 2. **Beginner-grade local journey.** A user can connect a repository, understand which checks ran, obtain safe setup guidance, scan, understand the first risk, review an exact patch and test plan, approve it, verify it, and open a draft pull request without mistaking partial coverage for safety.
 3. **Safe automated resolution.** Agent-generated changes remain finding-bound, proposal-hash-bound, explicitly approved, isolated from the local working tree, tested, rescanned, and published only as a draft pull request.
-4. **Stable public contracts.** Freeze documented CLI flags and exit codes, MCP tools, configuration and evidence schemas, package entry points, migration behavior, deprecation policy, and the compatibility test matrix.
-5. **Native-agent parity.** Claude Code, Codex, Cursor, GitHub Copilot, Gemini CLI, and Windsurf retain the same evidence and approval boundaries while using host-native validation where available.
+4. **Stable public contracts.** Release-candidate contract implemented: documented CLI flags and exit codes, MCP tools, configuration and evidence schemas, package entry points, migration behavior, deprecation policy, and the compatibility test matrix are frozen and checked in CI. Promote the candidate to the v1.0 promise at release.
+5. **Native-agent parity.** Release-candidate parity implemented: Claude Code, Codex, Cursor, GitHub Copilot, Gemini CLI, and Windsurf are checked against the same evidence, coverage, secret-redaction, approval, and verification boundaries while retaining host-native packaging. Promote the candidate contract at v1.0.
 
 The hosted multi-user service is intentionally outside the v1.0 release boundary. The loopback, one-user, one-repository service should survive independent review before authentication, tenancy, durable queues, or broader credential handling are introduced.
 

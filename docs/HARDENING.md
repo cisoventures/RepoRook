@@ -25,8 +25,18 @@ The second slice extends that boundary to evidence reuse and agent context:
 - repository-local agent integration files are non-link regular UTF-8 inputs capped at 2 MiB, with a 1 MiB allowlisted ownership receipt;
 - Gitleaks file output is capped at 50 MiB and malformed or unexpected JSON is scanner failure, never a clean result.
 
+The v1 release-candidate corpus extends link handling across operating systems:
+
+- directory-link tests use ordinary directory symlinks on Linux and macOS and actual junctions on Windows;
+- CLI artifact, configuration, organization-policy, and integration destinations reject linked path components before reads or writes;
+- MCP report and source-context reads and local-service artifact reads reject linked directory components;
+- Action artifact staging rejects a linked source directory before canonicalizing or copying any evidence; and
+- the shared regression corpus runs in every supported Windows, macOS, and Linux CI job.
+
+These tests cover the junction behavior available through Node.js. They do not replace independent review of less common Windows reparse tags or race-resistant operating-system sandboxing.
+
 ## Fuzzing contract
 
 `cli/test/fuzz.test.mjs` is deterministic so a failure is reproducible on Linux, macOS, and Windows. It generates nested arrays, objects, hostile paths, markup, null bytes, prototype-sensitive keys, unexpected scalar types, and secret-shaped fields. Scanner normalizers must return structurally valid findings without throwing. Strict policy and approval parsers may reject input, but rejection must be an ordinary bounded error and must not mutate global prototypes.
 
-The scanner execution and residual-risk review is documented in [`SANDBOXING.md`](SANDBOXING.md). The independent-review scope and coordinated response workflow are ready in [`SECURITY_REVIEW.md`](SECURITY_REVIEW.md) and [`SECURITY_RESPONSE.md`](SECURITY_RESPONSE.md). This seeded suite is a regression gate, not a substitute for coverage-guided native fuzzing or an actual independent review. Later v0.9 work will continue hostile-filesystem coverage and incorporate reviewer findings.
+The scanner execution and residual-risk review is documented in [`SANDBOXING.md`](SANDBOXING.md). The independent-review scope and coordinated response workflow are ready in [`SECURITY_REVIEW.md`](SECURITY_REVIEW.md) and [`SECURITY_RESPONSE.md`](SECURITY_RESPONSE.md). This seeded suite is a regression gate, not a substitute for coverage-guided native fuzzing or an actual independent review. Further hostile-filesystem coverage should incorporate reviewer findings.

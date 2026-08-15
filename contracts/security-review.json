@@ -1,0 +1,105 @@
+{
+  "schema_version": "1.0",
+  "status": "release-candidate",
+  "purpose": "Produce a reproducible, tamper-evident baseline for an independent RepoRook security review without asserting an audit opinion.",
+  "claims": {
+    "independent_review_completed": false,
+    "security_opinion_provided": false,
+    "network_access_required": false,
+    "network_sandbox_enforced": false,
+    "external_software_installation_performed": false,
+    "scanner_installation_performed": false,
+    "temporary_local_reporook_installation": true
+  },
+  "output": "outputs/security-review-baseline.json",
+  "environment": {
+    "CI": "1",
+    "npm_config_audit": "false",
+    "npm_config_fund": "false",
+    "npm_config_ignore_scripts": "true",
+    "npm_config_offline": "true"
+  },
+  "commands": [
+    {
+      "id": "repository-check",
+      "command": "npm",
+      "args": ["run", "check"],
+      "purpose": "Build and run adapter, parity, contract, type, unit, action, and deterministic fuzzing gates."
+    },
+    {
+      "id": "package-smoke",
+      "command": "npm",
+      "args": ["run", "smoke:packages"],
+      "purpose": "Pack and install all three packages from local tarballs in offline mode with lifecycle scripts disabled."
+    },
+    {
+      "id": "beginner-journey",
+      "command": "npm",
+      "args": ["run", "fixture:journey"],
+      "environment": {
+        "REPOROOK_REQUIRE_LOOPBACK_TESTS": "1"
+      },
+      "purpose": "Exercise the loopback service, incomplete coverage, exact approval, verification, and draft-only publication journey."
+    }
+  ],
+  "integrity_paths": [
+    ".github/workflows",
+    "SECURITY.md",
+    "action",
+    "action.yml",
+    "adapters",
+    "cli",
+    "contracts",
+    "mcp-server",
+    "package-lock.json",
+    "package.json",
+    "schemas",
+    "scripts",
+    "service",
+    "test-fixtures",
+    "test-support"
+  ],
+  "review_scope": [
+    ".github/workflows",
+    "action",
+    "action.yml",
+    "adapters",
+    "cli",
+    "contracts",
+    "mcp-server",
+    "package-lock.json",
+    "package.json",
+    "schemas",
+    "scripts",
+    "service",
+    "test-fixtures",
+    "test-support"
+  ],
+  "starting_evidence": [
+    "SECURITY.md",
+    "docs/ARCHITECTURE.md",
+    "docs/HARDENING.md",
+    "docs/SANDBOXING.md",
+    "docs/SECURITY_REVIEW.md",
+    "docs/SECURITY_RESPONSE.md"
+  ],
+  "required_manual_methods": [
+    "filesystem-process-credential-approval-boundary-review",
+    "coverage-guided-fuzzing",
+    "cross-platform-hostile-filesystem-testing",
+    "fault-injection",
+    "package-and-workflow-permission-review",
+    "secret-retention-validation"
+  ],
+  "required_report_fields": [
+    "schema_version",
+    "generated_at",
+    "revision",
+    "dirty",
+    "platform",
+    "safety",
+    "integrity",
+    "commands",
+    "summary"
+  ]
+}

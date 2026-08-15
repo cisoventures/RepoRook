@@ -11,8 +11,14 @@ const source = resolve(process.argv[2] ?? "");
 const destination = resolve(process.argv[3] ?? "");
 if (!process.argv[2] || !process.argv[3] || source === destination) throw new Error("Usage: stage-artifacts.mjs SOURCE_DIR DESTINATION_DIR");
 
+const sourceBefore = await lstat(source).catch(() => null);
+if (!sourceBefore?.isDirectory() || sourceBefore.isSymbolicLink()) throw new Error("RepoRook artifact source must be a real non-link directory");
 const sourceRoot = await realpath(source).catch(() => null);
-if (!sourceRoot || !(await stat(sourceRoot)).isDirectory()) throw new Error("RepoRook artifact source must be a directory");
+if (!sourceRoot) throw new Error("RepoRook artifact source must be a real non-link directory");
+const sourceCanonical = await stat(sourceRoot);
+if (!sourceCanonical.isDirectory() || sourceBefore.dev !== sourceCanonical.dev || sourceBefore.ino !== sourceCanonical.ino) {
+  throw new Error("RepoRook artifact source changed while it was being opened");
+}
 await rm(destination, { recursive: true, force: true });
 await mkdir(destination, { recursive: true, mode: 0o700 });
 
