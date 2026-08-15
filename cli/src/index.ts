@@ -89,6 +89,15 @@ Team-policy options:
 Agent integration options:
   --host HOSTS           Comma-separated hosts or all (default: all)
   --apply                Apply the displayed install, update, or uninstall plan
+
+Common options:
+  --help, -h             Print this help
+  --version, -v          Print the RepoRook version
+
+Exit codes:
+  0  Complete coverage and no policy-actionable finding met the configured threshold
+  1  Complete coverage and at least one policy-actionable finding met the configured threshold
+  2  Target, configuration, required scanner, policy, or incomplete-coverage error
 `;
 
 function boundedIntegerFlag(parsed: ReturnType<typeof parseArgs>, name: string, minimum: number, maximum: number): number | undefined {
