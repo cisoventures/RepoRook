@@ -4,6 +4,8 @@ All notable changes to RepoRook are documented here. RepoRook follows semantic v
 
 ## Unreleased
 
+## 0.9.3 - 2026-08-14
+
 ### Security
 
 - Require trusted per-invocation authorization before scanning repository-configured container images, strip generic Trivy registry credentials from version probes and scans, preserve host-scoped Docker authentication, and record the exact approved targets in scan receipts.
