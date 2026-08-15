@@ -24,6 +24,7 @@ test("CLI executes its entry point through the platform's package launch form", 
     assert.match(help.stdout, /verify <finding-id>/);
     assert.match(help.stdout, /integrate <install\|update\|doctor\|uninstall>/);
     assert.match(help.stdout, /--refresh-cache/);
+    assert.match(help.stdout, /--allow-external-targets/);
     await assert.rejects(
       process.platform === "win32"
         ? execute(process.execPath, [entry, "verify"])

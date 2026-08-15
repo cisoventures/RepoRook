@@ -66,6 +66,12 @@ export async function scanRepository(options: ScanOptions, scanners: ScannerAdap
   const target = resolve(options.target);
   const targetStats = await stat(target).catch(() => null);
   if (!targetStats?.isDirectory()) throw new Error(`Target is not a directory: ${target}`);
+  const scansExternalImages = options.config.containerImages.length > 0
+    && options.config.scanners["trivy-image"] !== false
+    && scanners.some((scanner) => scanner.name === "trivy-image");
+  if (scansExternalImages && !options.allowExternalTargets) {
+    throw new Error("Configured containerImages are external registry targets. Review them, then rerun with --allow-external-targets to authorize registry access for this invocation.");
+  }
   const commit = await gitCommit(target);
   const changed_files = options.changedBase !== undefined ? await gitChangedFiles(target, options.changedBase || undefined, options.changedHead) : undefined;
   const useCache = options.cacheEnabled ?? options.config.cacheEnabled;
@@ -186,6 +192,7 @@ export async function scanRepository(options: ScanOptions, scanners: ScannerAdap
       completed_at,
       ...(changed_files ? { changed_files } : {}),
       ...(changed_files !== undefined ? { scanner_scopes: Object.fromEntries(runs.map((run) => [run.status.name, run.scope])) } : {}),
+      ...(scansExternalImages ? { external_targets: { authorized: true as const, container_images: [...options.config.containerImages] } } : {}),
     },
   };
 }

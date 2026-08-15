@@ -153,6 +153,9 @@ test("dashboard explains incomplete coverage and offers non-installing setup gui
   assert.match(dashboardJs, /\/api\/setup/);
   assert.match(dashboardJs, /not a clean bill of health/);
   assert.match(dashboardJs, /RepoRook has not installed or changed anything/);
+  assert.match(html, /allow-external-targets/);
+  assert.match(dashboardJs, /allow_external_targets/);
+  assert.match(dashboardJs, /allow-external-targets"\)\.checked = false/);
 });
 
 test("dashboard requires its fragment token and exposes only redacted finding fields", async (context) => {
@@ -232,6 +235,35 @@ test("scan execution is single-flight and preserves RepoRook exit semantics", as
     assert.equal(job.status, "completed");
     assert.equal(job.exit_code, 1);
     assert.match(job.message, /actionable findings/);
+  } finally {
+    await dashboard.close();
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("service forwards external target approval only from an explicit boolean request", async (context) => {
+  const { repository } = await fixture();
+  const calls = [];
+  const runner = async (args) => {
+    calls.push(args);
+    return { code: 0, stdout: "{}\n", stderr: "" };
+  };
+  const dashboard = await startOrSkip(context, { repository, port: 0, bootstrapToken: "bootstrap-test-token", sessionToken: "session-test-token", cliRunner: runner });
+  if (!dashboard) { await rm(repository, { recursive: true, force: true }); return; }
+  try {
+    const cookie = await session(dashboard);
+    const send = async (body) => await fetch(`${dashboard.origin}/api/scan`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: dashboard.origin, cookie },
+      body: JSON.stringify(body),
+    });
+    assert.equal((await send({ allow_external_targets: true })).status, 202);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.match(calls[0].join(" "), /--allow-external-targets/);
+    assert.equal((await send({})).status, 202);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.doesNotMatch(calls[1].join(" "), /--allow-external-targets/);
+    assert.equal((await send({ allow_external_targets: "yes" })).status, 400);
   } finally {
     await dashboard.close();
     await rm(repository, { recursive: true, force: true });

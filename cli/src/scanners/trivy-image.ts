@@ -8,6 +8,7 @@ import type { Finding, RepoRookConfig, ScannerAdapter, ScannerContext, ScannerRe
 import { array, errored, jsonFromOutput, record, scannerParseError, scannerVersion, strings, successful, text, unavailable } from "./shared.js";
 
 function unique(values: string[]): string[] { return values.filter((value, index) => value && values.indexOf(value) === index); }
+const trivyCredentialEnvironment = ["TRIVY_USERNAME", "TRIVY_PASSWORD"];
 
 function fixedVersions(value: unknown): string[] {
   return unique(text(value).split(/[\s,]+/).map((item) => item.trim()).filter(Boolean));
@@ -69,11 +70,11 @@ export class TrivyImageScanner implements ScannerAdapter {
       : { applicable: false, reason: "no explicit containerImages targets configured; RepoRook never guesses or builds images" };
   }
   async incremental(_context: ScannerContext) { return { applicable: true, scope: "external-targets" as const }; }
-  async version() { return scannerVersion("trivy"); }
+  async version() { return scannerVersion("trivy", { unsetEnv: trivyCredentialEnvironment }); }
 
   async run(context: ScannerContext): Promise<ScannerResult> {
     const started = Date.now();
-    const version = context.scannerVersion !== undefined ? context.scannerVersion : await scannerVersion("trivy");
+    const version = context.scannerVersion !== undefined ? context.scannerVersion : await scannerVersion("trivy", { unsetEnv: trivyCredentialEnvironment });
     if (!version) return unavailable(this.name, Date.now() - started, "trivy is not installed; run `reporook setup`");
     const temporary = await mkdtemp(join(tmpdir(), "reporook-trivy-"));
     const configPath = join(temporary, "trivy.yaml");
@@ -91,7 +92,7 @@ export class TrivyImageScanner implements ScannerAdapter {
           "--scanners", "vuln",
           "--skip-version-check",
           image,
-        ], { cwd: temporary });
+        ], { cwd: temporary, unsetEnv: trivyCredentialEnvironment });
         duration_ms += result.duration_ms;
         if (result.missing) return unavailable(this.name, duration_ms, "trivy is not installed");
         try {

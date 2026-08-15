@@ -82,7 +82,7 @@ const tools: ToolDefinition[] = [
     description: "Run deterministic source, secret, dependency, infrastructure, workflow, and explicitly configured container-image checks. Read-only except for .reporook evidence files. Distinguish partial coverage from a clean scan.",
     inputSchema: {
       type: "object",
-      properties: { path: { type: "string", description: "Absolute repository path" }, fail_on: severitySchema, require_scanners: { type: "boolean" } },
+      properties: { path: { type: "string", description: "Absolute repository path" }, fail_on: severitySchema, require_scanners: { type: "boolean" }, allow_external_targets: { type: "boolean", default: false, description: "Authorize configured container-image registry access for this invocation" } },
       required: ["path"],
       additionalProperties: false,
     },
@@ -90,7 +90,8 @@ const tools: ToolDefinition[] = [
       const path = string(input, "path");
       const failOn = optionalString(input, "fail_on", severityValues);
       const requireScanners = optionalBoolean(input, "require_scanners");
-      const args = [...(failOn ? ["--fail-on", failOn] : []), ...(requireScanners ? ["--require-scanners"] : [])];
+      const allowExternalTargets = optionalBoolean(input, "allow_external_targets") ?? false;
+      const args = [...(failOn ? ["--fail-on", failOn] : []), ...(requireScanners ? ["--require-scanners"] : []), ...(allowExternalTargets ? ["--allow-external-targets"] : [])];
       return await scanViaCli(path, args);
     },
   },
@@ -100,7 +101,7 @@ const tools: ToolDefinition[] = [
     description: "Scan findings associated with a Git revision range. Use for local changes or pull-request review; results remain deterministic.",
     inputSchema: {
       type: "object",
-      properties: { path: { type: "string" }, base: { type: "string", default: "HEAD~1" }, head: { type: "string", default: "HEAD" }, fail_on: severitySchema },
+      properties: { path: { type: "string" }, base: { type: "string", default: "HEAD~1" }, head: { type: "string", default: "HEAD" }, fail_on: severitySchema, allow_external_targets: { type: "boolean", default: false, description: "Authorize configured container-image registry access for this invocation" } },
       required: ["path"],
       additionalProperties: false,
     },
@@ -109,7 +110,8 @@ const tools: ToolDefinition[] = [
       const base = gitRevision(input, "base", "HEAD~1");
       const head = gitRevision(input, "head", "HEAD");
       const failOn = optionalString(input, "fail_on", severityValues);
-      return await scanViaCli(path, ["--changed", base, "--head", head, ...(failOn ? ["--fail-on", failOn] : [])]);
+      const allowExternalTargets = optionalBoolean(input, "allow_external_targets") ?? false;
+      return await scanViaCli(path, ["--changed", base, "--head", head, ...(failOn ? ["--fail-on", failOn] : []), ...(allowExternalTargets ? ["--allow-external-targets"] : [])]);
     },
   },
   {
@@ -295,7 +297,7 @@ const tools: ToolDefinition[] = [
     description: "Rerun RepoRook and report whether the original stable finding remains. Resolution is inconclusive unless the original scanner completes under the same configuration. This does not replace repository tests.",
     inputSchema: {
       type: "object",
-      properties: { finding_id: { type: "string" }, repository_path: { type: "string" }, previous_report_path: { type: "string", default: ".reporook/findings.json" }, require_scanners: { type: "boolean", default: true } },
+      properties: { finding_id: { type: "string" }, repository_path: { type: "string" }, previous_report_path: { type: "string", default: ".reporook/findings.json" }, require_scanners: { type: "boolean", default: true }, allow_external_targets: { type: "boolean", default: false, description: "Authorize configured container-image registry access for this invocation" } },
       required: ["finding_id", "repository_path"],
       additionalProperties: false,
     },
@@ -304,7 +306,8 @@ const tools: ToolDefinition[] = [
       const repositoryPath = string(input, "repository_path");
       const previousReportPath = resolve(repositoryPath, string(input, "previous_report_path", { default: ".reporook/findings.json" }));
       const requireScanners = optionalBoolean(input, "require_scanners") ?? true;
-      return await verifyViaCli(repositoryPath, findingId, previousReportPath, requireScanners);
+      const allowExternalTargets = optionalBoolean(input, "allow_external_targets") ?? false;
+      return await verifyViaCli(repositoryPath, findingId, previousReportPath, requireScanners, allowExternalTargets);
     },
   },
   {

@@ -40,7 +40,7 @@ reporook setup
 
 `setup` prints `DISPLAY ONLY — NO COMMANDS WERE RUN` and does not install anything. Review and personally run only the commands for scanners that `doctor` marked as needed, then rerun `doctor`. Projects with OSV-supported dependency files may need OSV-Scanner; infrastructure and workflow files may need Checkov. Trivy is needed only after you explicitly list a container image.
 
-To scan a built image, add an explicit target such as `ghcr.io/example/app@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef` under `containerImages`. To inspect secrets in past commits, set `gitHistory: true`. Neither scope is inferred automatically; see [Infrastructure, container, and history scanning](INFRASTRUCTURE.md).
+To scan a built image, add an explicit target such as `ghcr.io/example/app@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef` under `containerImages`, review it, and add `--allow-external-targets` to that scan invocation. Checked-in configuration alone cannot authorize registry access. To inspect secrets in past commits, set `gitHistory: true`. Neither scope is inferred automatically; see [Infrastructure, container, and history scanning](INFRASTRUCTURE.md).
 
 ### 3. Connect your coding agent
 

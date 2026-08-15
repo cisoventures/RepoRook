@@ -4,6 +4,10 @@ All notable changes to RepoRook are documented here. RepoRook follows semantic v
 
 ## Unreleased
 
+### Security
+
+- Require trusted per-invocation authorization before scanning repository-configured container images, strip generic Trivy registry credentials from version probes and scans, preserve host-scoped Docker authentication, and record the exact approved targets in scan receipts.
+
 ### Added
 
 - Add a machine-readable external-review contract and one-command offline baseline that records revision, platform, command results, and integrity hashes without installing scanners or external software or asserting an audit opinion.
@@ -18,6 +22,7 @@ All notable changes to RepoRook are documented here. RepoRook follows semantic v
 - Document CLI help aliases and stable exit-code meanings directly in `reporook --help`.
 - Remove a stale README reference to an MCP approval tool; remediation approval intentionally remains at the trusted CLI or local-service boundary.
 - Make Cursor and Copilot automatic hooks honor repository policy thresholds and fail closed when applicable scanner coverage is unavailable.
+- Add the default-false external-target authorization control to CLI scan/verify, MCP scan/verify tools, the local service, and the GitHub Action. Existing `containerImages` users must explicitly opt in at the trusted invocation boundary.
 
 ## 0.9.2 - 2026-07-28
 

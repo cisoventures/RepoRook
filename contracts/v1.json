@@ -113,6 +113,7 @@
       "verify"
     ],
     "flags": [
+      "--allow-external-targets",
       "--allow-no-coverage",
       "--apply",
       "--approval",
@@ -191,11 +192,11 @@
       },
       {
         "name": "scan_changes",
-        "input_schema_sha256": "sha256:bcde0c51b2d3676951560ebb7a15960db3e9a2f6dec2c03e8501af1dba16543f"
+        "input_schema_sha256": "sha256:4167c4366781e4134d02d0f44b335f7a03f833a5cbe676e6a080be091018e0f1"
       },
       {
         "name": "scan_repository",
-        "input_schema_sha256": "sha256:8bc6a8de5c8bdc7abe8f06435baf8a1489e73fa42d021512b9d54a8da37743c9"
+        "input_schema_sha256": "sha256:cd6a0f4de2290a3dbd824167420426aeafb7d7084a7daf1733fa55e2957cbea5"
       },
       {
         "name": "suppress_finding",
@@ -203,7 +204,7 @@
       },
       {
         "name": "verify_fix",
-        "input_schema_sha256": "sha256:9bea957196140aed6a72a7d5b421d9098bb9a804f7737a63f0be90e75b20cc39"
+        "input_schema_sha256": "sha256:d27c226af185fbd89520036764d5b2f28ce251e160bb684646b56c78296bf1b1"
       }
     ]
   },
@@ -295,7 +296,7 @@
     {
       "path": "schemas/findings.schema.json",
       "id": "https://reporook.dev/schemas/findings-1.0.json",
-      "sha256": "sha256:2b980f98489ceecbbebf0654cb3f3319ca8659b26fd941312921c021b465b9c8"
+      "sha256": "sha256:3bb82dbf3b2eb8119c9f77cb39ff39d30e50731af28666b34a72c0c7c256a8b4"
     },
     {
       "path": "schemas/organization-policy.schema.json",
@@ -336,6 +337,7 @@
   "github_action": {
     "inputs": {
       "base": "",
+      "allow-external-targets": "false",
       "config": "",
       "fail-on": "high",
       "github-token": "${{ github.token }}",

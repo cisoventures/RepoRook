@@ -57,6 +57,8 @@ Scan options:
   --changed [BASE]       Keep findings in files changed since BASE (default HEAD~1)
   --head REVISION        Changed-mode head (default HEAD)
   --require-scanners     Treat unavailable applicable scanners as a tool error
+  --allow-external-targets
+                         Authorize configured container-image registry access for this invocation
   --no-cache             Disable scanner cache reads and writes for this scan
   --refresh-cache        Run every scanner and replace successful cache entries
   --cache-ttl MINUTES    Override cache freshness (1-1440 minutes)
@@ -124,6 +126,7 @@ async function runScan(parsed: ReturnType<typeof parseArgs>): Promise<number> {
     ...(changedRequested ? { changedBase: typeof changedValue === "string" ? changedValue : "" } : {}),
     changedHead: stringFlag(parsed.flags, "head"),
     requireScanners: parsed.flags["require-scanners"] === true,
+    allowExternalTargets: parsed.flags["allow-external-targets"] === true,
     ...(parsed.flags.cache === false ? { cacheEnabled: false } : {}),
     refreshCache: parsed.flags["refresh-cache"] === true,
     ...(cacheTtlMinutes !== undefined ? { cacheTtlMs: cacheTtlMinutes * 60_000 } : {}),
@@ -325,6 +328,7 @@ async function runVerify(parsed: ReturnType<typeof parseArgs>): Promise<number> 
     target,
     config: loaded.config,
     requireScanners: parsed.flags["require-scanners"] === true,
+    allowExternalTargets: parsed.flags["allow-external-targets"] === true,
     refreshCache: true,
   });
   const verification = verifyFindingResolution(previous, current, findingId, requiredScannerFailure(

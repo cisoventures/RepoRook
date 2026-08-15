@@ -258,6 +258,7 @@ printf '%s\\n' '{"check_type":"dockerfile","results":{"failed_checks":[{"check_i
 exit 1
 `);
   await writeFile(trivy, `#!/bin/sh
+if [ "\${TRIVY_USERNAME+x}" = "x" ] || [ "\${TRIVY_PASSWORD+x}" = "x" ]; then exit 8; fi
 if [ "$1" = "--version" ]; then printf '%s\\n' 'Version: 0.72.0'; exit 0; fi
 printf '%s\\n' "$*" > "$REPOROOK_TRIVY_TEST_ARGS"
 printf '%s\\n' '{"Results":[{"Target":"example/app:1","Type":"alpine","Vulnerabilities":[{"VulnerabilityID":"CVE-2026-0002","PkgName":"busybox","InstalledVersion":"1","FixedVersion":"2","Severity":"CRITICAL"}]}]}'
@@ -268,9 +269,13 @@ exit 0
   const previousCheckovArgsPath = process.env.REPOROOK_CHECKOV_TEST_ARGS;
   const previousTrivyArgsPath = process.env.REPOROOK_TRIVY_TEST_ARGS;
   const previousCheckovApiKey = process.env.BC_API_KEY;
+  const previousTrivyUsername = process.env.TRIVY_USERNAME;
+  const previousTrivyPassword = process.env.TRIVY_PASSWORD;
   process.env.REPOROOK_CHECKOV_TEST_ARGS = checkovArgsPath;
   process.env.REPOROOK_TRIVY_TEST_ARGS = trivyArgsPath;
   process.env.BC_API_KEY = "must-not-reach-checkov";
+  process.env.TRIVY_USERNAME = "must-not-reach-trivy";
+  process.env.TRIVY_PASSWORD = "must-not-reach-trivy";
   try {
     const config = structuredClone(defaultConfig);
     config.containerImages = ["example/app:1"];
@@ -293,6 +298,10 @@ exit 0
     else process.env.REPOROOK_TRIVY_TEST_ARGS = previousTrivyArgsPath;
     if (previousCheckovApiKey === undefined) delete process.env.BC_API_KEY;
     else process.env.BC_API_KEY = previousCheckovApiKey;
+    if (previousTrivyUsername === undefined) delete process.env.TRIVY_USERNAME;
+    else process.env.TRIVY_USERNAME = previousTrivyUsername;
+    if (previousTrivyPassword === undefined) delete process.env.TRIVY_PASSWORD;
+    else process.env.TRIVY_PASSWORD = previousTrivyPassword;
     await rm(target, { recursive: true, force: true });
   }
 });

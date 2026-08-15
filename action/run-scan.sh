@@ -13,6 +13,9 @@ fi
 if [ "${INPUT_REQUIRE_SCANNERS:-true}" = "true" ]; then
   args+=(--require-scanners)
 fi
+if [ "${INPUT_ALLOW_EXTERNAL_TARGETS:-false}" = "true" ]; then
+  args+=(--allow-external-targets)
+fi
 if [ "${INPUT_MODE:-diff}" = "diff" ]; then
   base="${INPUT_BASE:-${PR_BASE_SHA:-}}"
   if [ -n "$base" ]; then

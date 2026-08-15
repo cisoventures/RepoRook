@@ -87,7 +87,7 @@ export async function runCommand(
 export async function commandVersion(
   command: string,
   args: string[] = ["--version"],
-  options: Pick<CommandOptions, "env" | "timeoutMs"> = {},
+  options: Pick<CommandOptions, "env" | "unsetEnv" | "timeoutMs"> = {},
 ): Promise<string | null> {
   const result = await runCommand(command, args, { timeoutMs: options.timeoutMs ?? 15_000, ...options });
   if (result.missing) return null;

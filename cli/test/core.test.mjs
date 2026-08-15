@@ -13,6 +13,7 @@ import { gitChangedFiles } from "../dist/git.js";
 import { plainSummary } from "../dist/knowledge.js";
 import { matchesAny } from "../dist/path-utils.js";
 import { runCommand } from "../dist/process.js";
+import { parseFindingsReport } from "../dist/report-validation.js";
 
 test("simple YAML parser supports lists and scanner flags", () => {
   const parsed = parseSimpleYaml("failOn: medium\nignore:\n  - vendor/**\nscanners:\n  semgrep: false\n");
@@ -146,9 +147,48 @@ test("external image findings are not discarded by repository path filters", asy
     const config = structuredClone(defaultConfig);
     config.paths = ["src"];
     config.ignore = ["container-image:**"];
-    const report = await scanRepository({ target, config }, [scanner]);
+    const report = await scanRepository({ target, config, allowExternalTargets: true }, [scanner]);
     assert.equal(report.findings.length, 1);
     assert.equal(toSarif(report).runs[0].results[0].locations, undefined);
+  } finally {
+    await rm(target, { recursive: true, force: true });
+  }
+});
+
+test("configured external image scans require invocation approval and record the approved scope", async () => {
+  const target = await mkdtemp(join(tmpdir(), "reporook-external-target-approval-"));
+  let runs = 0;
+  const scanner = {
+    name: "trivy-image",
+    async isApplicable() { return { applicable: true }; },
+    async run() {
+      runs += 1;
+      return { status: { name: "trivy-image", applicable: true, available: true, version: "1", status: "ok", finding_count: 0, duration_ms: 1 }, findings: [] };
+    },
+  };
+  try {
+    const config = structuredClone(defaultConfig);
+    config.containerImages = ["attacker.example.test/app:latest"];
+    await assert.rejects(
+      () => scanRepository({ target, config }, [scanner]),
+      /--allow-external-targets/,
+    );
+    assert.equal(runs, 0);
+
+    const report = await scanRepository({ target, config, allowExternalTargets: true }, [scanner]);
+    assert.equal(runs, 1);
+    assert.deepEqual(report.scan_receipt.external_targets, {
+      authorized: true,
+      container_images: ["attacker.example.test/app:latest"],
+    });
+    assert.deepEqual(parseFindingsReport(structuredClone(report)).scan_receipt.external_targets, report.scan_receipt.external_targets);
+    const invalidReceipt = structuredClone(report);
+    invalidReceipt.scan_receipt.external_targets.authorized = false;
+    assert.throws(() => parseFindingsReport(invalidReceipt), /authorized must be true/);
+
+    config.scanners["trivy-image"] = false;
+    await scanRepository({ target, config }, [scanner]);
+    assert.equal(runs, 1);
   } finally {
     await rm(target, { recursive: true, force: true });
   }

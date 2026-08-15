@@ -27,6 +27,9 @@ inputs:
   require-scanners:
     description: Fail with a tool error when an applicable scanner cannot run.
     default: "true"
+  allow-external-targets:
+    description: Authorize configured container-image registry access for this workflow run.
+    default: "false"
 
 outputs:
   exit-code:
@@ -76,6 +79,7 @@ runs:
         INPUT_MODE: ${{ inputs.mode }}
         INPUT_BASE: ${{ inputs.base }}
         INPUT_REQUIRE_SCANNERS: ${{ inputs.require-scanners }}
+        INPUT_ALLOW_EXTERNAL_TARGETS: ${{ inputs.allow-external-targets }}
         PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         HEAD_SHA: ${{ github.sha }}
       run: "$GITHUB_ACTION_PATH/action/run-scan.sh"

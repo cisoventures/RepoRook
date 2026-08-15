@@ -225,7 +225,7 @@ export function parseFindingsReport(value: unknown): ScanReport {
   exactKeys(summaryInput, summaryKeys, [], "Findings report.summary");
   const summary = Object.fromEntries(summaryKeys.map((key) => [key, integer(summaryInput[key], `Findings report.summary.${key}`)])) as ScanReport["summary"];
   const receiptInput = object(input.scan_receipt, "Findings report.scan_receipt");
-  exactKeys(receiptInput, ["target", "commit", "config_hash", "scanner_versions", "started_at", "completed_at"], ["changed_files", "scanner_scopes"], "Findings report.scan_receipt");
+  exactKeys(receiptInput, ["target", "commit", "config_hash", "scanner_versions", "started_at", "completed_at"], ["changed_files", "scanner_scopes", "external_targets"], "Findings report.scan_receipt");
   const versionsInput = object(receiptInput.scanner_versions, "Findings report.scan_receipt.scanner_versions");
   const scannerVersions = Object.fromEntries(Object.entries(versionsInput).map(([name, version]) => [string(name, "Scanner version name"), version === null ? null : string(version, `Findings report.scan_receipt.scanner_versions.${name}`)]));
   const scannerScopeInput = receiptInput.scanner_scopes === undefined ? undefined : object(receiptInput.scanner_scopes, "Findings report.scan_receipt.scanner_scopes");
@@ -234,6 +234,15 @@ export function parseFindingsReport(value: unknown): ScanReport {
     if (!scannerScopes.has(parsed)) throw new Error(`Findings report.scan_receipt.scanner_scopes.${name} is invalid`);
     return [name, parsed];
   })) as ScanReport["scan_receipt"]["scanner_scopes"];
+  const externalTargetsInput = receiptInput.external_targets === undefined ? undefined : object(receiptInput.external_targets, "Findings report.scan_receipt.external_targets");
+  if (externalTargetsInput !== undefined) exactKeys(externalTargetsInput, ["authorized", "container_images"], [], "Findings report.scan_receipt.external_targets");
+  if (externalTargetsInput !== undefined && externalTargetsInput.authorized !== true) throw new Error("Findings report.scan_receipt.external_targets.authorized must be true");
+  const externalContainerImages = externalTargetsInput === undefined
+    ? undefined
+    : stringArray(externalTargetsInput.container_images, "Findings report.scan_receipt.external_targets.container_images");
+  if (externalContainerImages !== undefined && (!externalContainerImages.length || externalContainerImages.length > 20 || externalContainerImages.some((image) => !image.trim()) || new Set(externalContainerImages).size !== externalContainerImages.length)) {
+    throw new Error("Findings report.scan_receipt.external_targets.container_images must contain 1-20 unique image references");
+  }
   const report: ScanReport = {
     schema_version: "1.0",
     tool: { name: "reporook", version: string(tool.version, "Findings report.tool.version") },
@@ -253,6 +262,7 @@ export function parseFindingsReport(value: unknown): ScanReport {
       completed_at: timestamp(receiptInput.completed_at, "Findings report.scan_receipt.completed_at"),
       ...(receiptInput.changed_files === undefined ? {} : { changed_files: stringArray(receiptInput.changed_files, "Findings report.scan_receipt.changed_files").map((path, index) => repositoryPath(path, `Findings report.scan_receipt.changed_files[${index}]`)) }),
       ...(parsedScopes === undefined ? {} : { scanner_scopes: parsedScopes }),
+      ...(externalContainerImages === undefined ? {} : { external_targets: { authorized: true, container_images: externalContainerImages } }),
     },
   };
   assertFindingsReportConsistency(report);
@@ -283,5 +293,6 @@ export function assertFindingsReportConsistency(report: ScanReport, options: { e
   if (report.scan_receipt.scanner_scopes) {
     if (JSON.stringify(Object.keys(report.scan_receipt.scanner_scopes).sort()) !== JSON.stringify([...scannerNames].sort())) throw new Error("Findings report scan receipt scanner_scopes do not match its scanners");
   }
+  if (report.scan_receipt.external_targets && !scannerNames.includes("trivy-image")) throw new Error("Findings report external targets require a trivy-image scanner receipt");
   if (options.expectedTarget && resolve(report.target.path) !== resolve(options.expectedTarget)) throw new Error("Findings report is bound to a different repository target");
 }
