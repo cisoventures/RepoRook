@@ -13,6 +13,7 @@ All notable changes to RepoRook are documented here. RepoRook follows semantic v
 
 ### Changed
 
+- Update every CodeQL action component atomically and group future Dependabot updates so mixed releases cannot break analysis.
 - Reject linked Action artifact source directories and exercise CLI, MCP, service, integration, and Action directory-link boundaries with real Windows junctions in CI.
 - Document CLI help aliases and stable exit-code meanings directly in `reporook --help`.
 - Remove a stale README reference to an MCP approval tool; remediation approval intentionally remains at the trusted CLI or local-service boundary.
