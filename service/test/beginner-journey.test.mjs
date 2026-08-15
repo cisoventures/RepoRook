@@ -27,7 +27,7 @@ function scanReceipt(repository, scannerVersions) {
 function partialReport(repository) {
   return {
     schema_version: "1.0",
-    tool: { name: "reporook", version: "0.9.2" },
+    tool: { name: "reporook", version: "0.9.3" },
     target: { path: repository, commit: sourceCommit },
     generated_at: "2026-07-28T00:00:01.000Z",
     coverage_status: "partial",
@@ -45,7 +45,7 @@ function partialReport(repository) {
 function completeReport(repository) {
   return {
     schema_version: "1.0",
-    tool: { name: "reporook", version: "0.9.2" },
+    tool: { name: "reporook", version: "0.9.3" },
     target: { path: repository, commit: sourceCommit },
     generated_at: "2026-07-28T00:01:01.000Z",
     coverage_status: "complete",
