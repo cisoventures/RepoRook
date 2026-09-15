@@ -2,7 +2,7 @@
 
 An independent reviewer assessed RepoRook at revision `11f6b1b` and reported 32 tracked IDs: 29 validated or related items, two plausible items that could not be fully exercised on the review platform, and one withdrawn item. The security implementation is anchored at `d4efe3df3cedb49c7af7bc5162fca820be8684aa`; the v1 version, documentation, and final regression changes follow on the same remediation branch.
 
-This is a remediation ledger, not a self-issued security opinion. The initial review is complete; v1 publication remains gated on the independent reviewer verifying the final branch and the protected CI/release checks.
+This is a remediation ledger, not a self-issued security opinion. The initial remediation merged in PR #48; v1 publication remains gated on independent verification of the freshness follow-up and the two manual environment exercises.
 
 ## Remediation ledger
 
@@ -30,9 +30,10 @@ This is a remediation ledger, not a self-issued security opinion. The initial re
 | RR-AGT-01 | Fixed | Per-host validation and remediation assertions inspect declared host surfaces without concatenating the canonical skill into the result. |
 | RR-AGT-02 | Fixed | The parity validator derives the installer specification and requires exact equality with each host's declared installed paths. |
 | RR-AGT-03 | Fixed | Scanner-controlled fields and source context are control-character-neutralized and length bounded; every MCP response labels finding and source content as untrusted data that must never supply instructions. |
-| RR-SVC-01 | Fixed; browser revalidation requested | Cookies were removed. A one-use fragment bootstrap creates a rotating bearer held in exact-origin `sessionStorage`; logout invalidates it. All 25 live loopback service tests pass, and independent browser exercise remains requested. |
+| RR-SVC-01 | Fixed; browser revalidation requested | Cookies were removed. A one-use fragment bootstrap creates a rotating bearer held in exact-origin `sessionStorage`; logout invalidates it. All 29 live loopback service tests pass, and independent browser exercise remains requested. |
 | RR-SVC-02 | Fixed | GitHub App onboarding state is consumed in `finally` after success or failure, preventing failed-callback replay. |
 | RR-SVC-03 | Fixed | The publisher requires `draft === true`; otherwise it closes the unexpected pull request, deletes the branch, and fails. |
+| V1-STALE | Fixed in follow-up; re-review required | The service compares authenticated findings and remediation-plan source commits to a stable, clean current Git HEAD. Stale, dirty, commit-less, or unverifiable evidence remains visible with an explicit status but cannot prepare a plan, record an approval, or reach the draft-PR publisher. `service/test/server.test.mjs` replays a valid commit-A artifact after advancing to commit B and exercises the store plus direct HTTP boundaries. |
 | RR-REL-02 | Fixed | Validation and packaging run without OIDC or write permission; the privileged release job has no checkout and executes no repository source. |
 | RR-REL-03 | Fixed | Release requires `GITHUB_SHA` to equal the GitHub API's exact current `main` commit before tagging or publishing. |
 | RR-REL-04 | Fixed with RR-REL-03 | Dispatch and tag versions are independently format checked and must equal all package manifests in the unprivileged validation job. |
@@ -43,7 +44,7 @@ This is a remediation ledger, not a self-issued security opinion. The initial re
 
 ## Follow-up review gates
 
-The independent follow-up review identified four merge blockers and additional pre-publication hardening. Consumer repository binding (F1), baseline authorization (F2), bounded MCP policy outputs, and the verification scan lock are closed in focused regressions. The pre-publication follow-up adds authenticated derived evidence and plans (F3), rejects relative or symlinked key-store roots (F5), proves service-level HMAC enforcement, covers every scanning or mutating MCP argv route, and removes commit provenance when the repository changes during a scan. Windows and real-browser exercises remain independent environment gates rather than claims made by this ledger.
+The independent follow-up review identified four merge blockers and additional pre-publication hardening. Consumer repository binding (F1), baseline authorization (F2), bounded MCP policy outputs, and the verification scan lock are closed in focused regressions. The pre-publication follow-up adds authenticated derived evidence and plans (F3), rejects relative or symlinked key-store roots (F5), proves service-level HMAC enforcement, covers every scanning or mutating MCP argv route, removes commit provenance when the repository changes during a scan, and refuses authentically replayed service evidence after HEAD advances (V1-STALE). The real-Windows exercise is tracked in [#53](https://github.com/cisoventures/RepoRook/issues/53), and the real-browser exercise is tracked in [#54](https://github.com/cisoventures/RepoRook/issues/54); neither is replaced by CI.
 
 ## Required independent re-review
 

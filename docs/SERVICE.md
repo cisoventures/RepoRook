@@ -21,6 +21,7 @@ The dashboard can:
 - show a scanner-by-scanner coverage checklist and explain why an incomplete scan is inconclusive;
 - display platform-specific scanner setup commands after an explicit click without running them or installing software;
 - show reduced, plain-English finding evidence and coverage status;
+- mark evidence stale or dirty when its authenticated source commit is not the clean current Git HEAD, and block remediation until a new scan;
 - prepare a finding-bound remediation plan and exact proposal template;
 - show the exact patch and tests supplied in that proposal;
 - record a named approval receipt only if the proposal digest is unchanged;
@@ -100,6 +101,7 @@ The v1 local service:
 - does not return raw scanner metadata, matched source, or secret material;
 - never treats scanner exit code `2` as a completed scan;
 - requires the digest of the complete exact proposal, refuses to display or approve oversized patches, and rejects stale approvals;
+- compares authenticated findings and plan commits to a stable, clean current Git HEAD before planning, approval, or publishing;
 - authenticates findings and approval receipts with a host-local, repository-bound HMAC before trusting them;
 - keeps GitHub App keys and tokens server-side, outside RepoRook artifacts and browser responses;
 - uses random, expiring manifest state and validates the setup installation against the exact target repository;

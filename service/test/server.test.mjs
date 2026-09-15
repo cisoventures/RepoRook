@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFile as execFileCallback } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { authenticateArtifact, createApprovalReceipt } from "reporook";
 import { startDashboardServer } from "../dist/server.js";
 import { RepositoryStore } from "../dist/repository.js";
@@ -11,18 +13,32 @@ import { dashboardHtml, dashboardJs } from "../dist/ui.js";
 import { createDirectoryLink, removeDirectoryLink } from "../../test-support/path-links.mjs";
 
 const findingId = "rr-0123456789ab";
+const execFile = promisify(execFileCallback);
 process.env.REPOROOK_AUTH_KEY ??= "reporook-test-authentication-key-32-bytes-minimum";
+
+async function git(repository, args) {
+  const result = await execFile("git", args, { cwd: repository, encoding: "utf8", maxBuffer: 1024 * 1024 });
+  return result.stdout.trim();
+}
+
+async function commit(repository, message) {
+  await git(repository, ["add", "--", ".gitignore", "app.js", "reporook.yml"]);
+  await git(repository, ["-c", "user.name=RepoRook Test", "-c", "user.email=reporook@example.invalid", "commit", "--quiet", "--no-gpg-sign", "-m", message]);
+  return await git(repository, ["rev-parse", "--verify", "HEAD"]);
+}
 
 async function fixture() {
   const repository = await mkdtemp(join(tmpdir(), "reporook-service-test-"));
-  await mkdir(join(repository, ".git"));
   await mkdir(join(repository, ".reporook", "remediations", findingId), { recursive: true });
   await writeFile(join(repository, "app.js"), "export const ready = true;\n");
   await writeFile(join(repository, "reporook.yml"), "failOn: high\n");
+  await writeFile(join(repository, ".gitignore"), ".reporook/\n");
+  await git(repository, ["init", "--quiet", "--initial-branch=main"]);
+  const sourceCommit = await commit(repository, "initial fixture");
   const unsignedReport = {
     schema_version: "1.0",
     tool: { name: "reporook", version: "0.9.3" },
-    target: { path: repository, commit: "a".repeat(40) },
+    target: { path: repository, commit: sourceCommit },
     generated_at: "2026-07-25T00:00:00.000Z",
     coverage_status: "complete",
     summary: { critical: 0, high: 1, medium: 0, low: 0, total: 1 },
@@ -42,7 +58,7 @@ async function fixture() {
       findings: [{ finding_id: findingId, baseline: "not-configured", disposition: "actionable", effective_fail_on: "high", matched_path_policy: null, suppression: null, expired_suppression: null }],
     },
     scan_receipt: {
-      target: repository, commit: "a".repeat(40), config_hash: "sha256:" + "c".repeat(64),
+      target: repository, commit: sourceCommit, config_hash: "sha256:" + "c".repeat(64),
       scanner_versions: { semgrep: "1" }, started_at: "2026-07-25T00:00:00.000Z", completed_at: "2026-07-25T00:00:00.000Z",
     },
   };
@@ -61,7 +77,7 @@ async function fixture() {
   await writeFile(join(repository, ".reporook", "findings.json"), `${JSON.stringify(report)}\n`);
   await writeFile(join(repository, ".reporook", "priorities.json"), `${JSON.stringify(priorities)}\n`);
   await writeFile(join(repository, ".reporook", "remediations", findingId, "proposal.json"), `${JSON.stringify(proposal, null, 2)}\n`);
-  return { repository, proposal };
+  return { repository, proposal, sourceCommit };
 }
 
 async function session(dashboard) {
@@ -131,7 +147,7 @@ async function startOrSkip(context, options) {
 }
 
 test("repository snapshots expose plain evidence without raw scanner metadata", async () => {
-  const { repository } = await fixture();
+  const { repository, sourceCommit } = await fixture();
   try {
     const snapshot = await (await RepositoryStore.open(repository)).snapshot();
     const raw = JSON.stringify(snapshot);
@@ -139,6 +155,115 @@ test("repository snapshots expose plain evidence without raw scanner metadata", 
     assert.equal(snapshot.findings[0].plain_summary, "Untrusted input reaches a command.");
     assert.equal(snapshot.findings[0].policy_status, "actionable");
     assert.match(snapshot.approvals[0].proposal_digest, /^[a-f0-9]{64}$/);
+    assert.equal(snapshot.scan.freshness_status, "current");
+    assert.equal(snapshot.scan.current_commit, sourceCommit);
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("service freshness checks ignore inherited Git repository redirection", async () => {
+  const { repository } = await approvedPublicationFixture();
+  const previousGitDir = process.env.GIT_DIR;
+  const previousGitWorkTree = process.env.GIT_WORK_TREE;
+  try {
+    process.env.GIT_DIR = join(repository, "attacker-controlled-git-dir");
+    process.env.GIT_WORK_TREE = join(repository, "attacker-controlled-worktree");
+    const snapshot = await (await RepositoryStore.open(repository)).snapshot();
+    assert.equal(snapshot.scan.freshness_status, "current");
+  } finally {
+    if (previousGitDir === undefined) delete process.env.GIT_DIR;
+    else process.env.GIT_DIR = previousGitDir;
+    if (previousGitWorkTree === undefined) delete process.env.GIT_WORK_TREE;
+    else process.env.GIT_WORK_TREE = previousGitWorkTree;
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("service marks replayed signed findings stale and blocks approval and publication after HEAD advances", async () => {
+  const { repository, digest } = await approvedPublicationFixture();
+  try {
+    const store = await RepositoryStore.open(repository);
+    assert.equal((await store.snapshot()).scan.freshness_status, "current");
+    await writeFile(join(repository, "app.js"), "export const ready = 'new commit';\n");
+    const currentCommit = await commit(repository, "advance repository head");
+
+    const snapshot = await store.snapshot();
+    assert.equal(snapshot.scan.freshness_status, "stale");
+    assert.equal(snapshot.scan.current_commit, currentCommit);
+    assert.equal(snapshot.findings[0].plain_summary, "Untrusted input reaches a command.");
+    assert.equal(snapshot.approvals[0].publishable, false);
+    assert.match(snapshot.approvals[0].blocked_reason, /different repository commit/);
+    await assert.rejects(store.proposalDigest(findingId), /Remediation plan is not current.*different repository commit/);
+    await assert.rejects(store.publication(findingId, digest), /Remediation plan is not current.*different repository commit/);
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("dashboard remediation endpoints reject replayed signed evidence after HEAD advances", async (context) => {
+  const { repository, digest } = await approvedPublicationFixture();
+  const cliCalls = [];
+  const publishCalls = [];
+  await writeFile(join(repository, "app.js"), "export const ready = 'new endpoint commit';\n");
+  await commit(repository, "advance endpoint repository head");
+  const dashboard = await startOrSkip(context, {
+    repository,
+    port: 0,
+    bootstrapToken: "bootstrap-test-token",
+    sessionToken: "session-test-token",
+    cliRunner: async (args) => { cliCalls.push(args); return { code: 0, stdout: "{}", stderr: "" }; },
+    publisher: {
+      repository: "cisoventures/RepoRook",
+      publish: async (publication) => { publishCalls.push(publication); throw new Error("stale publication reached publisher"); },
+    },
+  });
+  if (!dashboard) { await rm(repository, { recursive: true, force: true }); return; }
+  try {
+    const authorization = await session(dashboard);
+    const headers = { "content-type": "application/json", origin: dashboard.origin, authorization };
+    const plan = await fetch(`${dashboard.origin}/api/plan`, {
+      method: "POST", headers, body: JSON.stringify({ finding_id: findingId }),
+    });
+    assert.equal(plan.status, 409);
+    assert.match((await plan.json()).error, /different repository commit/);
+    const approve = await fetch(`${dashboard.origin}/api/approve`, {
+      method: "POST", headers, body: JSON.stringify({
+        finding_id: findingId,
+        proposal_digest: digest,
+        approved_by: "Security owner",
+        reason: "Reviewed the exact patch and test plan before the repository changed.",
+      }),
+    });
+    assert.equal(approve.status, 409);
+    assert.match((await approve.json()).error, /different repository commit/);
+    const publish = await fetch(`${dashboard.origin}/api/publish`, {
+      method: "POST", headers, body: JSON.stringify({
+        finding_id: findingId,
+        proposal_digest: digest,
+        confirmation: "open approved draft pull request",
+      }),
+    });
+    assert.equal(publish.status, 422);
+    assert.match((await publish.json()).error, /different repository commit/);
+    assert.deepEqual(cliCalls, []);
+    assert.deepEqual(publishCalls, []);
+  } finally {
+    await dashboard.close();
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("service marks authenticated evidence unsafe while the repository is dirty", async () => {
+  const { repository } = await approvedPublicationFixture();
+  try {
+    await writeFile(join(repository, "app.js"), "export const ready = 'uncommitted';\n");
+    const store = await RepositoryStore.open(repository);
+    const snapshot = await store.snapshot();
+    assert.equal(snapshot.scan.freshness_status, "dirty");
+    assert.equal(snapshot.approvals[0].publishable, false);
+    assert.match(snapshot.approvals[0].blocked_reason, /uncommitted changes/);
+    await assert.rejects(store.proposalDigest(findingId), /uncommitted changes/);
   } finally {
     await rm(repository, { recursive: true, force: true });
   }
@@ -243,6 +368,8 @@ test("dashboard explains incomplete coverage and offers non-installing setup gui
   assert.match(dashboardJs, /allow-repository-suppressions"\)\.checked = false/);
   assert.match(html, /logout-button/);
   assert.match(dashboardJs, /sessionStorage\.removeItem\("reporook_session"\)/);
+  assert.match(dashboardJs, /freshness_status !== "current"/);
+  assert.match(dashboardJs, /item\.publishable && state\.snapshot\.publishing/);
 });
 
 test("dashboard requires its fragment token and exposes only redacted finding fields", async (context) => {
@@ -286,7 +413,7 @@ test("dashboard requires its fragment token and exposes only redacted finding fi
 });
 
 test("approval rejects stale proposal content and records only an exact reviewed proposal", async (context) => {
-  const { repository } = await fixture();
+  const { repository } = await approvedPublicationFixture();
   const calls = [];
   const runner = async (args) => {
     calls.push(args);

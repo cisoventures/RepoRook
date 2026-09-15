@@ -88,7 +88,9 @@ function renderCoverage(scan) {
     return;
   }
   const incomplete = scan.coverage_status !== "complete";
-  $("coverage-explanation").textContent = scan.coverage_status === "complete"
+  $("coverage-explanation").textContent = scan.freshness_status !== "current"
+    ? scan.freshness_reason || "This scan is not current. Run a new scan before remediation or publishing."
+    : scan.coverage_status === "complete"
     ? "Every applicable security check completed."
     : scan.coverage_status === "partial"
       ? "Some checks completed, but missing or failed scanners mean this is not a clean bill of health."
@@ -127,6 +129,7 @@ function render() {
     detail.append(element("p", {}, finding.remediation_hint));
     row.append(detail);
     const action = element("button", { class: "secondary", type: "button", "data-finding": finding.id }, "Prepare plan");
+    action.disabled = scan?.freshness_status !== "current";
     action.addEventListener("click", () => preparePlan(finding.id, action));
     row.append(action);
     queue.append(row);
@@ -174,7 +177,7 @@ function renderApproval(item) {
     });
     form.append(name, reason, button);
     wrapper.append(form);
-  } else if (state.snapshot.publishing?.enabled) {
+  } else if (item.publishable && state.snapshot.publishing?.enabled) {
     const button = element("button", { type: "button" }, "Open draft PR in " + state.snapshot.publishing.repository);
     button.addEventListener("click", async () => {
       if (!confirm("Open a draft pull request containing only this exact approved patch? RepoRook will not modify your local files.")) return;

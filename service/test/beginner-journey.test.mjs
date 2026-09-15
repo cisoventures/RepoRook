@@ -1,18 +1,32 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFile as execFileCallback } from "node:child_process";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { authenticateArtifact, createApprovalReceipt } from "reporook";
 import { GitHubPublisher } from "../dist/github.js";
 import { startDashboardServer } from "../dist/server.js";
 
 const findingId = "rr-0123456789ab";
 const planId = "rrp-0123456789ab";
-const sourceCommit = "a".repeat(40);
+const execFile = promisify(execFileCallback);
+let sourceCommit = "a".repeat(40);
 const originalSource = "export const ready = false;\n";
 const fixedSource = "export const ready = true;\n";
 process.env.REPOROOK_AUTH_KEY ??= "reporook-test-authentication-key-32-bytes-minimum";
+
+async function git(repository, args) {
+  const result = await execFile("git", args, { cwd: repository, encoding: "utf8", maxBuffer: 1024 * 1024 });
+  return result.stdout.trim();
+}
+
+async function commit(repository, paths, message) {
+  await git(repository, ["add", "--", ...paths]);
+  await git(repository, ["-c", "user.name=RepoRook Test", "-c", "user.email=reporook@example.invalid", "commit", "--quiet", "--no-gpg-sign", "-m", message]);
+  sourceCommit = await git(repository, ["rev-parse", "--verify", "HEAD"]);
+}
 
 function scanReceipt(repository, scannerVersions) {
   return {
@@ -212,9 +226,10 @@ test("beginner journey fails closed, binds approval, and opens only a repository
   const calls = [];
   const github = githubMock();
   let scanCount = 0;
-  await mkdir(join(repository, ".git"));
   await writeFile(join(repository, "app.js"), originalSource);
   await writeFile(join(repository, "package.json"), `${JSON.stringify({ name: "beginner-fixture", private: true, scripts: { test: "node --test" } }, null, 2)}\n`);
+  await git(repository, ["init", "--quiet", "--initial-branch=main"]);
+  await commit(repository, ["app.js", "package.json"], "initial beginner fixture");
 
   const runner = async (args) => {
     calls.push([...args]);
@@ -223,6 +238,8 @@ test("beginner journey fails closed, binds approval, and opens only a repository
     }
     if (args[0] === "init") {
       await writeFile(join(repository, "reporook.yml"), "failOn: high\nrequiredScanners:\n  - semgrep\n  - gitleaks\n");
+      await writeFile(join(repository, ".gitignore"), ".reporook/\n");
+      await commit(repository, [".gitignore", "reporook.yml"], "configure RepoRook fixture");
       return { code: 0, stdout: `${JSON.stringify({ initialized: true, repository })}\n`, stderr: "" };
     }
     if (args[0] === "scan") {
