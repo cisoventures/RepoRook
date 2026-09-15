@@ -3,7 +3,7 @@
   "$id": "https://reporook.dev/schemas/verification-1.0.json",
   "title": "RepoRook Finding Verification",
   "type": "object",
-  "required": ["schema_version", "tool", "finding_id", "generated_at", "scanner_resolution", "reason", "config_unchanged", "original_finding", "remaining_finding", "original_scanner_status", "source_scan", "verification_scan", "functional_tests"],
+  "required": ["schema_version", "tool", "finding_id", "generated_at", "scanner_resolution", "reason", "config_unchanged", "original_finding", "remaining_finding", "original_scanner_status", "source_scan", "verification_scan", "functional_tests", "authentication"],
   "properties": {
     "schema_version": { "const": "1.0" },
     "tool": {
@@ -54,7 +54,8 @@
         }
       },
       "additionalProperties": false
-    }
+    },
+    "authentication": { "$ref": "https://reporook.dev/schemas/findings-1.0.json#/$defs/authentication" }
   },
   "additionalProperties": false
 }

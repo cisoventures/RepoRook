@@ -141,6 +141,45 @@ process.stdout.write(JSON.stringify(${JSON.stringify(validReport("__TARGET__"))}
   }
 });
 
+test("every mutating or scanning MCP CLI call keeps repository paths behind an option terminator", async () => {
+  const { root, child, responses } = await serverWithStub(`
+import { appendFileSync } from "node:fs";
+appendFileSync(process.env.REPOROOK_TEST_ROOT + "/calls.txt", JSON.stringify(process.argv.slice(2)) + "\\n");
+process.stdout.write("{}\\n");
+`);
+  const findingId = "rr-0123456789ab";
+  const calls = [
+    { name: "scan_repository", arguments: { path: root } },
+    { name: "scan_changes", arguments: { path: root, base: "HEAD~1", head: "HEAD" } },
+    { name: "create_findings_baseline", arguments: { repository_path: root, confirmed: true } },
+    { name: "suppress_finding", arguments: { repository_path: root, finding_id: findingId, owner: "--owner-like-data", reason: "--reason-like-data", expires: "2099-01-01", confirmed: true } },
+    { name: "prioritize_findings", arguments: { repository_path: root } },
+    { name: "prepare_remediation_plan", arguments: { repository_path: root, finding_id: findingId } },
+    { name: "verify_fix", arguments: { repository_path: root, finding_id: findingId } },
+  ];
+  try {
+    for (const [index, call] of calls.entries()) {
+      child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: index + 1, method: "tools/call", params: call })}\n`);
+      await waitFor(responses, index + 1);
+    }
+    assert.equal(responses.every((item) => item.result?.isError !== true), true);
+    const argv = (await readFile(join(root, "calls.txt"), "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+    assert.equal(argv.length, calls.length);
+    assert.deepEqual(argv[0].slice(-2), ["--", root]);
+    assert.deepEqual(argv[1].slice(-2), ["--", root]);
+    assert.deepEqual(argv[2].slice(-2), ["--", root]);
+    assert.deepEqual(argv[3].slice(-3), ["--", findingId, root]);
+    assert.ok(argv[3].includes("--owner=--owner-like-data"));
+    assert.ok(argv[3].includes("--reason=--reason-like-data"));
+    assert.deepEqual(argv[4].slice(-2), ["--", root]);
+    assert.deepEqual(argv[5].slice(-3), ["--", findingId, root]);
+    assert.deepEqual(argv[6].slice(-3), ["--", findingId, root]);
+  } finally {
+    child.kill("SIGTERM");
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("stdio tool calls have a hard in-flight concurrency bound", async () => {
   const { root, child, responses } = await serverWithStub(`
 await new Promise((resolve) => setTimeout(resolve, 150));

@@ -316,12 +316,12 @@
     {
       "path": "schemas/priorities.schema.json",
       "id": "https://reporook.dev/schemas/priorities-1.0.json",
-      "sha256": "sha256:54c556f89528eafd411645863ca87e9bca264497c4fde0328aed35249b8c54bb"
+      "sha256": "sha256:0b67c1014b700361de4c0eea2692af3ff19d4de17f90a611842f7e8abf3516e0"
     },
     {
       "path": "schemas/remediation-plan.schema.json",
       "id": "https://reporook.dev/schemas/remediation-plan-1.0.json",
-      "sha256": "sha256:fdd1ff65d219b14983d595ee4b76b6d8c0a0b1a36f1aa670c493b0753129c551"
+      "sha256": "sha256:6c1bbfb63f7ec91cac95b2b7bea7a3f314bc77151d386a6563cc97582adaa92f"
     },
     {
       "path": "schemas/remediation-proposal.schema.json",
@@ -336,7 +336,7 @@
     {
       "path": "schemas/verification.schema.json",
       "id": "https://reporook.dev/schemas/verification-1.0.json",
-      "sha256": "sha256:96cb6126bd45b11ff25e0817f7b58153b0c5d53fbd33e0fc0e4f75c7fb57a36a"
+      "sha256": "sha256:5d0c529d0603b1d514a57d77da67f70538ea28c0344bae610a6364f43a50c382"
     }
   ],
   "github_action": {

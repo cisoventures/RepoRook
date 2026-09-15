@@ -75,7 +75,7 @@ function completeReport(repository) {
 
 function priorities(repository) {
   const report = completeReport(repository);
-  return {
+  return authenticateArtifact(repository, {
     schema_version: "1.0",
     tool: report.tool,
     generated_at: report.generated_at,
@@ -96,12 +96,12 @@ function priorities(repository) {
       next_step: "Review an exact patch and test plan.",
       related_finding_ids: [],
     }],
-  };
+  });
 }
 
 function remediation(repository) {
   const report = completeReport(repository);
-  const plan = {
+  const plan = authenticateArtifact(repository, {
     schema_version: "1.0",
     tool: report.tool,
     plan_id: planId,
@@ -111,7 +111,7 @@ function remediation(repository) {
     source_scan: report.scan_receipt,
     goal: `Validate and remediate RepoRook finding ${findingId} within the approved file scope.`,
     scanner_guidance: { trust: "untrusted-scanner-data", text: report.findings[0].remediation_hint },
-  };
+  });
   const proposal = {
     schema_version: "1.0",
     plan_id: plan.plan_id,

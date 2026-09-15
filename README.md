@@ -152,15 +152,15 @@ Changed-file scans plan work per adapter. Semgrep, OSV-Scanner, `npm audit`, `pi
 - `.reporook/findings.json`: deterministic normalized findings, including a jargon-free `plain_summary`
 - `.reporook/findings.json#policy`: new/baseline/suppressed/below-threshold disposition without modifying scanner evidence
 - `.reporook/results.sarif`: GitHub-compatible projection
-- `.reporook/scan-receipt.json`: commit, configuration hash, scanner versions, coverage, and any explicitly authorized external image targets
-- `.reporook/priorities.json`: deterministic fix-now, fix-next, and review-later queue
+- `.reporook/scan-receipt.json`: authenticated commit, configuration hash, scanner versions, coverage, and any explicitly authorized external image targets
+- `.reporook/priorities.json`: authenticated deterministic fix-now, fix-next, and review-later queue
 - `.reporook/agent-prompt.txt`: copy-ready, approval-based instructions for any coding agent
 - `.reporook/agent-review.json`: optional, separately attributed host-agent analysis
-- `.reporook/remediations/FINDING_ID/plan.json`: finding- and source-scan-bound remediation requirements
+- `.reporook/remediations/FINDING_ID/plan.json`: authenticated finding- and source-scan-bound remediation requirements
 - `.reporook/remediations/FINDING_ID/proposal.json`: exact diff, file list, behavior impact, and test-plan template
 - `.reporook/remediations/FINDING_ID/approval.json`: an authenticated receipt binding the approved plan, exact patch, files, and tests
 - `.reporook/remediations/FINDING_ID/fix-prompt.txt`: copy-ready exact-preview and approval workflow
-- `.reporook/verifications/FINDING_ID/verification.json`: preserved before/after scanner-resolution receipt
+- `.reporook/verifications/FINDING_ID/verification.json`: authenticated preserved before/after scanner-resolution receipt
 
 The v1 schemas are in [`schemas/`](schemas/). Finding IDs intentionally exclude line numbers so inserting code above a finding does not change its identity.
 

@@ -1,4 +1,5 @@
 import { sha256 } from "./fingerprint.js";
+import { authenticateArtifact } from "./auth.js";
 import { prioritizeFindings } from "./prioritization.js";
 import type { Finding, RemediationPlan, ScanReport } from "./types.js";
 import { VERSION } from "./version.js";
@@ -50,7 +51,7 @@ export function createRemediationPlan(report: ScanReport, findingId: string): Re
     report.scan_receipt.commit ?? "working-tree",
     report.scan_receipt.completed_at,
   ].join("\0");
-  return {
+  const plan = {
     schema_version: "1.0",
     tool: { name: "reporook", version: VERSION },
     plan_id: `rrp-${sha256(identity).slice(0, 12)}`,
@@ -96,4 +97,5 @@ export function createRemediationPlan(report: ScanReport, findingId: string): Re
       functional_tests_required: true,
     },
   };
+  return authenticateArtifact(report.scan_receipt.target, plan as unknown as Record<string, unknown>) as unknown as RemediationPlan;
 }

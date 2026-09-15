@@ -3,7 +3,7 @@ import { realpathSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs, stringFlag } from "./args.js";
-import { verifyArtifactAuthentication } from "./auth.js";
+import { authenticateArtifact, verifyArtifactAuthentication } from "./auth.js";
 import { artifactPath, writeApprovalArtifact, writeArtifacts, writeFindingBaselineArtifact, writePrioritizationArtifact, writeRemediationArtifacts, writeSuppressionArtifact, writeVerificationArtifact } from "./artifacts.js";
 import { approvalMatches, createApprovalReceipt, parseApprovalReceipt } from "./approval.js";
 import { authorizeSemgrepConfig, loadConfig } from "./config.js";
@@ -370,7 +370,7 @@ async function runVerify(parsed: ReturnType<typeof parseArgs>): Promise<number> 
     sarifOutput,
     writeSarif: parsed.flags.sarif !== false,
   });
-  const report: VerificationReport = {
+  const report = authenticateArtifact(target, {
     schema_version: "1.0",
     tool: { name: "reporook", version: VERSION },
     finding_id: findingId,
@@ -388,7 +388,7 @@ async function runVerify(parsed: ReturnType<typeof parseArgs>): Promise<number> 
       reminder: "Run the focused regression test and relevant project tests before calling the fix verified.",
     },
     approval,
-  };
+  } as unknown as Record<string, unknown>) as unknown as VerificationReport;
   const verificationPath = await writeVerificationArtifact(target, report, verificationOutput);
   if (parsed.flags.quiet !== true) {
     if (format === "json") process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);

@@ -108,10 +108,11 @@ export async function scanRepository(options: ScanOptions, scanners: ScannerAdap
   if (semgrepRules.source === "invocation" && semgrepRules.network && semgrepRules.selection !== defaultConfig.semgrepConfig && !options.allowExternalTargets) {
     throw new Error("Non-default Semgrep network rules require explicit external-target authorization");
   }
-  const commit = await gitCommit(target);
+  const startingHead = await gitCommit(target);
+  const commit = await cacheEligible(target, startingHead, options.config) ? startingHead : null;
   const changed_files = options.changedBase !== undefined ? await gitChangedFiles(target, options.changedBase || undefined, options.changedHead) : undefined;
   const useCache = options.cacheEnabled ?? options.config.cacheEnabled;
-  const canCache = useCache && await cacheEligible(target, commit, options.config);
+  const canCache = useCache && commit !== null;
   const cacheTtlMs = options.cacheTtlMs ?? options.config.cacheTtlMinutes * 60_000;
 
   const runs = await Promise.all(scanners.map(async (scanner) => {
@@ -216,11 +217,13 @@ export async function scanRepository(options: ScanOptions, scanners: ScannerAdap
     scanner.finding_count = findings.filter((finding) => finding.scanner === scanner.name).length;
   }
   const policy = await evaluatePolicy(target, findings, options.config, new Date(), { allowRepositorySuppressions: options.allowRepositorySuppressions });
+  const endingHead = await gitCommit(target);
+  const completedCommit = commit !== null && endingHead === commit && await cacheEligible(target, endingHead, options.config) ? commit : null;
   const completed_at = new Date().toISOString();
   const report: Omit<ScanReport, "authentication"> = {
     schema_version: "1.0",
     tool: { name: "reporook", version: VERSION },
-    target: { path: target, commit },
+    target: { path: target, commit: completedCommit },
     generated_at: completed_at,
     coverage_status: coverage(statuses),
     summary: summary(findings),
@@ -229,7 +232,7 @@ export async function scanRepository(options: ScanOptions, scanners: ScannerAdap
     policy,
     scan_receipt: {
       target,
-      commit,
+      commit: completedCommit,
       config_hash: `sha256:${sha256(JSON.stringify({ config: options.config, policy_hash: policy.policy_hash }))}`,
       scanner_versions: Object.fromEntries(statuses.map((scanner) => [scanner.name, scanner.version])),
       started_at,

@@ -94,7 +94,7 @@ reporook approve FINDING_ID . \
   --reason "Reviewed the exact patch and regression plan"
 ```
 
-The resulting `approval.json` binds the plan, proposal, patch, file list, test plan, approver, and reason, then authenticates that receipt with RepoRook's host-local HMAC key. Any change, copied receipt, or repository substitution invalidates it. The default key is created at `$XDG_CACHE_HOME/reporook/artifact-auth-key` or `~/.cache/reporook/artifact-auth-key` with owner-only permissions; automation may supply a secret `REPOROOK_AUTH_KEY` of at least 32 bytes. Never commit or print that key. `reporook verify` validates and attaches the receipt when present, while still reporting functional tests separately from scanner resolution.
+The generated `plan.json` is authenticated before it can be approved. The resulting `approval.json` verifies that plan, binds the proposal, patch, file list, test plan, approver, and reason, then authenticates the receipt with RepoRook's host-local HMAC key. Any change, copied receipt, or repository substitution invalidates it. The default key is created at `$XDG_CACHE_HOME/reporook/artifact-auth-key` or `~/.cache/reporook/artifact-auth-key` with owner-only permissions; `XDG_CACHE_HOME` must be absolute and non-link. Automation may supply a secret `REPOROOK_AUTH_KEY` of at least 32 bytes. Never commit or print that key. `reporook verify` validates and attaches the receipt when present, while still reporting functional tests separately from scanner resolution.
 
 ## Exit behavior
 

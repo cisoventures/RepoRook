@@ -86,6 +86,13 @@ test("approval receipts bind the exact plan, diff, files, and tests", () => {
   assert.equal(approvalMatches(receipt, plan, proposed, "/different-repository"), false);
   assert.equal(approvalMatches(receipt, plan, { ...proposed, test_plan: ["npm test"] }, target), false);
   assert.equal(approvalMatches(receipt, plan, { ...proposed, patch: `${proposed.patch}\n` }, target), false);
+  const tamperedPlan = structuredClone(plan);
+  tamperedPlan.finding.plain_summary = "Repository-authored replacement summary";
+  assert.equal(approvalMatches(receipt, tamperedPlan, proposed, target), false);
+  assert.throws(
+    () => createApprovalReceipt(tamperedPlan, proposed, "security-reviewer", "Reviewed the exact patch and regression test.", target),
+    /Remediation plan.*modified/,
+  );
   const changedSource = structuredClone(receipt);
   changedSource.source_scan.commit = "def456";
   assert.equal(approvalMatches(changedSource, plan, proposed, target), false);

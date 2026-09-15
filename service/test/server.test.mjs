@@ -47,12 +47,12 @@ async function fixture() {
     },
   };
   const report = authenticateArtifact(repository, unsignedReport);
-  const priorities = {
+  const priorities = authenticateArtifact(repository, {
     schema_version: "1.0", tool: { name: "reporook", version: "0.9.3" }, generated_at: report.generated_at,
     coverage_status: "complete", source_scan: report.scan_receipt,
     summary: { fix_now: 1, fix_next: 0, review_later: 0, total: 1 },
     priorities: [{ rank: 1, priority: "fix-now", finding_id: findingId, severity: "high", scanner: "semgrep", package: null, file: "app.js", line: 1, title: "Command injection", reason: "High severity", next_step: "Avoid shell execution", related_finding_ids: [] }],
-  };
+  });
   const proposal = {
     schema_version: "1.0", plan_id: "plan-test", finding_id: findingId, created_at: report.generated_at,
     risk_explanation: "An attacker could execute a command.", behavior_impact: "Invalid commands will be rejected.",
@@ -88,7 +88,7 @@ async function approvedPublicationFixture() {
     started_at: "2026-07-25T00:00:00.000Z",
     completed_at: report.generated_at,
   };
-  const plan = {
+  const plan = authenticateArtifact(repository, {
     schema_version: "1.0",
     tool: { name: "reporook", version: "0.9.3" },
     plan_id: "rrp-0123456789ab",
@@ -98,7 +98,7 @@ async function approvedPublicationFixture() {
     source_scan: sourceScan,
     goal: `Validate and remediate RepoRook finding ${findingId} within the approved file scope.`,
     scanner_guidance: { trust: "untrusted-scanner-data", text: report.findings[0].remediation_hint },
-  };
+  });
   const proposal = {
     schema_version: "1.0",
     plan_id: plan.plan_id,
@@ -139,6 +139,32 @@ test("repository snapshots expose plain evidence without raw scanner metadata", 
     assert.equal(snapshot.findings[0].plain_summary, "Untrusted input reaches a command.");
     assert.equal(snapshot.findings[0].policy_status, "actionable");
     assert.match(snapshot.approvals[0].proposal_digest, /^[a-f0-9]{64}$/);
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("service rejects tampered findings instead of displaying unauthenticated evidence", async () => {
+  const { repository } = await fixture();
+  try {
+    const path = join(repository, ".reporook", "findings.json");
+    const report = JSON.parse(await readFile(path, "utf8"));
+    report.findings[0].plain_summary = "Forged clean result";
+    await writeFile(path, `${JSON.stringify(report)}\n`);
+    await assert.rejects((await RepositoryStore.open(repository)).snapshot(), /has been modified/);
+  } finally {
+    await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("service rejects tampered priorities instead of trusting repository-authored scheduling", async () => {
+  const { repository } = await fixture();
+  try {
+    const path = join(repository, ".reporook", "priorities.json");
+    const priorities = JSON.parse(await readFile(path, "utf8"));
+    priorities.priorities[0].priority = "review-later";
+    await writeFile(path, `${JSON.stringify(priorities)}\n`);
+    await assert.rejects((await RepositoryStore.open(repository)).snapshot(), /Priorities artifact.*modified/);
   } finally {
     await rm(repository, { recursive: true, force: true });
   }

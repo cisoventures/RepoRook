@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createApprovalReceipt } from "reporook";
+import { authenticateArtifact, createApprovalReceipt } from "reporook";
 import { GitHubPublisher } from "../dist/github.js";
 
 process.env.REPOROOK_AUTH_KEY ??= "reporook-test-authentication-key-32-bytes-minimum";
@@ -19,7 +19,7 @@ function publication() {
     started_at: "2026-07-25T00:00:00.000Z",
     completed_at: "2026-07-25T00:00:01.000Z",
   };
-  const plan = {
+  const plan = authenticateArtifact(source_scan.target, {
     schema_version: "1.0",
     tool: { name: "reporook", version: "0.9.3" },
     plan_id: planId,
@@ -29,7 +29,7 @@ function publication() {
     source_scan,
     goal: `Validate and remediate RepoRook finding ${findingId} within the approved file scope.`,
     scanner_guidance: { trust: "untrusted-scanner-data", text: "Use the safe command API." },
-  };
+  });
   const proposal = {
     schema_version: "1.0",
     plan_id: planId,

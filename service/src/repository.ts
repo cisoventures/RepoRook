@@ -218,7 +218,16 @@ export class RepositoryStore {
       verifyArtifactAuthentication(this.target, reportArtifact.value as Record<string, unknown>, "Findings artifact");
       report = parseFindingsReport(reportArtifact.value);
     }
-    const priorities = priorityArtifact?.value as PrioritizationReport | undefined;
+    let priorities: PrioritizationReport | undefined;
+    if (priorityArtifact) {
+      if (!report) throw new Error("Priorities cannot be trusted without their authenticated findings artifact");
+      if (!priorityArtifact.value || typeof priorityArtifact.value !== "object" || Array.isArray(priorityArtifact.value)) throw new Error("Priorities artifact must be an object");
+      verifyArtifactAuthentication(this.target, priorityArtifact.value as Record<string, unknown>, "Priorities artifact");
+      priorities = priorityArtifact.value as PrioritizationReport;
+      if (JSON.stringify(priorities.source_scan) !== JSON.stringify(report.scan_receipt)) {
+        throw new Error("Priorities artifact does not belong to the current findings scan");
+      }
+    }
     const priorityByFinding = new Map((priorities?.priorities ?? []).map((item) => [item.finding_id, item.priority]));
     const policyByFinding = new Map((report?.policy?.findings ?? []).map((item) => [item.finding_id, item.disposition]));
     const findings: DashboardFinding[] = Array.isArray(report?.findings) ? report.findings.slice(0, 1_000).map((finding: Finding) => ({

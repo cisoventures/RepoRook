@@ -14,6 +14,7 @@ import { plainSummary } from "../dist/knowledge.js";
 import { matchesAny } from "../dist/path-utils.js";
 import { resolveCommandPath, runCommand } from "../dist/process.js";
 import { parseFindingsReport } from "../dist/report-validation.js";
+import { verifyArtifactAuthentication } from "../dist/auth.js";
 
 process.env.REPOROOK_AUTH_KEY ??= "reporook-test-authentication-key-32-bytes-minimum";
 
@@ -159,6 +160,9 @@ test("engine deduplicates findings and produces SARIF", async () => {
     assert.match(prompt, /Do not edit files until I approve that exact change/);
     const priorities = JSON.parse(await readFile(artifacts.prioritiesPath, "utf8"));
     assert.equal(priorities.priorities[0].finding_id, finding.id);
+    assert.doesNotThrow(() => verifyArtifactAuthentication(target, priorities, "Priorities artifact"));
+    const receipt = JSON.parse(await readFile(artifacts.receiptPath, "utf8"));
+    assert.doesNotThrow(() => verifyArtifactAuthentication(target, receipt, "Scan receipt"));
     if (process.platform !== "win32") assert.equal((await stat(artifacts.promptPath)).mode & 0o777, 0o600);
     await assert.rejects(
       () => writeArtifacts(target, report, { output: ".reporook/priorities.json", writeSarif: false }),
@@ -168,6 +172,34 @@ test("engine deduplicates findings and produces SARIF", async () => {
       () => writeArtifacts(target, report, { output: "other/findings.json", writeSarif: false }),
       /scan evidence must stay in a .reporook directory/,
     );
+  } finally {
+    await rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
+test("scan receipts drop their commit binding when the repository changes during the scan", async () => {
+  const target = await mkdtemp(join(tmpdir(), "reporook-scan-freshness-"));
+  try {
+    execFileSync("git", ["init", "--quiet"], { cwd: target });
+    execFileSync("git", ["config", "user.email", "reporook@example.test"], { cwd: target });
+    execFileSync("git", ["config", "user.name", "RepoRook Test"], { cwd: target });
+    await writeFile(join(target, ".gitignore"), ".reporook/\n");
+    await writeFile(join(target, "app.js"), "export const state = 'before';\n");
+    execFileSync("git", ["add", ".gitignore", "app.js"], { cwd: target });
+    execFileSync("git", ["commit", "--quiet", "-m", "fixture"], { cwd: target });
+    const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: target, encoding: "utf8" }).trim();
+    const scanner = {
+      name: "fake",
+      async isApplicable() { return { applicable: true }; },
+      async run() {
+        await writeFile(join(target, "app.js"), "export const state = 'changed-during-scan';\n");
+        return { status: { name: "fake", applicable: true, available: true, version: "1", status: "ok", finding_count: 0, duration_ms: 1 }, findings: [] };
+      },
+    };
+    const report = await scanRepository({ target, config: structuredClone(defaultConfig), cacheEnabled: false }, [scanner]);
+    assert.equal(head.length, 40);
+    assert.equal(report.target.commit, null);
+    assert.equal(report.scan_receipt.commit, null);
   } finally {
     await rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }

@@ -192,6 +192,7 @@ export function createApprovalReceipt(
   if (!artifactTargetsMatch(sourceScan.target, target)) {
     throw new Error("Remediation plan source target does not match the repository being approved");
   }
+  verifyArtifactAuthentication(target, plan as unknown as Record<string, unknown>, "Remediation plan");
   const bindings = {
     plan_hash: digest(plan),
     proposal_hash: digest(proposal),
@@ -283,6 +284,7 @@ export function approvalMatches(receipt: ApprovalReceipt, planValue: unknown, pr
     const proposal = parseRemediationProposal(proposalValue);
     const sourceScan = parseScanReceipt(plan.source_scan, "Remediation plan source_scan");
     if (!artifactTargetsMatch(sourceScan.target, target) || !artifactTargetsMatch(parsedReceipt.source_scan.target, target)) return false;
+    verifyArtifactAuthentication(target, plan as unknown as Record<string, unknown>, "Remediation plan");
     verifyArtifactAuthentication(target, parsedReceipt as unknown as Record<string, unknown>, "Approval receipt");
     return parsedReceipt.status === "approved"
       && parsedReceipt.plan_id === plan.plan_id

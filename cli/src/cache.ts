@@ -1,10 +1,10 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { artifactPath } from "./artifacts.js";
 import { sha256 } from "./fingerprint.js";
 import { maximumEvidenceBytes, readBoundedJsonFile } from "./input.js";
+import { loadHostLocalKey } from "./key-store.js";
 import { matchesAny } from "./path-utils.js";
 import { runCommand } from "./process.js";
 import type { Finding, FindingMetadata, RepoRookConfig, ScannerResult, ScannerStatus, Severity } from "./types.js";
@@ -32,19 +32,7 @@ let authenticationKeyPromise: Promise<Buffer> | null = null;
 async function cacheAuthenticationKey(): Promise<Buffer> {
   if (authenticationKeyPromise) return await authenticationKeyPromise;
   authenticationKeyPromise = (async () => {
-    const base = resolve(process.env.XDG_CACHE_HOME || join(homedir(), ".cache"));
-    const directory = join(base, "reporook");
-    const path = join(directory, "cache-auth-key");
-    await mkdir(directory, { recursive: true, mode: 0o700 });
-    try { await writeFile(path, randomBytes(32), { flag: "wx", mode: 0o600 }); }
-    catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    }
-    const metadata = await lstat(path);
-    if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size !== 32) throw new Error("RepoRook cache authentication key is invalid");
-    const key = await readFile(path);
-    if (key.length !== 32) throw new Error("RepoRook cache authentication key is invalid");
-    return key;
+    return loadHostLocalKey("cache-auth-key", "cache authentication");
   })();
   return await authenticationKeyPromise;
 }

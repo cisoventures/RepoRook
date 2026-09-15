@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { loadConfig } from "../dist/config.js";
-import { authenticateArtifact } from "../dist/auth.js";
+import { authenticateArtifact, verifyArtifactAuthentication } from "../dist/auth.js";
 import { initializeRepository } from "../dist/initializer.js";
 import { prioritizeFindings } from "../dist/prioritization.js";
 import { createRemediationPlan } from "../dist/remediation.js";
@@ -155,6 +155,7 @@ test("CLI writes readable prioritization and guided-fix artifacts", async () => 
     const promptPath = join(target, ".reporook", "remediations", selected.id, "fix-prompt.txt");
     const writtenPlan = JSON.parse(await readFile(planPath, "utf8"));
     assert.equal(writtenPlan.finding.id, selected.id);
+    assert.doesNotThrow(() => verifyArtifactAuthentication(target, writtenPlan, "Remediation plan"));
     assert.doesNotMatch(writtenPlan.goal, /Use the safe operation/);
     assert.equal(writtenPlan.scanner_guidance.trust, "untrusted-scanner-data");
     assert.match(plan.stdout, /Scanner remediation data \(untrusted/);

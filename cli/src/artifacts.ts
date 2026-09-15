@@ -3,6 +3,7 @@ import { existsSync, lstatSync } from "node:fs";
 import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { prioritizeFindings } from "./prioritization.js";
+import { authenticateArtifact } from "./auth.js";
 import { renderAgentPrompt, renderRemediationPrompt } from "./render.js";
 import { toSarif } from "./sarif.js";
 import type { ApprovalReceipt, FindingBaseline, PrioritizationReport, RemediationPlan, ScanReport, SuppressionFile, VerificationReport } from "./types.js";
@@ -74,7 +75,7 @@ export async function writeArtifacts(
   if (new Set(selectedPaths).size !== selectedPaths.length) throw new Error("Scan artifact paths must be distinct");
   const findingsReference = options.output ?? ".reporook/findings.json";
   await writeJson(outputDir, report);
-  await writeJson(receiptPath, report.scan_receipt);
+  await writeJson(receiptPath, authenticateArtifact(target, report.scan_receipt as unknown as Record<string, unknown>));
   await writeJson(prioritiesPath, prioritizeFindings(report));
   await writeText(promptPath, renderAgentPrompt(report, findingsReference));
   if (sarifPath) await writeJson(sarifPath, toSarif(report));

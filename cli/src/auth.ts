@@ -1,13 +1,8 @@
-import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join, resolve } from "node:path";
-
-export interface ArtifactAuthentication {
-  scheme: "hmac-sha256";
-  key_id: string;
-  digest: string;
-}
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { realpathSync } from "node:fs";
+import { resolve } from "node:path";
+import { loadHostLocalKey } from "./key-store.js";
+import type { ArtifactAuthentication } from "./types.js";
 
 // This identifies the artifact-authentication scheme, not the secret key. A
 // secret-derived identifier would give attackers a reusable offline verifier
@@ -22,28 +17,7 @@ function authenticationKey(): Buffer {
     }
     return Buffer.from(configured, "utf8");
   }
-  const base = resolve(process.env.XDG_CACHE_HOME || join(homedir(), ".cache"));
-  const directory = join(base, "reporook");
-  const path = join(directory, "artifact-auth-key");
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const directoryMetadata = lstatSync(directory);
-  if (!directoryMetadata.isDirectory() || directoryMetadata.isSymbolicLink()) throw new Error("RepoRook artifact authentication directory is invalid");
-  // Windows does not expose its ACLs through POSIX mode bits. The cache lives
-  // below the user's profile there, while creation and link/type checks below
-  // still prevent replacing the key with attacker-selected filesystem objects.
-  if (process.platform !== "win32") chmodSync(directory, 0o700);
-  if (!existsSync(path)) {
-    try { writeFileSync(path, randomBytes(32), { mode: 0o600, flag: "wx" }); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
-  }
-  const metadata = lstatSync(path);
-  const unsafePosixPermissions = process.platform !== "win32" && (metadata.mode & 0o077) !== 0;
-  if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size !== 32 || unsafePosixPermissions) {
-    throw new Error("RepoRook artifact authentication key is invalid or has unsafe permissions");
-  }
-  const key = readFileSync(path);
-  if (key.byteLength !== 32) throw new Error("RepoRook artifact authentication key is invalid");
-  return key;
+  return loadHostLocalKey("artifact-auth-key", "artifact authentication");
 }
 
 function unsigned(value: Record<string, unknown>): Record<string, unknown> {
