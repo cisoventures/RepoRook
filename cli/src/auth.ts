@@ -9,6 +9,11 @@ export interface ArtifactAuthentication {
   digest: string;
 }
 
+// This identifies the artifact-authentication scheme, not the secret key. A
+// secret-derived identifier would give attackers a reusable offline verifier
+// for weak automation secrets; the HMAC digest below is the authenticity proof.
+const artifactAuthenticationKeyId = `sha256:${createHash("sha256").update("reporook-artifact-authentication:v1").digest("hex")}`;
+
 function authenticationKey(): Buffer {
   const configured = process.env.REPOROOK_AUTH_KEY;
   if (configured !== undefined) {
@@ -73,7 +78,7 @@ export function authenticateArtifact<T extends Record<string, unknown>>(target: 
     ...unsigned(value),
     authentication: {
       scheme: "hmac-sha256",
-      key_id: `sha256:${createHash("sha256").update(key).digest("hex")}`,
+      key_id: artifactAuthenticationKeyId,
       digest: digestFor(key, target, value),
     },
   } as T & { authentication: ArtifactAuthentication };
@@ -88,9 +93,8 @@ export function verifyArtifactAuthentication(target: string, value: Record<strin
     throw new Error(`${label} authentication metadata is invalid`);
   }
   const key = authenticationKey();
-  const expectedKeyId = `sha256:${createHash("sha256").update(key).digest("hex")}`;
   const expectedDigest = digestFor(key, target, value);
-  const keyMatches = timingSafeEqual(Buffer.from(auth.key_id), Buffer.from(expectedKeyId));
+  const keyMatches = timingSafeEqual(Buffer.from(auth.key_id), Buffer.from(artifactAuthenticationKeyId));
   const digestMatches = timingSafeEqual(Buffer.from(auth.digest), Buffer.from(expectedDigest));
   if (!keyMatches || !digestMatches) throw new Error(`${label} was not produced by this RepoRook repository or has been modified`);
 }

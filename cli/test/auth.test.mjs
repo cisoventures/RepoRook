@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmod, lstat, mkdtemp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { chmod, lstat, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { authenticateArtifact, verifyArtifactAuthentication } from "../dist/auth.js";
@@ -19,6 +20,8 @@ test("artifact authentication uses a protected host-local key and binds the repo
     const metadata = await lstat(keyPath);
     assert.equal(metadata.isFile(), true);
     assert.equal(metadata.size, 32);
+    const key = await readFile(keyPath);
+    assert.notEqual(artifact.authentication.key_id, `sha256:${createHash("sha256").update(key).digest("hex")}`);
     if (process.platform !== "win32") assert.equal(metadata.mode & 0o777, 0o600);
     await chmod(keyPath, 0o644);
     if (process.platform === "win32") {
