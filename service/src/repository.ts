@@ -16,6 +16,7 @@ import {
 } from "reporook";
 import { parseFindingsReport } from "reporook/report-validation";
 import type { RemediationPublication } from "./github.js";
+import { evidenceFreshness, readRepositoryState, requireCurrentEvidence, type EvidenceFreshness, type RepositoryState } from "./repository-state.js";
 
 const configCandidates = ["reporook.yml", "reporook.yaml", ".reporook.yml", ".reporook.json"];
 const maxArtifactBytes = 10 * 1024 * 1024;
@@ -54,6 +55,9 @@ export interface DashboardSnapshot {
     generated_at: string;
     coverage_status: string;
     source_commit: string | null;
+    current_commit: string | null;
+    freshness_status: EvidenceFreshness["status"];
+    freshness_reason: string | null;
     summary: Record<string, number>;
     scanners: Array<{ name: string; status: string; finding_count: number; reason?: string }>;
   };
@@ -138,8 +142,30 @@ export class RepositoryStore {
     }
   }
 
+  private async findingsReport(): Promise<ScanReport | null> {
+    const artifact = await this.readArtifact(".reporook/findings.json");
+    if (!artifact) return null;
+    if (!artifact.value || typeof artifact.value !== "object" || Array.isArray(artifact.value)) throw new Error("Findings artifact must be an object");
+    verifyArtifactAuthentication(this.target, artifact.value as Record<string, unknown>, "Findings artifact");
+    return parseFindingsReport(artifact.value);
+  }
+
+  async assertCurrentFindings(): Promise<void> {
+    const report = await this.findingsReport();
+    if (!report) throw new Error("Run a security scan before preparing a remediation plan");
+    requireCurrentEvidence(report.scan_receipt.commit, await readRepositoryState(this.target), "Findings artifact");
+  }
+
+  private async assertCurrentPlan(plan: RemediationPlan): Promise<void> {
+    verifyArtifactAuthentication(this.target, plan as unknown as Record<string, unknown>, "Remediation plan");
+    requireCurrentEvidence(plan.source_scan.commit, await readRepositoryState(this.target), "Remediation plan");
+  }
+
   async proposalDigest(findingId: string): Promise<string> {
     if (!/^rr-[a-f0-9]{12}$/.test(findingId)) throw new Error("Invalid finding ID");
+    const plan = await this.readArtifact(`.reporook/remediations/${findingId}/plan.json`);
+    if (!plan) throw new Error("Prepare a remediation plan before approving it");
+    await this.assertCurrentPlan(plan.value as RemediationPlan);
     const proposal = await this.readArtifact(`.reporook/remediations/${findingId}/proposal.json`);
     if (!proposal) throw new Error("Prepare a remediation plan before approving it");
     return createHash("sha256").update(proposal.raw).digest("hex");
@@ -162,10 +188,11 @@ export class RepositoryStore {
       throw new Error("The approval receipt no longer matches this repository's exact plan, patch, files, and tests");
     }
     if (proposal.finding_id !== findingId) throw new Error("The proposal does not match the requested finding");
+    await this.assertCurrentPlan(plan);
     return { plan, proposal, approval, proposal_digest: proposalDigest };
   }
 
-  private async approvalItems(priorities: PrioritizationReport | null): Promise<ApprovalItem[]> {
+  private async approvalItems(priorities: PrioritizationReport | null, state: RepositoryState, reportFreshness: EvidenceFreshness): Promise<ApprovalItem[]> {
     if (!priorities) return [];
     const output: ApprovalItem[] = [];
     for (const priority of priorities.priorities.slice(0, 250)) {
@@ -175,9 +202,28 @@ export class RepositoryStore {
       if (!proposal || proposal.value === null || typeof proposal.value !== "object" || Array.isArray(proposal.value)) continue;
       const value = proposal.value as Record<string, unknown>;
       const patch = typeof value.patch === "string" ? value.patch : "";
-      const publishable = Buffer.byteLength(patch, "utf8") <= maxPublishPatchBytes;
+      const patchWithinLimit = Buffer.byteLength(patch, "utf8") <= maxPublishPatchBytes;
       const approval = await this.readArtifact(`.reporook/remediations/${findingId}/approval.json`);
       const plan = await this.readArtifact(`.reporook/remediations/${findingId}/plan.json`);
+      let blockedReason = reportFreshness.reason;
+      if (!plan) {
+        blockedReason = "Prepare a remediation plan from the current security scan before approving it.";
+      } else {
+        try {
+          if (!plan.value || typeof plan.value !== "object" || Array.isArray(plan.value)) throw new Error("invalid plan");
+          verifyArtifactAuthentication(this.target, plan.value as Record<string, unknown>, "Remediation plan");
+          const planValue = plan.value as RemediationPlan;
+          if (JSON.stringify(planValue.source_scan) !== JSON.stringify(priorities.source_scan)) {
+            blockedReason = "The remediation plan does not belong to the current findings scan. Prepare a new plan before approving it.";
+          } else {
+            blockedReason = evidenceFreshness(planValue.source_scan.commit, state).reason;
+          }
+        } catch {
+          blockedReason = "The remediation plan is unauthenticated or invalid. Prepare a new plan before approving it.";
+        }
+      }
+      if (!patchWithinLimit) blockedReason = "Proposal patch exceeds the 512 KiB review and publishing limit; split it into smaller independently reviewed remediations.";
+      const publishable = patchWithinLimit && blockedReason === null;
       let approvalId: string | null = null;
       if (approval && plan) {
         try {
@@ -199,7 +245,7 @@ export class RepositoryStore {
         approved: approvalId !== null,
         approval_id: approvalId,
         publishable,
-        blocked_reason: publishable ? null : "Proposal patch exceeds the 512 KiB review and publishing limit; split it into smaller independently reviewed remediations.",
+        blocked_reason: blockedReason,
       });
     }
     return output;
@@ -210,14 +256,8 @@ export class RepositoryStore {
       const entry = await lstat(join(this.target, candidate)).catch(() => null);
       return Boolean(entry?.isFile() && !entry.isSymbolicLink());
     }))).some(Boolean);
-    const reportArtifact = await this.readArtifact(".reporook/findings.json");
     const priorityArtifact = await this.readArtifact(".reporook/priorities.json");
-    let report: ScanReport | undefined;
-    if (reportArtifact) {
-      if (!reportArtifact.value || typeof reportArtifact.value !== "object" || Array.isArray(reportArtifact.value)) throw new Error("Findings artifact must be an object");
-      verifyArtifactAuthentication(this.target, reportArtifact.value as Record<string, unknown>, "Findings artifact");
-      report = parseFindingsReport(reportArtifact.value);
-    }
+    const report = await this.findingsReport() ?? undefined;
     let priorities: PrioritizationReport | undefined;
     if (priorityArtifact) {
       if (!report) throw new Error("Priorities cannot be trusted without their authenticated findings artifact");
@@ -242,6 +282,10 @@ export class RepositoryStore {
       policy_status: policyByFinding.get(finding.id) ?? null,
       priority: priorityByFinding.get(finding.id) ?? null,
     })) : [];
+    const repositoryState = report ? await readRepositoryState(this.target) : null;
+    const reportFreshness = report && repositoryState
+      ? evidenceFreshness(report.scan_receipt.commit, repositoryState)
+      : null;
     return {
       repository: {
         name: basename(this.target),
@@ -254,6 +298,9 @@ export class RepositoryStore {
         generated_at: report.generated_at,
         coverage_status: report.coverage_status,
         source_commit: report.target.commit,
+        current_commit: reportFreshness?.current_commit ?? null,
+        freshness_status: reportFreshness?.status ?? "unverifiable",
+        freshness_reason: reportFreshness?.reason ?? null,
         summary: { ...report.summary },
         scanners: report.scanners.map((scanner) => ({
           name: scanner.name,
@@ -263,7 +310,11 @@ export class RepositoryStore {
         })),
       } : null,
       findings,
-      approvals: await this.approvalItems(priorities ?? null),
+      approvals: await this.approvalItems(
+        priorities ?? null,
+        repositoryState ?? { head: null, clean: false, error: "No findings artifact is available" },
+        reportFreshness ?? { status: "unverifiable", current_commit: null, reason: "Run a current security scan before approving or publishing." },
+      ),
     };
   }
 }

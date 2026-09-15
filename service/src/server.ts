@@ -253,6 +253,8 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
         const input = await body(request);
         const findingId = stringValue(input.finding_id, "finding_id", 15, 15);
         if (!/^rr-[a-f0-9]{12}$/.test(findingId)) throw new HttpError(400, "Invalid finding ID");
+        try { await store.assertCurrentFindings(); }
+        catch (error) { throw new HttpError(409, error instanceof Error ? error.message : "Run a new scan before preparing a remediation plan"); }
         const result = await cli(["plan", findingId, store.target, "--format", "json"]);
         if (result.code !== 0) throw new HttpError(422, result.stderr.trim() || "RepoRook could not prepare the plan");
         return json(response, 200, JSON.parse(result.stdout) as unknown);
@@ -263,7 +265,9 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
         if (!/^rr-[a-f0-9]{12}$/.test(findingId)) throw new HttpError(400, "Invalid finding ID");
         const digest = stringValue(input.proposal_digest, "proposal_digest", 64, 64);
         if (!/^[a-f0-9]{64}$/.test(digest)) throw new HttpError(400, "Invalid proposal digest");
-        const currentDigest = await store.proposalDigest(findingId);
+        let currentDigest: string;
+        try { currentDigest = await store.proposalDigest(findingId); }
+        catch (error) { throw new HttpError(409, error instanceof Error ? error.message : "Run a new scan before approving this proposal"); }
         if (!equalSecret(digest, currentDigest)) throw new HttpError(409, "The proposal changed after it was displayed; review the new exact patch before approving");
         const approvedBy = stringValue(input.approved_by, "approved_by", 2, 100);
         const reason = stringValue(input.reason, "reason", 10, 500);
