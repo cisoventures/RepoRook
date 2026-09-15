@@ -194,7 +194,7 @@ export function createApprovalReceipt(
   }
   verifyArtifactAuthentication(target, plan as unknown as Record<string, unknown>, "Remediation plan");
   const bindings = {
-    plan_hash: digest(plan),
+    plan_hash: plan.authentication.digest,
     proposal_hash: digest(proposal),
     patch_hash: digest(proposal.patch),
     test_plan_hash: digest(proposal.test_plan),
@@ -289,7 +289,7 @@ export function approvalMatches(receipt: ApprovalReceipt, planValue: unknown, pr
     return parsedReceipt.status === "approved"
       && parsedReceipt.plan_id === plan.plan_id
       && parsedReceipt.finding_id === plan.finding.id
-      && parsedReceipt.bindings.plan_hash === digest(plan)
+      && parsedReceipt.bindings.plan_hash === plan.authentication.digest
       && parsedReceipt.bindings.proposal_hash === digest(proposal)
       && parsedReceipt.bindings.patch_hash === digest(proposal.patch)
       && parsedReceipt.bindings.test_plan_hash === digest(proposal.test_plan)

@@ -81,6 +81,7 @@ test("approval receipts bind the exact plan, diff, files, and tests", () => {
   const proposed = proposal(plan);
   const receipt = createApprovalReceipt(plan, proposed, "security-reviewer", "Reviewed the exact patch and regression test.", target, new Date("2026-07-24T12:10:00.000Z"));
   assert.match(receipt.approval_id, /^rra-[a-f0-9]{12}$/);
+  assert.equal(receipt.bindings.plan_hash, plan.authentication.digest);
   assert.equal(receipt.bindings.files[0], "src/app.ts");
   assert.equal(approvalMatches(receipt, plan, proposed, target), true);
   assert.equal(approvalMatches(receipt, plan, proposed, "/different-repository"), false);
