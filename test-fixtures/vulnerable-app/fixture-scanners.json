@@ -1,0 +1,7 @@
+{
+  "scanners": {
+    "semgrep": false,
+    "pip-audit": false,
+    "checkov": false
+  }
+}

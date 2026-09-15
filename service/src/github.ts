@@ -28,7 +28,7 @@ export interface PublishedPullRequest {
 
 export interface RemediationPublisher {
   readonly repository: string;
-  publish(publication: RemediationPublication): Promise<PublishedPullRequest>;
+  publish(publication: RemediationPublication, repositoryTarget: string): Promise<PublishedPullRequest>;
 }
 
 export interface GitHubPublisherOptions {
@@ -221,9 +221,9 @@ export class GitHubPublisher implements RemediationPublisher {
     throw new Error(`The GitHub App installation is not authorized for ${this.repository}`);
   }
 
-  async publish(publication: RemediationPublication): Promise<PublishedPullRequest> {
-    if (!approvalMatches(publication.approval, publication.plan, publication.proposal)) {
-      throw new Error("The approval receipt no longer matches the exact plan, patch, files, and tests");
+  async publish(publication: RemediationPublication, repositoryTarget: string): Promise<PublishedPullRequest> {
+    if (!approvalMatches(publication.approval, publication.plan, publication.proposal, repositoryTarget)) {
+      throw new Error("The approval receipt no longer matches this repository's exact plan, patch, files, and tests");
     }
     validatePatch(publication.proposal);
     if (!publication.approval.source_scan.commit || !/^[a-f0-9]{40}$/.test(publication.approval.source_scan.commit)) {
@@ -321,9 +321,16 @@ export class GitHubPublisher implements RemediationPublisher {
         ].join("\n"),
       }),
     });
+    const pullNumber = Number(pull?.number);
+    if (!Number.isSafeInteger(pullNumber) || pullNumber < 1) throw new Error("GitHub did not return a valid pull request number");
+    if (pull?.draft !== true) {
+      await this.request(`/repos/${repository}/pulls/${pullNumber}`, { method: "PATCH", body: JSON.stringify({ state: "closed" }) }).catch(() => null);
+      await this.request(`/repos/${repository}/git/refs/heads/${encodedRef(branch)}`, { method: "DELETE" }).catch(() => null);
+      throw new Error("GitHub did not create the pull request as a draft; RepoRook closed it and refused to report success");
+    }
     return {
       repository: this.repository,
-      number: Number(pull?.number),
+      number: pullNumber,
       url: text(pull?.html_url, "GitHub pull request URL"),
       branch,
       commit: commitSha,

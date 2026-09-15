@@ -100,6 +100,7 @@ test("spoofed installation callback cannot persist credentials or mint a token",
     const state = new URL(request.action).searchParams.get("state");
     await integration.completeManifest("manifest_code_12345", state);
     await assert.rejects(integration.completeInstallation("99999", state), /did not match the selected repository/);
+    await assert.rejects(integration.completeInstallation("67890", state), /expired or was already used/);
     assert.equal(integration.status().enabled, false);
     assert.equal(mock.calls.some((call) => call.path.includes("/access_tokens")), false);
     await assert.rejects(readFile(credentialPath), /ENOENT/);

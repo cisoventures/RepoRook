@@ -2,15 +2,20 @@ import { readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { verifyArtifactAuthentication } from "../cli/dist/auth.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const target = resolve(root, "test-fixtures/vulnerable-app");
+const configPath = resolve(target, "fixture-scanners.json");
 const baselinePath = resolve(target, ".reporook/findings.json");
 const scan = spawnSync(process.execPath, [
   resolve(root, "cli/dist/index.js"),
   "scan",
   target,
+  "--config",
+  configPath,
   "--no-cache",
+  "--require-scanners",
   "--no-sarif",
   "--quiet",
 ], { encoding: "utf8" });
@@ -27,6 +32,8 @@ const result = spawnSync(process.execPath, [
   "verify",
   finding.id,
   target,
+  "--config",
+  configPath,
   "--require-scanners",
   "--no-sarif",
   "--quiet",
@@ -39,6 +46,7 @@ if (after !== before) throw new Error("Verification overwrote the baseline findi
 
 const receiptPath = resolve(target, `.reporook/verifications/${finding.id}/verification.json`);
 const receipt = JSON.parse(await readFile(receiptPath, "utf8"));
+verifyArtifactAuthentication(target, receipt, "Verification receipt");
 if (receipt.scanner_resolution !== "failed" || receipt.remaining_finding?.id !== finding.id) {
   throw new Error("Verification did not preserve the equivalent remaining finding");
 }

@@ -50,6 +50,17 @@ function stringArray(value: unknown, label: string): string[] {
   return value.map((item, index) => string(item, `${label}[${index}]`, true));
 }
 
+function parseAuthentication(value: unknown, label: string): NonNullable<ScanReport["authentication"]> {
+  const input = object(value, label);
+  exactKeys(input, ["scheme", "key_id", "digest"], [], label);
+  const keyId = string(input.key_id, `${label}.key_id`);
+  const digest = string(input.digest, `${label}.digest`);
+  if (input.scheme !== "hmac-sha256" || !/^sha256:[a-f0-9]{64}$/.test(keyId) || !/^sha256:[a-f0-9]{64}$/.test(digest)) {
+    throw new Error(`${label} is invalid`);
+  }
+  return { scheme: "hmac-sha256", key_id: keyId, digest };
+}
+
 function repositoryPath(value: unknown, label: string): string {
   const path = string(value, label).replaceAll("\\", "/").replace(/^\.\//, "");
   const normalized = posix.normalize(path);
@@ -61,13 +72,16 @@ function repositoryPath(value: unknown, label: string): string {
 
 function suppression(value: unknown, label: string): FindingSuppression {
   const input = object(value, label);
-  exactKeys(input, ["id", "finding_id", "owner", "reason", "expires_at", "created_at"], [], label);
+  exactKeys(input, ["id", "finding_id", "finding_fingerprint", "owner", "reason", "expires_at", "created_at"], [], label);
   const id = string(input.id, `${label}.id`);
   const findingId = string(input.finding_id, `${label}.finding_id`);
   if (!/^rrs-[a-f0-9]{12}$/.test(id) || !/^rr-[a-f0-9]{12}$/.test(findingId)) throw new Error(`${label} contains an invalid ID`);
+  const findingFingerprint = string(input.finding_fingerprint, `${label}.finding_fingerprint`);
+  if (!/^sha256:[a-f0-9]{64}$/.test(findingFingerprint)) throw new Error(`${label}.finding_fingerprint is invalid`);
   return {
     id,
     finding_id: findingId,
+    finding_fingerprint: findingFingerprint,
     owner: string(input.owner, `${label}.owner`),
     reason: string(input.reason, `${label}.reason`),
     expires_at: timestamp(input.expires_at, `${label}.expires_at`),
@@ -206,7 +220,7 @@ function policy(value: unknown, findingIds: Set<string>): PolicyEvaluation {
 
 export function parseFindingsReport(value: unknown): ScanReport {
   const input = object(value, "Findings report");
-  exactKeys(input, ["schema_version", "tool", "target", "generated_at", "coverage_status", "summary", "scanners", "findings", "scan_receipt"], ["policy"], "Findings report");
+  exactKeys(input, ["schema_version", "tool", "target", "generated_at", "coverage_status", "summary", "scanners", "findings", "scan_receipt", "authentication"], ["policy"], "Findings report");
   if (input.schema_version !== "1.0") throw new Error("Findings report.schema_version must be 1.0");
   const tool = object(input.tool, "Findings report.tool");
   exactKeys(tool, ["name", "version"], [], "Findings report.tool");
@@ -225,7 +239,7 @@ export function parseFindingsReport(value: unknown): ScanReport {
   exactKeys(summaryInput, summaryKeys, [], "Findings report.summary");
   const summary = Object.fromEntries(summaryKeys.map((key) => [key, integer(summaryInput[key], `Findings report.summary.${key}`)])) as ScanReport["summary"];
   const receiptInput = object(input.scan_receipt, "Findings report.scan_receipt");
-  exactKeys(receiptInput, ["target", "commit", "config_hash", "scanner_versions", "started_at", "completed_at"], ["changed_files", "scanner_scopes", "external_targets"], "Findings report.scan_receipt");
+  exactKeys(receiptInput, ["target", "commit", "config_hash", "scanner_versions", "started_at", "completed_at"], ["changed_files", "scanner_scopes", "external_targets", "semgrep_rules"], "Findings report.scan_receipt");
   const versionsInput = object(receiptInput.scanner_versions, "Findings report.scan_receipt.scanner_versions");
   const scannerVersions = Object.fromEntries(Object.entries(versionsInput).map(([name, version]) => [string(name, "Scanner version name"), version === null ? null : string(version, `Findings report.scan_receipt.scanner_versions.${name}`)]));
   const scannerScopeInput = receiptInput.scanner_scopes === undefined ? undefined : object(receiptInput.scanner_scopes, "Findings report.scan_receipt.scanner_scopes");
@@ -243,6 +257,11 @@ export function parseFindingsReport(value: unknown): ScanReport {
   if (externalContainerImages !== undefined && (!externalContainerImages.length || externalContainerImages.length > 20 || externalContainerImages.some((image) => !image.trim()) || new Set(externalContainerImages).size !== externalContainerImages.length)) {
     throw new Error("Findings report.scan_receipt.external_targets.container_images must contain 1-20 unique image references");
   }
+  const semgrepRulesInput = receiptInput.semgrep_rules === undefined ? undefined : object(receiptInput.semgrep_rules, "Findings report.scan_receipt.semgrep_rules");
+  if (semgrepRulesInput) exactKeys(semgrepRulesInput, ["selection", "source", "digest", "network"], [], "Findings report.scan_receipt.semgrep_rules");
+  const semgrepSource = semgrepRulesInput ? string(semgrepRulesInput.source, "Findings report.scan_receipt.semgrep_rules.source") : undefined;
+  const semgrepDigest = !semgrepRulesInput || semgrepRulesInput.digest === null ? null : string(semgrepRulesInput.digest, "Findings report.scan_receipt.semgrep_rules.digest");
+  if (semgrepSource !== undefined && (!["default", "invocation"].includes(semgrepSource) || (semgrepDigest !== null && !/^sha256:[a-f0-9]{64}$/.test(semgrepDigest)))) throw new Error("Findings report.scan_receipt.semgrep_rules is invalid");
   const report: ScanReport = {
     schema_version: "1.0",
     tool: { name: "reporook", version: string(tool.version, "Findings report.tool.version") },
@@ -260,10 +279,17 @@ export function parseFindingsReport(value: unknown): ScanReport {
       scanner_versions: scannerVersions,
       started_at: timestamp(receiptInput.started_at, "Findings report.scan_receipt.started_at"),
       completed_at: timestamp(receiptInput.completed_at, "Findings report.scan_receipt.completed_at"),
+      ...(semgrepRulesInput && semgrepSource ? { semgrep_rules: {
+        selection: string(semgrepRulesInput.selection, "Findings report.scan_receipt.semgrep_rules.selection"),
+        source: semgrepSource as "default" | "invocation",
+        digest: semgrepDigest,
+        network: boolean(semgrepRulesInput.network, "Findings report.scan_receipt.semgrep_rules.network"),
+      } } : {}),
       ...(receiptInput.changed_files === undefined ? {} : { changed_files: stringArray(receiptInput.changed_files, "Findings report.scan_receipt.changed_files").map((path, index) => repositoryPath(path, `Findings report.scan_receipt.changed_files[${index}]`)) }),
       ...(parsedScopes === undefined ? {} : { scanner_scopes: parsedScopes }),
       ...(externalContainerImages === undefined ? {} : { external_targets: { authorized: true, container_images: externalContainerImages } }),
     },
+    authentication: parseAuthentication(input.authentication, "Findings report.authentication"),
   };
   assertFindingsReportConsistency(report);
   return report;

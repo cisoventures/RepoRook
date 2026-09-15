@@ -1,8 +1,34 @@
 # Changelog
 
-All notable changes to RepoRook are documented here. RepoRook follows semantic versioning while its public contracts remain pre-1.0.
+All notable changes to RepoRook are documented here. RepoRook follows semantic versioning and the stable v1 compatibility policy.
 
 ## Unreleased
+
+## 1.0.0 - 2026-08-15
+
+### Security
+
+- Authenticate findings, cache evidence, and approval receipts with a protected host-local, repository-bound HMAC; strictly reconstruct evidence and reject unsigned, copied, malformed, inconsistent, oversized, linked, or race-swapped artifacts.
+- Bind suppressions to exact finding fingerprints and require a trusted per-invocation opt-in before repository suppressions can affect policy.
+- Move Semgrep rule authority to the trusted invocation boundary, bind local rules by digest, and require explicit network authorization for non-default remote rules.
+- Fail closed on npm-audit operational errors, preserve distinct Gitleaks occurrences, cap pip-audit and OSV-Scanner repository fanout, sanitize executable search paths, and harden option and path boundaries across CLI and MCP.
+- Bound and label scanner-controlled agent text, correct report finding counts, serialize repository scans, redact MCP errors, and make Action outputs fresh, exact, and resistant to stale files or workflow-command injection.
+- Require complete proposal display and exact digest approval, bind approver attribution cryptographically, reject stale source state, and accept remote publication only when GitHub confirms a draft pull request.
+- Replace loopback cookies with rotating exact-origin bearer sessions, consume GitHub App onboarding state on every outcome, and strengthen no-follow artifact reads.
+- Split validation from the privileged release job, remove checkout and repository execution from the OIDC job, require the exact current `main` commit, minimize credentials, and document safe partial-stage recovery.
+
+### Added
+
+- Add adversarial regression coverage for forged evidence and approvals, option injection, traversal, stale Action outputs, output delimiters, operational scanner errors, oversized proposals, concurrent scans, draft-only publishing, loopback session boundaries, and release-workflow privilege separation.
+- Add explicit suppression controls across CLI, MCP, service, and GitHub Action plus operator-selected Semgrep rule inputs and optional SARIF/comment permissions.
+
+### Changed
+
+- Promote the machine-readable CLI, MCP, service, schema, Action, and six-host agent-parity contracts to stable v1.
+- Pin every published GitHub Action example to immutable commit SHAs.
+- Update the CLI, MCP server, local service, and native adapter package versions together to `1.0.0`.
+
+The accepted findings from the independent external review are remediated in this source. Publication remains gated on an independent regression re-review and the protected CI/release checks.
 
 ## 0.9.3 - 2026-08-14
 

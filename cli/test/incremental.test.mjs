@@ -14,6 +14,8 @@ import { OsvScanner } from "../dist/scanners/osv-scanner.js";
 import { PipAuditScanner } from "../dist/scanners/pip-audit.js";
 import { SemgrepScanner } from "../dist/scanners/semgrep.js";
 
+process.env.REPOROOK_AUTH_KEY ??= "reporook-test-authentication-key-32-bytes-minimum";
+
 function git(target, args) {
   return execFileSync("git", args, { cwd: target, encoding: "utf8" }).trim();
 }

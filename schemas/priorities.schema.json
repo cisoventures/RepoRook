@@ -3,7 +3,7 @@
   "$id": "https://reporook.dev/schemas/priorities-1.0.json",
   "title": "RepoRook Finding Priorities",
   "type": "object",
-  "required": ["schema_version", "tool", "generated_at", "coverage_status", "source_scan", "summary", "priorities"],
+  "required": ["schema_version", "tool", "generated_at", "coverage_status", "source_scan", "summary", "priorities", "authentication"],
   "properties": {
     "schema_version": { "const": "1.0" },
     "tool": {
@@ -47,7 +47,8 @@
         },
         "additionalProperties": false
       }
-    }
+    },
+    "authentication": { "$ref": "https://reporook.dev/schemas/findings-1.0.json#/$defs/authentication" }
   },
   "additionalProperties": false
 }

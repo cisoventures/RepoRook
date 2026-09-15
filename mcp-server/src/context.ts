@@ -1,11 +1,14 @@
 import { constants } from "node:fs";
 import { lstat, open, realpath, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { verifyArtifactAuthentication } from "reporook";
 import { assertFindingsReportConsistency, parseFindingsReport } from "reporook/report-validation";
 import type { Finding, ScanReport } from "reporook/schema";
 
 const maximumReportBytes = 10 * 1024 * 1024;
 const maximumSourceBytes = 1024 * 1024;
+const maximumContextBytes = 64 * 1024;
+const maximumContextLineCharacters = 2_000;
 
 export type FindingRecord = Finding;
 
@@ -63,7 +66,10 @@ async function boundedText(source: RepositoryFile, label: string, maximumBytes: 
 
 export async function readReport(target: string, requested: string): Promise<ScanReport> {
   const source = await repositoryFile(target, requested, "Findings artifact");
-  const report = parseFindingsReport(JSON.parse(await boundedText(source, "Findings artifact", maximumReportBytes)) as unknown);
+  const raw = JSON.parse(await boundedText(source, "Findings artifact", maximumReportBytes)) as unknown;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("Findings artifact must be an object");
+  verifyArtifactAuthentication(source.root, raw as Record<string, unknown>, "Findings artifact");
+  const report = parseFindingsReport(raw);
   const claimedRoot = await realpath(resolve(report.target.path)).catch(() => null);
   if (claimedRoot !== source.root) throw new Error("Findings report is bound to a different repository target");
   assertFindingsReportConsistency(report);
@@ -86,8 +92,16 @@ export async function codeContext(target: string, finding: FindingRecord, radius
   const lines = source.split(/\r?\n/);
   const start = Math.max(1, Number(finding.line || 1) - radius);
   const end = Math.min(lines.length, Number(finding.line || 1) + radius);
-  const selected = lines.slice(start - 1, end).map((line, index) => `${String(start + index).padStart(5, " ")} | ${line}`).join("\n");
-  return { start_line: start, end_line: end, code: selected };
+  const selected = lines.slice(start - 1, end).map((line, index) => {
+    const neutralized = line.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "�");
+    const bounded = neutralized.length <= maximumContextLineCharacters ? neutralized : `${neutralized.slice(0, maximumContextLineCharacters - 1)}…`;
+    return `${String(start + index).padStart(5, " ")} | ${bounded}`;
+  }).join("\n");
+  const bytes = Buffer.from(selected, "utf8");
+  const code = bytes.byteLength <= maximumContextBytes
+    ? selected
+    : `${new TextDecoder("utf-8").decode(bytes.subarray(0, maximumContextBytes - 3))}…`;
+  return { start_line: start, end_line: end, code };
 }
 
 export async function findingContext(target: string, finding: FindingRecord, radius = 8): Promise<{ start_line: number; end_line: number; code: string } | null> {

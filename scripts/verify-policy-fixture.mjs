@@ -11,6 +11,7 @@ const baselinePath = resolve(policyDirectory, "fixture-baseline.json");
 const configPath = resolve(policyDirectory, "fixture-policy.json");
 const policyReportPath = resolve(policyDirectory, "policy-findings.json");
 const prioritiesPath = resolve(policyDirectory, "priorities.json");
+const fixtureScannerConfig = JSON.parse(await readFile(resolve(target, "fixture-scanners.json"), "utf8"));
 
 const baseline = spawnSync(process.execPath, [
   cli, "baseline", target,
@@ -25,11 +26,13 @@ await writeFile(configPath, `${JSON.stringify({
   baseline: ".reporook/fixture-baseline.json",
   suppressions: ".reporook/fixture-suppressions.json",
   pathPolicies: { "src/**": "medium" },
+  scanners: fixtureScannerConfig.scanners,
 }, null, 2)}\n`);
 
 const scan = spawnSync(process.execPath, [
   cli, "scan", target,
   "--config", ".reporook/fixture-policy.json",
+  "--allow-repository-suppressions",
   "--require-scanners",
   "--output", ".reporook/policy-findings.json",
   "--no-sarif",

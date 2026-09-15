@@ -1,6 +1,6 @@
 # Compatibility and migration policy
 
-RepoRook's v1 release-candidate contract is recorded in [`contracts/v1.json`](../contracts/v1.json) and checked by `npm run validate:contracts`. The contract makes accidental breaking changes fail in CI before they reach users. It becomes the stable v1 compatibility promise when v1.0 ships.
+RepoRook's stable v1 contract is recorded in [`contracts/v1.json`](../contracts/v1.json) and checked by `npm run validate:contracts`. The contract makes accidental breaking changes fail in CI before they reach users.
 
 ## Covered public surfaces
 
@@ -26,9 +26,17 @@ RepoRook follows semantic versioning for the covered public surfaces:
 - A minor release may add optional fields, commands, flags, tools, exports, or Action inputs without changing existing behavior.
 - Removing, renaming, reinterpreting, or making an optional input required needs a major release.
 
-Before v1.0, an intentional release-candidate contract change must update the implementation, `contracts/v1.json`, relevant documentation, tests, and changelog in the same pull request. The compatibility failure is not a snapshot-update instruction: reviewers must decide whether the change is additive, a migration, or an unintended break.
+An intentional contract change must update the implementation, `contracts/v1.json`, relevant documentation, tests, and changelog in the same pull request. The compatibility failure is not a snapshot-update instruction: reviewers must decide whether the change is additive, a migration, or an unintended break.
 
 The external-target authorization gate is an intentional pre-v1 security migration. Existing repositories with `containerImages` must add `--allow-external-targets` (CLI), `allow_external_targets: true` (MCP), the per-scan service checkbox, or `allow-external-targets: true` (Action) only at a trusted invocation boundary. Checked-in configuration alone no longer starts registry requests. Private registries must use host-scoped Docker credentials rather than generic Trivy username/password environment variables. Removing the flag restores the fail-closed behavior and is the safe rollback.
+
+v1 also makes three deliberate security migrations:
+
+- Repository baselines and suppressions require `--allow-repository-suppressions`, `allow_repository_suppressions: true`, the per-scan service checkbox, or `allow-repository-suppressions: true` in a trusted Action workflow. Without it, repository policy cannot make findings non-actionable.
+- Non-default Semgrep aliases, URLs, and local rule files are selected at the invocation boundary with `--semgrep-config` or `semgrep-config`; checked-in `semgrepConfig` cannot switch rules. Network rule selections also require external-target authorization.
+- Findings, standalone scan receipts, priorities, remediation plans, verification receipts, and approval receipts require repository-bound HMAC authentication. Processes that exchange evidence across an isolated boundary must share a secret `REPOROOK_AUTH_KEY` of at least 32 bytes. The default host-local key is intentionally not portable between machines. Relative `XDG_CACHE_HOME` values and symlinked cache bases are rejected.
+
+The final v1 security review also made repository identity explicit in the public approval helpers: `createApprovalReceipt` and `approvalMatches` require the consumer's repository target, verify the plan's authentication, and service publishers receive that target separately from untrusted remediation artifacts. MCP policy tools retain their published `output_path` field for compatibility but accept only the dedicated `reporook-baseline.json` or `reporook-suppressions.json` destination shown by each tool. Scan receipts use `commit: null` unless the worktree remains clean at one commit for the full scan. These fail-closed changes intentionally reject calls that could reuse an approval across repositories, trust stale provenance, or overwrite unrelated repository files.
 
 ## Deprecation and migration
 

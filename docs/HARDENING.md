@@ -6,7 +6,7 @@ RepoRook treats the repository it scans, scanner output, policy evidence, host-a
 
 A repository may contain malformed configuration, unusual filenames, symbolic links, deeply nested data, oversized files, adversarial glob patterns, scanner fixtures that resemble secrets, or content intended to manipulate an agent. RepoRook must handle those inputs as data and either produce bounded evidence or fail closed with exit `2`.
 
-The first v0.9 controls enforce:
+The v1 controls enforce:
 
 - configuration files remain inside the repository;
 - every existing configuration path component is non-symbolic-link;
@@ -25,7 +25,7 @@ The second slice extends that boundary to evidence reuse and agent context:
 - repository-local agent integration files are non-link regular UTF-8 inputs capped at 2 MiB, with a 1 MiB allowlisted ownership receipt;
 - Gitleaks file output is capped at 50 MiB and malformed or unexpected JSON is scanner failure, never a clean result.
 
-The v1 release-candidate corpus extends link handling across operating systems:
+The v1 corpus extends link handling across operating systems:
 
 - directory-link tests use ordinary directory symlinks on Linux and macOS and actual junctions on Windows;
 - CLI artifact, configuration, organization-policy, and integration destinations reject linked path components before reads or writes;
@@ -39,4 +39,4 @@ These tests cover the junction behavior available through Node.js. They do not r
 
 `cli/test/fuzz.test.mjs` is deterministic so a failure is reproducible on Linux, macOS, and Windows. It generates nested arrays, objects, hostile paths, markup, null bytes, prototype-sensitive keys, unexpected scalar types, and secret-shaped fields. Scanner normalizers must return structurally valid findings without throwing. Strict policy and approval parsers may reject input, but rejection must be an ordinary bounded error and must not mutate global prototypes.
 
-The scanner execution and residual-risk review is documented in [`SANDBOXING.md`](SANDBOXING.md). The independent-review scope and coordinated response workflow are ready in [`SECURITY_REVIEW.md`](SECURITY_REVIEW.md) and [`SECURITY_RESPONSE.md`](SECURITY_RESPONSE.md). This seeded suite is a regression gate, not a substitute for coverage-guided native fuzzing or an actual independent review. Further hostile-filesystem coverage should incorporate reviewer findings.
+The scanner execution and residual-risk review is documented in [`SANDBOXING.md`](SANDBOXING.md). The independent-review scope and coordinated response workflow are in [`SECURITY_REVIEW.md`](SECURITY_REVIEW.md) and [`SECURITY_RESPONSE.md`](SECURITY_RESPONSE.md). The independent review's accepted findings now have targeted regressions; the remediation branch still requires independent re-review. The seeded suite does not replace coverage-guided native fuzzing or less-common Windows reparse testing.

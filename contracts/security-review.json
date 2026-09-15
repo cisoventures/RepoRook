@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "status": "release-candidate",
+  "status": "stable",
   "purpose": "Produce a reproducible, tamper-evident baseline for an independent RepoRook security review without asserting an audit opinion.",
   "claims": {
     "independent_review_completed": false,

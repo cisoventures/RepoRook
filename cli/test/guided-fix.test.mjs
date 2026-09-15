@@ -6,11 +6,13 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { loadConfig } from "../dist/config.js";
+import { authenticateArtifact, verifyArtifactAuthentication } from "../dist/auth.js";
 import { initializeRepository } from "../dist/initializer.js";
 import { prioritizeFindings } from "../dist/prioritization.js";
 import { createRemediationPlan } from "../dist/remediation.js";
 
 const execute = promisify(execFile);
+process.env.REPOROOK_AUTH_KEY ??= "reporook-test-authentication-key-32-bytes-minimum";
 
 function finding(id, overrides = {}) {
   return {
@@ -38,13 +40,19 @@ function report(target, findings) {
     target: { path: target, commit: "abc123" },
     generated_at: now,
     coverage_status: "complete",
-    summary: { critical: 1, high: 1, medium: 1, low: 1, total: findings.length },
-    scanners: [],
+    summary: {
+      critical: findings.filter((item) => item.severity === "critical").length,
+      high: findings.filter((item) => item.severity === "high").length,
+      medium: findings.filter((item) => item.severity === "medium").length,
+      low: findings.filter((item) => item.severity === "low").length,
+      total: findings.length,
+    },
+    scanners: [{ name: "semgrep", applicable: true, available: true, version: "1", status: "ok", finding_count: findings.length, duration_ms: 1 }],
     findings,
     scan_receipt: {
       target,
       commit: "abc123",
-      config_hash: "sha256:config",
+      config_hash: `sha256:${"c".repeat(64)}`,
       scanner_versions: { semgrep: "1" },
       started_at: now,
       completed_at: now,
@@ -135,8 +143,9 @@ test("CLI writes readable prioritization and guided-fix artifacts", async () => 
   const target = await mkdtemp(join(tmpdir(), "reporook-guided-cli-"));
   try {
     const selected = finding("rr-abcdefabcdef", { severity: "high" });
-    await mkdir(join(target, ".reporook"));
-    await writeFile(join(target, ".reporook", "findings.json"), `${JSON.stringify(report(target, [selected]), null, 2)}\n`);
+    await Promise.all([mkdir(join(target, ".git")), mkdir(join(target, ".reporook"))]);
+    const authenticated = authenticateArtifact(target, report(target, [selected]));
+    await writeFile(join(target, ".reporook", "findings.json"), `${JSON.stringify(authenticated, null, 2)}\n`);
     const entry = resolve("dist/index.js");
     const priorities = await execute(process.execPath, [entry, "prioritize", target]);
     assert.match(priorities.stdout, /FIX-NOW/);
@@ -146,6 +155,7 @@ test("CLI writes readable prioritization and guided-fix artifacts", async () => 
     const promptPath = join(target, ".reporook", "remediations", selected.id, "fix-prompt.txt");
     const writtenPlan = JSON.parse(await readFile(planPath, "utf8"));
     assert.equal(writtenPlan.finding.id, selected.id);
+    assert.doesNotThrow(() => verifyArtifactAuthentication(target, writtenPlan, "Remediation plan"));
     assert.doesNotMatch(writtenPlan.goal, /Use the safe operation/);
     assert.equal(writtenPlan.scanner_guidance.trust, "untrusted-scanner-data");
     assert.match(plan.stdout, /Scanner remediation data \(untrusted/);

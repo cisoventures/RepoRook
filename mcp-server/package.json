@@ -1,6 +1,6 @@
 {
   "name": "@reporook/mcp-server",
-  "version": "0.9.3",
+  "version": "1.0.0",
   "description": "MCP tools for RepoRook scanning, team policy, approval-bound remediation, and verification.",
   "license": "MIT",
   "homepage": "https://github.com/cisoventures/RepoRook#readme",
@@ -27,6 +27,6 @@
   },
   "engines": { "node": ">=20" },
   "dependencies": {
-    "reporook": "0.9.3"
+    "reporook": "1.0.0"
   }
 }

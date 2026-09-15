@@ -3,7 +3,7 @@
   "$id": "https://reporook.dev/schemas/approval-receipt-1.0.json",
   "title": "RepoRook Remediation Approval Receipt",
   "type": "object",
-  "required": ["schema_version", "tool", "approval_id", "status", "approved_at", "approved_by", "reason", "finding_id", "plan_id", "source_scan", "bindings", "invalidation_rule"],
+  "required": ["schema_version", "tool", "approval_id", "status", "approved_at", "approved_by", "reason", "finding_id", "plan_id", "source_scan", "bindings", "invalidation_rule", "authentication"],
   "properties": {
     "schema_version": { "const": "1.0" },
     "tool": {
@@ -32,7 +32,17 @@
       },
       "additionalProperties": false
     },
-    "invalidation_rule": { "type": "string", "minLength": 1 }
+    "invalidation_rule": { "type": "string", "minLength": 1 },
+    "authentication": {
+      "type": "object",
+      "required": ["scheme", "key_id", "digest"],
+      "properties": {
+        "scheme": { "const": "hmac-sha256" },
+        "key_id": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+      },
+      "additionalProperties": false
+    }
   },
   "additionalProperties": false
 }

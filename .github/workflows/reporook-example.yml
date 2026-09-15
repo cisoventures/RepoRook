@@ -8,8 +8,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
-  security-events: write
 
 jobs:
   security:
@@ -18,9 +16,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: ./
         with:
           path: cli
           config: ../.github/reporook-example.yml
           fail-on: high
           mode: full
+          upload-sarif: "false"
+          comment-pr: "false"

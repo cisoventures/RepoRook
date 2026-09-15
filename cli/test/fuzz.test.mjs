@@ -65,7 +65,7 @@ function validateFindingsOrRepositoryBoundary(parse) {
     validateFindings(parse());
   } catch (error) {
     assert.ok(error instanceof Error);
-    assert.match(error.message, /resolves outside the repository/);
+    assert.match(error.message, /resolves outside the repository|npm audit report is missing vulnerabilities or advisories/);
   }
 }
 

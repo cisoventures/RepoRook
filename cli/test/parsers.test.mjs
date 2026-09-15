@@ -7,11 +7,14 @@ import { SemgrepScanner, discoverCodePresence, parseSemgrep, semgrepErrors } fro
 import { GitleaksScanner, parseGitleaks } from "../dist/scanners/gitleaks.js";
 import { CheckovScanner, discoverCheckovFiles, parseCheckov } from "../dist/scanners/checkov.js";
 import { parseTrivyImage, TrivyImageScanner } from "../dist/scanners/trivy-image.js";
-import { parseNpmAudit } from "../dist/scanners/npm-audit.js";
-import { parsePipAudit } from "../dist/scanners/pip-audit.js";
+import { NpmAuditScanner, parseNpmAudit } from "../dist/scanners/npm-audit.js";
+import { parsePipAudit, PipAuditScanner } from "../dist/scanners/pip-audit.js";
 import { discoverOsvLockfiles, OsvScanner, parseOsvScanner } from "../dist/scanners/osv-scanner.js";
 import { findingFingerprint } from "../dist/fingerprint.js";
 import { defaultConfig } from "../dist/config.js";
+import { scanRepository } from "../dist/engine.js";
+
+process.env.REPOROOK_AUTH_KEY ??= "reporook-test-authentication-key-32-bytes-minimum";
 
 test("finding fingerprints are stable and line independent", () => {
   const first = findingFingerprint(["semgrep", "rule", "src/app.js", "dangerous code"]);
@@ -113,7 +116,8 @@ exit 1
     assert.match(result.status.reason, /Could not parse broken\.py/);
     assert.equal(result.findings.length, 1);
   } finally {
-    process.env.PATH = previousPath;
+    if (previousPath === undefined) delete process.env.PATH;
+    else process.env.PATH = previousPath;
     await rm(target, { recursive: true, force: true });
   }
 });
@@ -124,6 +128,16 @@ test("Gitleaks parser never preserves secret material", () => {
   assert.doesNotMatch(JSON.stringify(findings), /DO_NOT_KEEP_ME/);
   assert.equal(findings[0].severity, "critical");
   assert.match(findings[0].plain_summary, /API key|token|password/);
+});
+
+test("Gitleaks keeps separate occurrences while retaining relocation-tolerant verification identity", () => {
+  const findings = parseGitleaks([
+    { RuleID: "generic-api-key", File: "/repo/.env", StartLine: 1, Fingerprint: "same-secret:1", Description: "API key" },
+    { RuleID: "generic-api-key", File: "/repo/.env", StartLine: 2, Fingerprint: "same-secret:2", Description: "API key" },
+  ], "/repo");
+  assert.equal(findings.length, 2);
+  assert.notEqual(findings[0].fingerprint, findings[1].fingerprint);
+  assert.equal(findings[0].verification_fingerprint, findings[1].verification_fingerprint);
 });
 
 test("Gitleaks history findings retain only safe commit provenance", () => {
@@ -213,6 +227,18 @@ test("Checkov output becomes a repository-relative infrastructure finding", () =
   assert.equal(findings[0].file, "infrastructure/main.tf");
   assert.equal(findings[0].severity, "medium");
   assert.match(findings[0].plain_summary, /security safeguard/);
+});
+
+test("Checkov relative-path fallback rejects repository traversal", () => {
+  assert.throws(() => parseCheckov({
+    check_type: "terraform",
+    results: { failed_checks: [{
+      check_id: "CKV_ESCAPE",
+      check_name: "Host path",
+      repo_file_path: "../../outside/main.tf",
+      file_line_range: [1, 1],
+    }] },
+  }, "/repo"), /outside the repository/);
 });
 
 test("Trivy image output preserves image provenance and fixed versions", () => {
@@ -314,12 +340,56 @@ test("npm audit v7 output becomes one advisory finding", () => {
   assert.match(findings[0].plain_summary, /lodash package/);
 });
 
+test("npm audit operational error payloads cannot parse as a clean scan", () => {
+  assert.throws(
+    () => parseNpmAudit({ error: { code: "EAUDITNOPJSON", summary: "audit endpoint failed" } }),
+    /reported an operational error/,
+  );
+  assert.throws(() => parseNpmAudit({ metadata: { vulnerabilities: { total: 0 } } }), /missing vulnerabilities or advisories/);
+});
+
+test("npm audit exit 1 error documents fail scanner coverage", { skip: process.platform === "win32" }, async () => {
+  const target = await mkdtemp(join(tmpdir(), "reporook-npm-audit-error-"));
+  const executable = join(target, "npm");
+  const previousPath = process.env.PATH;
+  await writeFile(join(target, "package-lock.json"), "{}\n");
+  await writeFile(executable, `#!/bin/sh
+if [ "$1" = "--version" ]; then printf '%s\\n' '11.17.0'; exit 0; fi
+printf '%s\\n' '{"error":{"code":"EAUDITNOPJSON","summary":"audit endpoint failed"}}'
+exit 1
+`);
+  await chmod(executable, 0o755);
+  process.env.PATH = `${target}:${previousPath ?? ""}`;
+  try {
+    const scanner = new NpmAuditScanner();
+    const result = await scanner.run({ target, config: structuredClone(defaultConfig) });
+    assert.equal(result.status.status, "error");
+    assert.equal(result.findings.length, 0);
+    const report = await scanRepository({ target, config: structuredClone(defaultConfig) }, [scanner]);
+    assert.equal(report.coverage_status, "failed");
+  } finally {
+    if (previousPath === undefined) delete process.env.PATH;
+    else process.env.PATH = previousPath;
+    await rm(target, { recursive: true, force: true });
+  }
+});
+
 test("pip-audit output records fixed versions", () => {
   const findings = parsePipAudit({ dependencies: [{ name: "urllib3", version: "1.24.1", vulns: [{ id: "PYSEC-1", aliases: ["CVE-2020-0001"], fix_versions: ["1.25.9"], description: "Example issue" }] }] }, "requirements.txt");
   assert.equal(findings.length, 1);
   assert.deepEqual(findings[0].metadata.fixed_versions, ["1.25.9"]);
   assert.deepEqual(findings[0].metadata.cve, ["CVE-2020-0001"]);
   assert.match(findings[0].plain_summary, /urllib3 package/);
+});
+
+test("pip-audit caps repository-controlled requirements fanout", async () => {
+  const target = await mkdtemp(join(tmpdir(), "reporook-pip-fanout-"));
+  try {
+    await Promise.all(Array.from({ length: 21 }, (_, index) => writeFile(join(target, `requirements-${index}.txt`), "safe==1\n")));
+    await assert.rejects(() => new PipAuditScanner().isApplicable(target), /at most 20/);
+  } finally {
+    await rm(target, { recursive: true, force: true });
+  }
 });
 
 test("OSV-Scanner groups aliases into one actionable dependency finding", () => {
@@ -362,6 +432,18 @@ test("OSV-Scanner discovers complementary root and nested manifests without gene
     await writeFile(join(target, "node_modules", "ignored", "Cargo.lock"), "version = 3\n");
     const lockfiles = (await discoverOsvLockfiles(target)).map((file) => file.slice(target.length + 1).replaceAll("\\", "/"));
     assert.deepEqual(lockfiles, ["Cargo.lock", "services/api/package-lock.json"]);
+  } finally {
+    await rm(target, { recursive: true, force: true });
+  }
+});
+
+test("OSV-Scanner fails closed when repository discovery exceeds its depth bound", async () => {
+  const target = await mkdtemp(join(tmpdir(), "reporook-osv-depth-"));
+  try {
+    const deep = join(target, ...Array.from({ length: 12 }, (_, index) => `d${index}`));
+    await mkdir(deep, { recursive: true });
+    await writeFile(join(deep, "Cargo.lock"), "version = 3\n");
+    await assert.rejects(() => discoverOsvLockfiles(target), /depth limit/);
   } finally {
     await rm(target, { recursive: true, force: true });
   }

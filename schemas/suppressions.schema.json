@@ -10,10 +10,11 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "finding_id", "owner", "reason", "expires_at", "created_at"],
+        "required": ["id", "finding_id", "finding_fingerprint", "owner", "reason", "expires_at", "created_at"],
         "properties": {
           "id": { "type": "string", "pattern": "^rrs-[a-f0-9]{12}$" },
           "finding_id": { "type": "string", "pattern": "^rr-[a-f0-9]{12}$" },
+          "finding_fingerprint": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
           "owner": { "type": "string", "minLength": 1 },
           "reason": { "type": "string", "minLength": 1 },
           "expires_at": { "type": "string", "format": "date-time" },

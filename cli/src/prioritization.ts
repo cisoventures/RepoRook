@@ -1,4 +1,5 @@
 import type { Finding, PrioritizationReport, PrioritizedFinding, PriorityBand, ScanReport, Severity } from "./types.js";
+import { authenticateArtifact } from "./auth.js";
 import { VERSION } from "./version.js";
 
 const severityScore: Record<Severity, number> = { critical: 400, high: 300, medium: 200, low: 100 };
@@ -79,7 +80,7 @@ export function prioritizeFindings(report: ScanReport): PrioritizationReport {
       related_finding_ids: relatedFindings(report, finding, eligible),
     };
   });
-  return {
+  const reportValue = {
     schema_version: "1.0",
     tool: { name: "reporook", version: VERSION },
     generated_at: report.generated_at,
@@ -94,4 +95,5 @@ export function prioritizeFindings(report: ScanReport): PrioritizationReport {
     },
     priorities,
   };
+  return authenticateArtifact(report.scan_receipt.target, reportValue as unknown as Record<string, unknown>) as unknown as PrioritizationReport;
 }

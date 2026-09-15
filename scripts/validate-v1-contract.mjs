@@ -20,6 +20,8 @@ function assertEqual(label, actual, expected) {
   throw new Error(`${label} changed outside the v1 contract:\nexpected ${JSON.stringify(expected, null, 2)}\nactual   ${JSON.stringify(actual, null, 2)}`);
 }
 
+assertEqual("v1 contract status", contract.status, "stable");
+
 function sha256(value) {
   return `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
 }
@@ -166,4 +168,4 @@ assertEqual("CI Node.js matrix", nodeVersions, contract.compatibility.ci_node_ve
 assertEqual("root Node.js engine", rootManifest.engines?.node, contract.compatibility.node_engine);
 for (const manifest of packageManifests.values()) assertEqual(`${manifest.name} Node.js engine`, manifest.engines?.node, contract.compatibility.node_engine);
 
-process.stdout.write(`RepoRook v1 release-candidate contract passed ${checks} compatibility checks.\n`);
+process.stdout.write(`RepoRook v1 stable contract passed ${checks} compatibility checks.\n`);

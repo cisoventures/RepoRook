@@ -59,6 +59,12 @@ export interface ScanReceipt {
     authorized: true;
     container_images: string[];
   };
+  semgrep_rules?: {
+    selection: string;
+    source: "default" | "invocation";
+    digest: string | null;
+    network: boolean;
+  };
 }
 
 export type ScannerScope = "repository" | "changed-files" | "external-targets" | "not-applicable";
@@ -93,6 +99,7 @@ export interface FindingBaseline {
 export interface FindingSuppression {
   id: string;
   finding_id: string;
+  finding_fingerprint: string;
   owner: string;
   reason: string;
   expires_at: string;
@@ -145,6 +152,12 @@ export interface PolicyEvaluation {
   findings: FindingPolicyResult[];
 }
 
+export interface ArtifactAuthentication {
+  scheme: "hmac-sha256";
+  key_id: string;
+  digest: string;
+}
+
 export interface ScanReport {
   schema_version: "1.0";
   tool: { name: "reporook"; version: string };
@@ -156,6 +169,7 @@ export interface ScanReport {
   findings: Finding[];
   policy?: PolicyEvaluation;
   scan_receipt: ScanReceipt;
+  authentication: ArtifactAuthentication;
 }
 
 export interface VerificationReport {
@@ -179,6 +193,7 @@ export interface VerificationReport {
     status: "approved" | "not-recorded";
     receipt: ApprovalReceipt | null;
   };
+  authentication: ArtifactAuthentication;
 }
 
 export const priorityBands = ["fix-now", "fix-next", "review-later"] as const;
@@ -213,6 +228,7 @@ export interface PrioritizationReport {
     total: number;
   };
   priorities: PrioritizedFinding[];
+  authentication: ArtifactAuthentication;
 }
 
 export interface RemediationPlan {
@@ -253,6 +269,7 @@ export interface RemediationPlan {
     scanner_pass_condition: string;
     functional_tests_required: true;
   };
+  authentication: ArtifactAuthentication;
 }
 
 export interface RemediationProposal {
@@ -286,6 +303,7 @@ export interface ApprovalReceipt {
     files: string[];
   };
   invalidation_rule: string;
+  authentication: ArtifactAuthentication;
 }
 
 export interface ProjectStack {
@@ -339,6 +357,8 @@ export interface ScanOptions {
   refreshCache?: boolean;
   cacheTtlMs?: number;
   allowExternalTargets?: boolean;
+  allowRepositorySuppressions?: boolean;
+  authorizedSemgrepConfig?: NonNullable<ScanReceipt["semgrep_rules"]>;
 }
 
 export interface ScannerContext {

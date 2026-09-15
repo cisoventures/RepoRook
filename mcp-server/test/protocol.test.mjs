@@ -33,6 +33,7 @@ test("stdio server negotiates MCP and exposes all tools", async () => {
   assert.equal(responses[1].result.tools.find((tool) => tool.name === "verify_fix").inputSchema.properties.require_scanners.default, true);
   for (const name of ["scan_repository", "scan_changes", "verify_fix"]) {
     assert.equal(responses[1].result.tools.find((tool) => tool.name === name).inputSchema.properties.allow_external_targets.default, false);
+    assert.equal(responses[1].result.tools.find((tool) => tool.name === name).inputSchema.properties.allow_repository_suppressions.default, false);
   }
   assert.ok(responses[1].result.tools.find((tool) => tool.name === "create_findings_baseline").inputSchema.required.includes("confirmed"));
   assert.ok(responses[1].result.tools.find((tool) => tool.name === "get_policy_status").inputSchema.required.includes("repository_path"));

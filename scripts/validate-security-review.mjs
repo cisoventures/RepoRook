@@ -29,7 +29,7 @@ async function readJson(path) {
   return JSON.parse(await readFile(repositoryPath(path), "utf8"));
 }
 
-assertEqual("security-review status", contract.status, "release-candidate");
+assertEqual("security-review status", contract.status, "stable");
 assertEqual("independent-review claim", contract.claims.independent_review_completed, false);
 assertEqual("security-opinion claim", contract.claims.security_opinion_provided, false);
 assertEqual("network claim", contract.claims.network_access_required, false);

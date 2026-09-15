@@ -53,6 +53,10 @@ const skippedDirectories = new Set([
   "vendor",
   "venv",
 ]);
+const maximumDiscoveryDepth = 10;
+const maximumDiscoveryEntries = 10_000;
+const maximumLockfiles = 256;
+const maximumArgumentBytes = 256 * 1024;
 
 function isRequirementsFile(name: string): boolean {
   return /^requirements.*\.txt$/i.test(name);
@@ -78,20 +82,25 @@ function handledByNativeRootScanner(relativePath: string): boolean {
 
 export async function discoverOsvLockfiles(target: string): Promise<string[]> {
   const found: string[] = [];
-  const walk = async (directory: string): Promise<void> => {
+  let visited = 0;
+  const walk = async (directory: string, depth: number): Promise<void> => {
+    if (depth > maximumDiscoveryDepth) throw new Error(`OSV lockfile discovery exceeded its depth limit of ${maximumDiscoveryDepth}`);
     const entries = await readdir(directory, { withFileTypes: true });
     for (const entry of entries) {
+      visited += 1;
+      if (visited > maximumDiscoveryEntries) throw new Error(`OSV lockfile discovery exceeded ${maximumDiscoveryEntries} entries`);
       const absolute = join(directory, entry.name);
       const relativePath = relative(target, absolute).replaceAll("\\", "/");
       if (entry.isDirectory()) {
-        if (!skippedDirectories.has(entry.name.toLowerCase())) await walk(absolute);
+        if (!skippedDirectories.has(entry.name.toLowerCase())) await walk(absolute, depth + 1);
         continue;
       }
       if (!entry.isFile() || handledByNativeRootScanner(relativePath) || !isSupportedLockfile(relativePath)) continue;
       found.push(absolute);
+      if (found.length > maximumLockfiles) throw new Error(`OSV lockfile discovery exceeded ${maximumLockfiles} supported files`);
     }
   };
-  await walk(target);
+  await walk(target, 0);
   return found.sort((left, right) => left.localeCompare(right));
 }
 
@@ -242,6 +251,9 @@ export class OsvScanner implements ScannerAdapter {
     if (!lockfiles.length) return errored(this.name, version, Date.now() - started, "OSV-supported dependency files disappeared before the scan started");
     const args = ["scan", "source", "--format=json", "--verbosity=error"];
     for (const lockfile of lockfiles) args.push("--lockfile", lockfile);
+    if (args.reduce((total, value) => total + Buffer.byteLength(value, "utf8") + 1, 0) > maximumArgumentBytes) {
+      return errored(this.name, version, Date.now() - started, `OSV-Scanner arguments exceed ${maximumArgumentBytes} bytes`);
+    }
     const result = await runCommand("osv-scanner", args, { cwd: context.target });
     if (result.missing) return unavailable(this.name, result.duration_ms, "osv-scanner is not installed");
     try {

@@ -35,4 +35,6 @@ Immediately after the first release:
 
 Never retry a publish blindly after npm has accepted a package or stage. First check the staged-package view and public registry; npm package versions are immutable.
 
+If the stage-publish step fails after accepting only some packages, the workflow prints all three package/version candidates that may need cleanup. Open npm's **Staged Packages** view, inspect the version, and reject every incomplete entry with 2FA before retrying. The trusted OIDC publisher is intentionally limited to staging and publishing; it cannot reject a stage. Do not add a broad npm token merely to automate this recovery step.
+
 Trusted publishing requires npm 11.5.1 or later. Staged publishing and the `npm trust` command require npm 11.15.0 or later and Node.js 22.14.0 or later. The release workflow pins the official Node.js 26.5.0 toolchain, which bundles npm 11.17.0, and verifies the bundled npm version before any dependency or publishing command. It deliberately fails instead of downloading and executing a replacement package manager inside the privileged release job.

@@ -12,6 +12,14 @@ async function exists(path: string): Promise<boolean> { try { await access(path)
 
 export function parseNpmAudit(raw: unknown): Finding[] {
   const root = record(raw);
+  if (Object.hasOwn(root, "error") && root.error !== null && root.error !== undefined) {
+    throw new Error("npm audit reported an operational error");
+  }
+  const hasVulnerabilities = Object.hasOwn(root, "vulnerabilities")
+    && root.vulnerabilities !== null && typeof root.vulnerabilities === "object" && !Array.isArray(root.vulnerabilities);
+  const hasAdvisories = Object.hasOwn(root, "advisories")
+    && root.advisories !== null && typeof root.advisories === "object" && !Array.isArray(root.advisories);
+  if (!hasVulnerabilities && !hasAdvisories) throw new Error("npm audit report is missing vulnerabilities or advisories");
   const vulnerabilities = record(root.vulnerabilities);
   const findings: Finding[] = [];
   for (const [packageName, value] of Object.entries(vulnerabilities)) {
