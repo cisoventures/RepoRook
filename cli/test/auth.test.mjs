@@ -21,7 +21,11 @@ test("artifact authentication uses a protected host-local key and binds the repo
     assert.equal(metadata.size, 32);
     if (process.platform !== "win32") assert.equal(metadata.mode & 0o777, 0o600);
     await chmod(keyPath, 0o644);
-    assert.throws(() => authenticateArtifact("/repo/one", { value: "other" }), /unsafe permissions/);
+    if (process.platform === "win32") {
+      assert.doesNotThrow(() => authenticateArtifact("/repo/one", { value: "other" }));
+    } else {
+      assert.throws(() => authenticateArtifact("/repo/one", { value: "other" }), /unsafe permissions/);
+    }
   } finally {
     if (priorKey === undefined) delete process.env.REPOROOK_AUTH_KEY;
     else process.env.REPOROOK_AUTH_KEY = priorKey;

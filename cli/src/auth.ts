@@ -23,13 +23,17 @@ function authenticationKey(): Buffer {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const directoryMetadata = lstatSync(directory);
   if (!directoryMetadata.isDirectory() || directoryMetadata.isSymbolicLink()) throw new Error("RepoRook artifact authentication directory is invalid");
-  chmodSync(directory, 0o700);
+  // Windows does not expose its ACLs through POSIX mode bits. The cache lives
+  // below the user's profile there, while creation and link/type checks below
+  // still prevent replacing the key with attacker-selected filesystem objects.
+  if (process.platform !== "win32") chmodSync(directory, 0o700);
   if (!existsSync(path)) {
     try { writeFileSync(path, randomBytes(32), { mode: 0o600, flag: "wx" }); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
   }
   const metadata = lstatSync(path);
-  if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size !== 32 || (metadata.mode & 0o077) !== 0) {
+  const unsafePosixPermissions = process.platform !== "win32" && (metadata.mode & 0o077) !== 0;
+  if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.size !== 32 || unsafePosixPermissions) {
     throw new Error("RepoRook artifact authentication key is invalid or has unsafe permissions");
   }
   const key = readFileSync(path);
@@ -44,8 +48,19 @@ function unsigned(value: Record<string, unknown>): Record<string, unknown> {
 
 function targetIdentity(target: string): string {
   const absolute = resolve(target);
-  try { return realpathSync(absolute); }
-  catch { return absolute; }
+  let canonical: string;
+  try { canonical = realpathSync.native(absolute); }
+  catch { canonical = absolute; }
+  if (process.platform !== "win32") return canonical;
+  // Windows APIs can return the same path with different drive-letter casing,
+  // separators, or an extended-length prefix. Normalize those aliases so an
+  // artifact signed by one process verifies in another without weakening the
+  // repository-path binding.
+  return canonical
+    .replace(/^\\\\\?\\UNC\\/i, "//")
+    .replace(/^\\\\\?\\/, "")
+    .replaceAll("\\", "/")
+    .toLowerCase();
 }
 
 function digestFor(key: Buffer, target: string, value: Record<string, unknown>): string {

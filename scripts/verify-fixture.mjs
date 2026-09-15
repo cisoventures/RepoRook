@@ -11,6 +11,10 @@ const scan = spawnSync(process.execPath, [
   "scan",
   target,
   "--no-cache",
+  // This fixture deliberately runs without the optional hash-locked Python
+  // scanners. The preceding CI step separately proves required coverage fails
+  // closed; this journey tests that an unchanged finding remains unresolved.
+  "--allow-no-coverage",
   "--no-sarif",
   "--quiet",
 ], { encoding: "utf8" });
@@ -27,7 +31,6 @@ const result = spawnSync(process.execPath, [
   "verify",
   finding.id,
   target,
-  "--require-scanners",
   "--no-sarif",
   "--quiet",
 ], { encoding: "utf8" });
