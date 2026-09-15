@@ -28,7 +28,7 @@ test("published Action examples use immutable source revisions", async () => {
     const document = await source(path);
     assert.doesNotMatch(document, /uses:\s+[^\s]+@(?:v|main|master|latest)/);
     assert.match(document, /actions\/checkout@[0-9a-f]{40} # v7/);
-    assert.match(document, /cisoventures\/RepoRook@98f290a7645e88e4f9fada89b12e1577f5a1bb84 # v1\.0\.0 source pin/);
+    assert.match(document, /cisoventures\/RepoRook@72e3365001464c3f7b90f7620914fac149b61e39 # v1\.0\.0 source pin/);
     assert.match(document, /persist-credentials: false/);
   }
 });
