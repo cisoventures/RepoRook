@@ -32,9 +32,11 @@ The external-target authorization gate is an intentional pre-v1 security migrati
 
 v1 also makes three deliberate security migrations:
 
-- Repository suppressions require `--allow-repository-suppressions`, `allow_repository_suppressions: true`, the per-scan service checkbox, or `allow-repository-suppressions: true` in a trusted Action workflow. Without it, findings remain actionable.
+- Repository baselines and suppressions require `--allow-repository-suppressions`, `allow_repository_suppressions: true`, the per-scan service checkbox, or `allow-repository-suppressions: true` in a trusted Action workflow. Without it, repository policy cannot make findings non-actionable.
 - Non-default Semgrep aliases, URLs, and local rule files are selected at the invocation boundary with `--semgrep-config` or `semgrep-config`; checked-in `semgrepConfig` cannot switch rules. Network rule selections also require external-target authorization.
 - Findings and approval receipts require repository-bound HMAC authentication. Processes that exchange evidence across an isolated boundary must share a secret `REPOROOK_AUTH_KEY` of at least 32 bytes. The default host-local key is intentionally not portable between machines.
+
+The final v1 security review also made repository identity explicit in the public approval helpers: `createApprovalReceipt` and `approvalMatches` require the consumer's repository target, and service publishers receive that target separately from untrusted remediation artifacts. MCP policy tools retain their published `output_path` field for compatibility but accept only the dedicated `reporook-baseline.json` or `reporook-suppressions.json` destination shown by each tool. These fail-closed changes intentionally reject calls that could reuse an approval across repositories or overwrite unrelated repository files.
 
 ## Deprecation and migration
 

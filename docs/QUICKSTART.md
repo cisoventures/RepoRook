@@ -145,7 +145,7 @@ jobs:
         with:
           fail-on: high
           mode: diff
-          # Set true only after reviewing reporook-suppressions.json.
+          # Set true only after reviewing the baseline and suppression files.
           allow-repository-suppressions: false
 ```
 

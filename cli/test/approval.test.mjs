@@ -76,19 +76,21 @@ function proposal(plan) {
 }
 
 test("approval receipts bind the exact plan, diff, files, and tests", () => {
-  const plan = createRemediationPlan(report("/repo"), finding().id);
+  const target = "/repo";
+  const plan = createRemediationPlan(report(target), finding().id);
   const proposed = proposal(plan);
-  const receipt = createApprovalReceipt(plan, proposed, "security-reviewer", "Reviewed the exact patch and regression test.", new Date("2026-07-24T12:10:00.000Z"));
+  const receipt = createApprovalReceipt(plan, proposed, "security-reviewer", "Reviewed the exact patch and regression test.", target, new Date("2026-07-24T12:10:00.000Z"));
   assert.match(receipt.approval_id, /^rra-[a-f0-9]{12}$/);
   assert.equal(receipt.bindings.files[0], "src/app.ts");
-  assert.equal(approvalMatches(receipt, plan, proposed), true);
-  assert.equal(approvalMatches(receipt, plan, { ...proposed, test_plan: ["npm test"] }), false);
-  assert.equal(approvalMatches(receipt, plan, { ...proposed, patch: `${proposed.patch}\n` }), false);
+  assert.equal(approvalMatches(receipt, plan, proposed, target), true);
+  assert.equal(approvalMatches(receipt, plan, proposed, "/different-repository"), false);
+  assert.equal(approvalMatches(receipt, plan, { ...proposed, test_plan: ["npm test"] }, target), false);
+  assert.equal(approvalMatches(receipt, plan, { ...proposed, patch: `${proposed.patch}\n` }, target), false);
   const changedSource = structuredClone(receipt);
   changedSource.source_scan.commit = "def456";
-  assert.equal(approvalMatches(changedSource, plan, proposed), false);
+  assert.equal(approvalMatches(changedSource, plan, proposed, target), false);
   for (const [field, value] of [["approved_by", "attacker"], ["reason", "changed reason"], ["approved_at", "2026-07-24T12:11:00.000Z"]]) {
-    assert.equal(approvalMatches({ ...receipt, [field]: value }, plan, proposed), false);
+    assert.equal(approvalMatches({ ...receipt, [field]: value }, plan, proposed, target), false);
   }
   const forgedActor = "forged-security-owner";
   const forgedId = `rra-${createHash("sha256").update([
@@ -98,8 +100,12 @@ test("approval receipts bind the exact plan, diff, files, and tests", () => {
     receipt.reason,
     receipt.approved_at,
   ].join("\0")).digest("hex").slice(0, 12)}`;
-  assert.equal(approvalMatches({ ...receipt, approved_by: forgedActor, approval_id: forgedId }, plan, proposed), false);
-  assert.equal(approvalMatches({ ...receipt, approval_id: "rra-000000000000" }, plan, proposed), false);
+  assert.equal(approvalMatches({ ...receipt, approved_by: forgedActor, approval_id: forgedId }, plan, proposed, target), false);
+  assert.equal(approvalMatches({ ...receipt, approval_id: "rra-000000000000" }, plan, proposed, target), false);
+  assert.throws(
+    () => createApprovalReceipt(plan, proposed, "security-reviewer", "Reviewed the exact patch and regression test.", "/different-repository"),
+    /source target does not match/,
+  );
   assert.throws(() => parseRemediationProposal({ ...proposed, files: ["../outside.ts"] }), /repository-relative/);
   assert.throws(() => parseRemediationProposal({ ...proposed, files: ["src/other.ts"] }), /exactly match/);
 });

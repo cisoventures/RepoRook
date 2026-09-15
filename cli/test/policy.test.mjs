@@ -189,7 +189,7 @@ test("policy evaluation separates new, baseline, suppressed, expired, and below-
       failOn: "high",
       pathPolicies: { "src/auth/**": "low" },
     };
-    await assert.rejects(() => evaluatePolicy(target, [existing, pathActionable, suppressed, belowThreshold, expired], config, now), /explicit --allow-repository-suppressions/);
+    await assert.rejects(() => evaluatePolicy(target, [existing, pathActionable, suppressed, belowThreshold, expired], config, now), /baseline or suppression policy requires explicit --allow-repository-suppressions/);
     const policy = await evaluatePolicy(target, [existing, pathActionable, suppressed, belowThreshold, expired], config, now, { allowRepositorySuppressions: true });
     assert.deepEqual(policy.summary, {
       new: 4,
@@ -207,6 +207,31 @@ test("policy evaluation separates new, baseline, suppressed, expired, and below-
     const noBlockers = structuredClone(policy);
     noBlockers.summary.actionable = 0;
     assert.equal(scanExitCode(report(target, [existing], noBlockers), "high", [], false, false), 0);
+  } finally {
+    await rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+});
+
+test("repository baselines cannot make findings non-actionable without explicit policy approval", async () => {
+  const target = await mkdtemp(join(tmpdir(), "reporook-baseline-approval-"));
+  const selected = finding("rr-121212121212");
+  try {
+    const baseline = createFindingBaseline(report(target, [selected]), new Date("2026-07-24T12:00:00.000Z"));
+    await writeFile(join(target, "reporook-baseline.json"), `${JSON.stringify(baseline, null, 2)}\n`);
+    const config = structuredClone(defaultConfig);
+    await assert.rejects(
+      () => evaluatePolicy(target, [selected], config, new Date("2026-07-24T12:05:00.000Z")),
+      /baseline or suppression policy requires explicit --allow-repository-suppressions/,
+    );
+    const approved = await evaluatePolicy(
+      target,
+      [selected],
+      config,
+      new Date("2026-07-24T12:05:00.000Z"),
+      { allowRepositorySuppressions: true },
+    );
+    assert.equal(approved.findings[0].disposition, "baseline");
+    assert.equal(approved.summary.actionable, 0);
   } finally {
     await rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
@@ -253,7 +278,7 @@ test("nested scans can use repository-root policy files but cannot escape the re
       ...structuredClone(defaultConfig),
       baselineFile: "../../reporook-baseline.json",
     };
-    const policy = await evaluatePolicy(nested, [selected], config, new Date("2026-07-24T12:00:00.000Z"));
+    const policy = await evaluatePolicy(nested, [selected], config, new Date("2026-07-24T12:00:00.000Z"), { allowRepositorySuppressions: true });
     assert.equal(policy.findings[0].baseline, "existing");
     await assert.rejects(
       evaluatePolicy(nested, [selected], { ...config, baselineFile: "../../../outside.json" }),

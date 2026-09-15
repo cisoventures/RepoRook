@@ -68,6 +68,10 @@ function targetIdentity(target: string): string {
     .toLowerCase();
 }
 
+export function artifactTargetsMatch(left: string, right: string): boolean {
+  return targetIdentity(left) === targetIdentity(right);
+}
+
 function digestFor(key: Buffer, target: string, value: Record<string, unknown>): string {
   return `sha256:${createHmac("sha256", key).update(targetIdentity(target)).update("\0").update(JSON.stringify(unsigned(value))).digest("hex")}`;
 }

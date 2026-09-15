@@ -80,7 +80,7 @@ jobs:
         with:
           fail-on: high
           mode: diff
-          # Set true only after reviewing reporook-suppressions.json.
+          # Set true only after reviewing the baseline and suppression files.
           allow-repository-suppressions: false
 ```
 
@@ -135,7 +135,7 @@ pathPolicies:
   src/payments/**: medium
 ```
 
-Configuration is validated strictly: unknown scanner names, invalid value types, unknown keys, a scanner that is both required and disabled, and a path rule that weakens the global threshold are errors rather than silent fallbacks. Configuration files must be regular, non-symbolic-link files inside the repository and are capped at 1 MiB; an explicitly requested missing file is an error rather than a fallback to defaults. Baseline and suppression files are repository-relative, reviewable JSON. A checked-in suppression file is ignored unless the trusted invocation explicitly passes `--allow-repository-suppressions` (or the matching MCP, service, or Action option). Missing or unauthorized policy files fail safe by making findings actionable rather than hiding them.
+Configuration is validated strictly: unknown scanner names, invalid value types, unknown keys, a scanner that is both required and disabled, and a path rule that weakens the global threshold are errors rather than silent fallbacks. Configuration files must be regular, non-symbolic-link files inside the repository and are capped at 1 MiB; an explicitly requested missing file is an error rather than a fallback to defaults. Baseline and suppression files are repository-relative, reviewable JSON. Checked-in baseline and suppression files cannot make findings non-actionable unless the trusted invocation explicitly passes `--allow-repository-suppressions` (or the matching MCP, service, or Action option). Missing or unauthorized policy files fail safe by making findings actionable rather than hiding them.
 
 An optional organization policy is a committed, repository-relative YAML or JSON profile. It sets a minimum global threshold, required scanners, and sensitive-path thresholds. Repository configuration may tighten those values but cannot weaken them or disable a profile-required scanner. RepoRook validates the file without following symbolic links and binds its content hash into policy evidence and the scan receipt. See [team policy](docs/TEAM_POLICY.md).
 

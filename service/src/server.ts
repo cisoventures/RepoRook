@@ -284,7 +284,7 @@ export async function startDashboardServer(options: DashboardServerOptions): Pro
         publishingFindings.add(findingId);
         try {
           const publication = await store.publication(findingId, digest);
-          return json(response, 201, await activePublisher.publish(publication));
+          return json(response, 201, await activePublisher.publish(publication, store.target));
         } catch (error) {
           throw new HttpError(422, error instanceof Error ? error.message : "RepoRook could not open the draft pull request");
         } finally {

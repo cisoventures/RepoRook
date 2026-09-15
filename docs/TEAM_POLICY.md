@@ -28,13 +28,13 @@ reporook suppress FINDING_ID . \
 
 This writes or updates `reporook-suppressions.json`. Each suppression binds the finding ID and full evidence fingerprint, so a changed finding cannot inherit an old exception. Commit the file so reviewers can audit the decision. Expired suppressions never disappear: RepoRook reports them as expired and evaluates matching findings normally. Suppression does not mean fixed.
 
-A repository cannot activate its own exceptions. After reviewing the committed file, a trusted invocation must opt in for that scan:
+A repository cannot activate its own accepted baseline or exceptions. After reviewing the committed baseline and suppression files, a trusted invocation must opt in for that scan:
 
 ```bash
 reporook scan . --require-scanners --allow-repository-suppressions
 ```
 
-The equivalent controls are `allow_repository_suppressions: true` in MCP, the unchecked dashboard control, and `allow-repository-suppressions: true` in the Action. Without that explicit choice, matching findings remain actionable.
+The equivalent controls are `allow_repository_suppressions: true` in MCP, the unchecked dashboard control, and `allow-repository-suppressions: true` in the Action. Without that explicit choice, repository policy cannot make matching findings non-actionable.
 
 ## Tighten sensitive paths
 

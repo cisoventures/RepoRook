@@ -95,6 +95,26 @@ process.stdout.write("{}\\n");
   }
 });
 
+test("MCP policy tools cannot redirect approved writes onto unrelated repository files", async () => {
+  const { root, child, responses } = await serverWithStub(`
+import { appendFileSync } from "node:fs";
+appendFileSync(process.env.REPOROOK_TEST_ROOT + "/calls.txt", process.argv.slice(2).join(" ") + "\\n");
+process.stdout.write("{}\\n");
+`);
+  try {
+    child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "create_findings_baseline", arguments: { repository_path: root, confirmed: true, output_path: "package.json" } } })}\n`);
+    await waitFor(responses, 1);
+    child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "suppress_finding", arguments: { repository_path: root, finding_id: "rr-0123456789ab", owner: "security", reason: "temporary exception", expires: "2099-01-01", confirmed: true, output_path: "src/app.ts" } } })}\n`);
+    await waitFor(responses, 2);
+    assert.equal(responses.every((item) => item.result?.isError === true), true);
+    assert.equal(responses.every((item) => /cannot overwrite another repository file/.test(item.result.content[0].text)), true);
+    await assert.rejects(readFile(join(root, "calls.txt"), "utf8"), /ENOENT/);
+  } finally {
+    child.kill("SIGTERM");
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("sensitive scan approvals reach the CLI only when explicitly requested", async () => {
   const { root, child, responses } = await serverWithStub(`
 import { appendFileSync } from "node:fs";
@@ -152,6 +172,23 @@ process.stdout.write("{}\\n");
     child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "scan_repository", arguments: { path: root } } })}\n`);
     await waitFor(responses, 2);
     assert.equal(responses.filter((item) => item.result?.isError && /already running for this repository/.test(item.result.content?.[0]?.text ?? "")).length, 1);
+  } finally {
+    child.kill("SIGTERM");
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("verification rescans share the canonical repository scan lock", async () => {
+  const { root, child, responses } = await serverWithStub(`
+await new Promise((resolve) => setTimeout(resolve, 150));
+process.stdout.write("{}\\n");
+`);
+  try {
+    child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "verify_fix", arguments: { finding_id: "rr-0123456789ab", repository_path: root } } })}\n`);
+    child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "scan_repository", arguments: { path: root } } })}\n`);
+    await waitFor(responses, 2);
+    assert.equal(responses.filter((item) => item.result?.isError && /already running for this repository/.test(item.result.content?.[0]?.text ?? "")).length, 1);
+    assert.equal(responses.filter((item) => !item.result?.isError).length, 1);
   } finally {
     child.kill("SIGTERM");
     await rm(root, { recursive: true, force: true });

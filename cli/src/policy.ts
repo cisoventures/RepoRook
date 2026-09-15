@@ -249,10 +249,10 @@ export async function evaluatePolicy(
 ): Promise<PolicyEvaluation> {
   const baselineInput = await optionalJson(target, config.baselineFile, "Baseline file");
   const suppressionInput = await optionalJson(target, config.suppressionsFile, "Suppression file");
-  const baseline = baselineInput.value === null ? null : parseFindingBaseline(baselineInput.value);
-  if (suppressionInput.value !== null && !options.allowRepositorySuppressions) {
-    throw new Error("Repository-authored suppressions require explicit --allow-repository-suppressions approval for this invocation");
+  if ((baselineInput.value !== null || suppressionInput.value !== null) && !options.allowRepositorySuppressions) {
+    throw new Error("Repository-authored baseline or suppression policy requires explicit --allow-repository-suppressions approval for this invocation");
   }
+  const baseline = baselineInput.value === null ? null : parseFindingBaseline(baselineInput.value);
   const suppressionFile = suppressionInput.value === null ? null : parseSuppressionFile(suppressionInput.value);
   const baselineFingerprints = new Set(baseline?.findings.map((finding) => finding.fingerprint) ?? []);
   const suppressionsByFinding = new Map((suppressionFile?.suppressions ?? []).map((item) => [item.finding_id, item]));

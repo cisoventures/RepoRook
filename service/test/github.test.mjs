@@ -49,7 +49,7 @@ function publication() {
     ].join("\n"),
     test_plan: ["npm test"],
   };
-  const approval = createApprovalReceipt(plan, proposal, "Security owner", "Reviewed exact patch and tests", new Date("2026-07-25T00:01:00.000Z"));
+  const approval = createApprovalReceipt(plan, proposal, "Security owner", "Reviewed exact patch and tests", source_scan.target, new Date("2026-07-25T00:01:00.000Z"));
   return { plan, proposal, approval, proposal_digest: "c".repeat(64) };
 }
 
@@ -89,7 +89,7 @@ function githubMock(options = {}) {
 test("GitHub publisher creates one repository-scoped draft PR from the exact approved patch", async () => {
   const mock = githubMock();
   const publisher = new GitHubPublisher({ repository: "cisoventures/RepoRook", token: "github-installation-token-value", fetch: mock.fetch });
-  const result = await publisher.publish(publication());
+  const result = await publisher.publish(publication(), "/repository");
   assert.equal(result.number, 21);
   assert.equal(result.draft, true);
   assert.equal(result.repository, "cisoventures/RepoRook");
@@ -106,7 +106,7 @@ test("GitHub publisher creates one repository-scoped draft PR from the exact app
 test("GitHub publisher rejects a token that cannot see the selected repository before writes", async () => {
   const mock = githubMock({ authorized: false });
   const publisher = new GitHubPublisher({ repository: "cisoventures/RepoRook", token: "github-installation-token-value", fetch: mock.fetch });
-  await assert.rejects(publisher.publish(publication()), /not authorized for cisoventures\/RepoRook/);
+  await assert.rejects(publisher.publish(publication(), "/repository"), /not authorized for cisoventures\/RepoRook/);
   assert.equal(mock.calls.length, 1);
   assert.equal(mock.calls.some((call) => call.method !== "GET"), false);
 });
@@ -114,14 +114,14 @@ test("GitHub publisher rejects a token that cannot see the selected repository b
 test("GitHub publisher requires an installation token and never falls back to a broad personal token", async () => {
   const mock = githubMock({ installationError: true });
   const publisher = new GitHubPublisher({ repository: "cisoventures/RepoRook", token: "personal-access-token-value", fetch: mock.fetch });
-  await assert.rejects(publisher.publish(publication()), /must be a GitHub App installation token/);
+  await assert.rejects(publisher.publish(publication(), "/repository"), /must be a GitHub App installation token/);
   assert.equal(mock.calls.length, 1);
 });
 
 test("GitHub publisher rejects a stale default branch before creating remote objects", async () => {
   const mock = githubMock({ baseSha: "d".repeat(40) });
   const publisher = new GitHubPublisher({ repository: "cisoventures/RepoRook", token: "github-installation-token-value", fetch: mock.fetch });
-  await assert.rejects(publisher.publish(publication()), /changed after the approved scan/);
+  await assert.rejects(publisher.publish(publication(), "/repository"), /changed after the approved scan/);
   assert.equal(mock.calls.some((call) => call.method === "POST"), false);
 });
 
@@ -130,14 +130,21 @@ test("GitHub publisher rejects a receipt whose source scan was altered", async (
   const input = publication();
   input.approval.source_scan.commit = "d".repeat(40);
   const publisher = new GitHubPublisher({ repository: "cisoventures/RepoRook", token: "github-installation-token-value", fetch: mock.fetch });
-  await assert.rejects(publisher.publish(input), /approval receipt no longer matches/);
+  await assert.rejects(publisher.publish(input, "/repository"), /approval receipt no longer matches/);
+  assert.equal(mock.calls.length, 0);
+});
+
+test("GitHub publisher rejects approval receipts minted for another local repository", async () => {
+  const mock = githubMock();
+  const publisher = new GitHubPublisher({ repository: "cisoventures/RepoRook", token: "github-installation-token-value", fetch: mock.fetch });
+  await assert.rejects(publisher.publish(publication(), "/different-repository"), /approval receipt no longer matches/);
   assert.equal(mock.calls.length, 0);
 });
 
 test("GitHub publisher rejects and closes a pull request not confirmed draft", async () => {
   const mock = githubMock({ pullDraft: false });
   const publisher = new GitHubPublisher({ repository: "cisoventures/RepoRook", token: "github-installation-token-value", fetch: mock.fetch });
-  await assert.rejects(publisher.publish(publication()), /did not create the pull request as a draft/);
+  await assert.rejects(publisher.publish(publication(), "/repository"), /did not create the pull request as a draft/);
   assert.ok(mock.calls.some((call) => call.method === "PATCH" && call.path.endsWith("/pulls/21")));
   assert.ok(mock.calls.some((call) => call.method === "DELETE" && call.path.includes("/git/refs/heads/reporook/")));
 });

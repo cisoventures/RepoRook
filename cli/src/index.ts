@@ -64,7 +64,7 @@ Scan options:
   --allow-external-targets
                          Authorize configured container-image or non-default Semgrep network access for this invocation
   --allow-repository-suppressions
-                         Trust reviewed repository suppressions for this invocation
+                         Trust reviewed repository baseline and suppression policy for this invocation
   --semgrep-config RULES Operator-selected Semgrep alias, URL, or repository-local rules file
   --no-cache             Disable scanner cache reads and writes for this scan
   --refresh-cache        Run every scanner and replace successful cache entries
@@ -267,7 +267,7 @@ async function runApprove(parsed: ReturnType<typeof parseArgs>): Promise<number>
   let proposal: unknown;
   try { proposal = JSON.parse(proposalText) as unknown; }
   catch { throw new Error("Remediation proposal is not valid JSON"); }
-  const receipt = createApprovalReceipt(plan, proposal, approvedBy, reason);
+  const receipt = createApprovalReceipt(plan, proposal, approvedBy, reason, target);
   const output = stringFlag(parsed.flags, "approval-output") ?? `${directory}/approval.json`;
   const outputPath = artifactPath(target, output);
   if ([planPath, proposalPath].includes(outputPath)) throw new Error("Approval receipt must not overwrite the plan or proposal");
@@ -345,7 +345,7 @@ async function runVerify(parsed: ReturnType<typeof parseArgs>): Promise<number> 
     const proposalPath = artifactPath(target, stringFlag(parsed.flags, "proposal") ?? `${remediationDir}/proposal.json`);
     const plan = await readBoundedJsonFile(planPath, "Remediation plan");
     const proposal = await readBoundedJsonFile(proposalPath, "Remediation proposal");
-    if (!approvalMatches(receipt, plan, proposal)) throw new Error("Approval receipt no longer matches the exact plan, patch, files, and test plan");
+    if (!approvalMatches(receipt, plan, proposal, target)) throw new Error("Approval receipt no longer matches this repository's exact plan, patch, files, and test plan");
     approval = { status: "approved", receipt };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT" || requestedApproval || approvalReceiptLoaded) throw error;

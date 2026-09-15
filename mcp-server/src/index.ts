@@ -60,6 +60,14 @@ function optionalBoolean(input: JsonRecord, name: string): boolean | undefined {
   return value;
 }
 
+function fixedPolicyOutput(input: JsonRecord, name: string, expected: string): string {
+  const value = string(input, name, { default: expected });
+  if (value !== expected) {
+    throw new Error(`${name} is fixed to ${expected}; MCP policy tools cannot overwrite another repository file`);
+  }
+  return value;
+}
+
 function gitRevision(input: JsonRecord, name: string, defaultValue: string): string {
   const value = string(input, name, { default: defaultValue });
   if (value.length > 1024 || value.startsWith("-") || value.includes("\0") || /[\r\n]/.test(value)) {
@@ -104,7 +112,7 @@ const tools: ToolDefinition[] = [
     description: "Run deterministic source, secret, dependency, infrastructure, workflow, and explicitly configured container-image checks. Read-only except for .reporook evidence files. Distinguish partial coverage from a clean scan.",
     inputSchema: {
       type: "object",
-      properties: { path: { type: "string", description: "Absolute repository path" }, fail_on: severitySchema, require_scanners: { type: "boolean" }, allow_external_targets: { type: "boolean", default: false, description: "Authorize configured container-image registry access for this invocation" }, allow_repository_suppressions: { type: "boolean", default: false, description: "Trust the reviewed reporook-suppressions.json file for this invocation" } },
+      properties: { path: { type: "string", description: "Absolute repository path" }, fail_on: severitySchema, require_scanners: { type: "boolean" }, allow_external_targets: { type: "boolean", default: false, description: "Authorize configured container-image registry access for this invocation" }, allow_repository_suppressions: { type: "boolean", default: false, description: "Trust the reviewed repository baseline and suppression files for this invocation" } },
       required: ["path"],
       additionalProperties: false,
     },
@@ -124,7 +132,7 @@ const tools: ToolDefinition[] = [
     description: "Scan findings associated with a Git revision range. Use for local changes or pull-request review; results remain deterministic.",
     inputSchema: {
       type: "object",
-      properties: { path: { type: "string" }, base: { type: "string", default: "HEAD~1" }, head: { type: "string", default: "HEAD" }, fail_on: severitySchema, allow_external_targets: { type: "boolean", default: false, description: "Authorize configured container-image registry access for this invocation" }, allow_repository_suppressions: { type: "boolean", default: false, description: "Trust the reviewed reporook-suppressions.json file for this invocation" } },
+      properties: { path: { type: "string" }, base: { type: "string", default: "HEAD~1" }, head: { type: "string", default: "HEAD" }, fail_on: severitySchema, allow_external_targets: { type: "boolean", default: false, description: "Authorize configured container-image registry access for this invocation" }, allow_repository_suppressions: { type: "boolean", default: false, description: "Trust the reviewed repository baseline and suppression files for this invocation" } },
       required: ["path"],
       additionalProperties: false,
     },
@@ -191,7 +199,7 @@ const tools: ToolDefinition[] = [
       return await baselineViaCli(
         repositoryPath,
         resolve(repositoryPath, string(input, "report_path", { default: ".reporook/findings.json" })),
-        string(input, "output_path", { default: "reporook-baseline.json" }),
+        fixedPolicyOutput(input, "output_path", "reporook-baseline.json"),
       );
     },
   },
@@ -221,7 +229,7 @@ const tools: ToolDefinition[] = [
         repositoryPath,
         string(input, "finding_id"),
         resolve(repositoryPath, string(input, "report_path", { default: ".reporook/findings.json" })),
-        string(input, "output_path", { default: "reporook-suppressions.json" }),
+        fixedPolicyOutput(input, "output_path", "reporook-suppressions.json"),
         string(input, "owner"),
         string(input, "reason"),
         string(input, "expires"),
@@ -333,7 +341,7 @@ const tools: ToolDefinition[] = [
     description: "Rerun RepoRook and report whether the original stable finding remains. Resolution is inconclusive unless the original scanner completes under the same configuration. This does not replace repository tests.",
     inputSchema: {
       type: "object",
-      properties: { finding_id: { type: "string" }, repository_path: { type: "string" }, previous_report_path: { type: "string", default: ".reporook/findings.json" }, require_scanners: { type: "boolean", default: true }, allow_external_targets: { type: "boolean", default: false, description: "Authorize configured container-image registry access for this invocation" }, allow_repository_suppressions: { type: "boolean", default: false, description: "Trust the reviewed reporook-suppressions.json file for this invocation" } },
+      properties: { finding_id: { type: "string" }, repository_path: { type: "string" }, previous_report_path: { type: "string", default: ".reporook/findings.json" }, require_scanners: { type: "boolean", default: true }, allow_external_targets: { type: "boolean", default: false, description: "Authorize configured container-image registry access for this invocation" }, allow_repository_suppressions: { type: "boolean", default: false, description: "Trust the reviewed repository baseline and suppression files for this invocation" } },
       required: ["finding_id", "repository_path"],
       additionalProperties: false,
     },
@@ -344,7 +352,14 @@ const tools: ToolDefinition[] = [
       const requireScanners = optionalBoolean(input, "require_scanners") ?? true;
       const allowExternalTargets = optionalBoolean(input, "allow_external_targets") ?? false;
       const allowRepositorySuppressions = optionalBoolean(input, "allow_repository_suppressions") ?? false;
-      return await verifyViaCli(repositoryPath, findingId, previousReportPath, requireScanners, allowExternalTargets, allowRepositorySuppressions);
+      return await withRepositoryScanLock(repositoryPath, async () => await verifyViaCli(
+        repositoryPath,
+        findingId,
+        previousReportPath,
+        requireScanners,
+        allowExternalTargets,
+        allowRepositorySuppressions,
+      ));
     },
   },
   {

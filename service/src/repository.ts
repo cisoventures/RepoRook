@@ -158,8 +158,8 @@ export class RepositoryStore {
     const plan = planArtifact.value as RemediationPlan;
     const proposal = parseRemediationProposal(proposalArtifact.value);
     const approval = parseApprovalReceipt(approvalArtifact.value);
-    if (!approvalMatches(approval, plan, proposal)) {
-      throw new Error("The approval receipt no longer matches the exact plan, patch, files, and tests");
+    if (!approvalMatches(approval, plan, proposal, this.target)) {
+      throw new Error("The approval receipt no longer matches this repository's exact plan, patch, files, and tests");
     }
     if (proposal.finding_id !== findingId) throw new Error("The proposal does not match the requested finding");
     return { plan, proposal, approval, proposal_digest: proposalDigest };
@@ -183,7 +183,7 @@ export class RepositoryStore {
         try {
           const parsedProposal = parseRemediationProposal(proposal.value);
           const parsedApproval = parseApprovalReceipt(approval.value);
-          if (publishable && approvalMatches(parsedApproval, plan.value, parsedProposal)) approvalId = parsedApproval.approval_id;
+          if (publishable && approvalMatches(parsedApproval, plan.value, parsedProposal, this.target)) approvalId = parsedApproval.approval_id;
         } catch {
           approvalId = null;
         }

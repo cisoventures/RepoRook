@@ -249,7 +249,7 @@ test("beginner journey fails closed, binds approval, and opens only a repository
       const { plan, proposal } = remediation(repository);
       const approvedBy = args.find((value) => value.startsWith("--approved-by="))?.slice("--approved-by=".length);
       const reason = args.find((value) => value.startsWith("--reason="))?.slice("--reason=".length);
-      const approval = createApprovalReceipt(plan, proposal, approvedBy, reason, new Date("2026-07-28T00:02:00.000Z"));
+      const approval = createApprovalReceipt(plan, proposal, approvedBy, reason, repository, new Date("2026-07-28T00:02:00.000Z"));
       const path = join(repository, ".reporook", "remediations", findingId, "approval.json");
       await writeFile(path, `${JSON.stringify(approval, null, 2)}\n`);
       return { code: 0, stdout: `${JSON.stringify(approval)}\n`, stderr: "" };

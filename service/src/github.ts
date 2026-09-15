@@ -28,7 +28,7 @@ export interface PublishedPullRequest {
 
 export interface RemediationPublisher {
   readonly repository: string;
-  publish(publication: RemediationPublication): Promise<PublishedPullRequest>;
+  publish(publication: RemediationPublication, repositoryTarget: string): Promise<PublishedPullRequest>;
 }
 
 export interface GitHubPublisherOptions {
@@ -221,9 +221,9 @@ export class GitHubPublisher implements RemediationPublisher {
     throw new Error(`The GitHub App installation is not authorized for ${this.repository}`);
   }
 
-  async publish(publication: RemediationPublication): Promise<PublishedPullRequest> {
-    if (!approvalMatches(publication.approval, publication.plan, publication.proposal)) {
-      throw new Error("The approval receipt no longer matches the exact plan, patch, files, and tests");
+  async publish(publication: RemediationPublication, repositoryTarget: string): Promise<PublishedPullRequest> {
+    if (!approvalMatches(publication.approval, publication.plan, publication.proposal, repositoryTarget)) {
+      throw new Error("The approval receipt no longer matches this repository's exact plan, patch, files, and tests");
     }
     validatePatch(publication.proposal);
     if (!publication.approval.source_scan.commit || !/^[a-f0-9]{40}$/.test(publication.approval.source_scan.commit)) {

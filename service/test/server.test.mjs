@@ -110,7 +110,7 @@ async function approvedPublicationFixture() {
     patch: "--- a/app.js\n+++ b/app.js\n@@ -1 +1 @@\n-export const ready = true;\n+export const ready = false;\n",
     test_plan: ["npm test"],
   };
-  const approval = createApprovalReceipt(plan, proposal, "Security owner", "Reviewed the exact patch and tests", new Date("2026-07-25T00:01:00.000Z"));
+  const approval = createApprovalReceipt(plan, proposal, "Security owner", "Reviewed the exact patch and tests", repository, new Date("2026-07-25T00:01:00.000Z"));
   const directory = join(repository, ".reporook", "remediations", findingId);
   await writeFile(join(directory, "plan.json"), `${JSON.stringify(plan, null, 2)}\n`);
   await writeFile(join(directory, "proposal.json"), `${JSON.stringify(proposal, null, 2)}\n`);
@@ -141,6 +141,25 @@ test("repository snapshots expose plain evidence without raw scanner metadata", 
     assert.match(snapshot.approvals[0].proposal_digest, /^[a-f0-9]{64}$/);
   } finally {
     await rm(repository, { recursive: true, force: true });
+  }
+});
+
+test("repository publication rejects an approval bundle copied from another repository", async () => {
+  const source = await approvedPublicationFixture();
+  const victim = await fixture();
+  try {
+    const sourceDirectory = join(source.repository, ".reporook", "remediations", findingId);
+    const victimDirectory = join(victim.repository, ".reporook", "remediations", findingId);
+    for (const name of ["plan.json", "proposal.json", "approval.json"]) {
+      await writeFile(join(victimDirectory, name), await readFile(join(sourceDirectory, name)));
+    }
+    const proposalRaw = await readFile(join(victimDirectory, "proposal.json"), "utf8");
+    const digest = createHash("sha256").update(proposalRaw).digest("hex");
+    const store = await RepositoryStore.open(victim.repository);
+    await assert.rejects(store.publication(findingId, digest), /this repository's exact plan/);
+  } finally {
+    await rm(source.repository, { recursive: true, force: true });
+    await rm(victim.repository, { recursive: true, force: true });
   }
 });
 

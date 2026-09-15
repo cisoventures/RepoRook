@@ -34,7 +34,7 @@ inputs:
     description: Operator-selected Semgrep alias, URL, or repository-local rules file. Repository configuration cannot override this value.
     default: ""
   allow-repository-suppressions:
-    description: Explicitly trust reviewed repository suppression records for this workflow run.
+    description: Explicitly trust reviewed repository baseline and suppression records for this workflow run.
     default: "false"
   upload-sarif:
     description: Upload SARIF with the workflow token. Disable for untrusted self-scans or when security-events write is unavailable.

@@ -1,5 +1,5 @@
 import { isAbsolute, posix } from "node:path";
-import { authenticateArtifact, verifyArtifactAuthentication } from "./auth.js";
+import { artifactTargetsMatch, authenticateArtifact, verifyArtifactAuthentication } from "./auth.js";
 import { sha256 } from "./fingerprint.js";
 import type { ApprovalReceipt, RemediationPlan, RemediationProposal, ScanReceipt } from "./types.js";
 import { VERSION } from "./version.js";
@@ -178,6 +178,7 @@ export function createApprovalReceipt(
   proposalValue: unknown,
   approvedBy: string,
   reason: string,
+  target: string,
   now = new Date(),
 ): ApprovalReceipt {
   const plan = validateRemediationPlan(planValue);
@@ -188,6 +189,9 @@ export function createApprovalReceipt(
   const approvalReason = nonEmpty(reason, "reason");
   const approvedAt = now.toISOString();
   const sourceScan = parseScanReceipt(plan.source_scan, "Remediation plan source_scan");
+  if (!artifactTargetsMatch(sourceScan.target, target)) {
+    throw new Error("Remediation plan source target does not match the repository being approved");
+  }
   const bindings = {
     plan_hash: digest(plan),
     proposal_hash: digest(proposal),
@@ -209,7 +213,7 @@ export function createApprovalReceipt(
     bindings,
     invalidation_rule: approvalInvalidationRule,
   };
-  return authenticateArtifact(sourceScan.target, receipt as unknown as Record<string, unknown>) as unknown as ApprovalReceipt;
+  return authenticateArtifact(target, receipt as unknown as Record<string, unknown>) as unknown as ApprovalReceipt;
 }
 
 export function parseApprovalReceipt(value: unknown): ApprovalReceipt {
@@ -272,13 +276,14 @@ export function parseApprovalReceipt(value: unknown): ApprovalReceipt {
   };
 }
 
-export function approvalMatches(receipt: ApprovalReceipt, planValue: unknown, proposalValue: unknown): boolean {
+export function approvalMatches(receipt: ApprovalReceipt, planValue: unknown, proposalValue: unknown, target: string): boolean {
   try {
     const parsedReceipt = parseApprovalReceipt(receipt);
     const plan = validateRemediationPlan(planValue);
     const proposal = parseRemediationProposal(proposalValue);
     const sourceScan = parseScanReceipt(plan.source_scan, "Remediation plan source_scan");
-    verifyArtifactAuthentication(sourceScan.target, parsedReceipt as unknown as Record<string, unknown>, "Approval receipt");
+    if (!artifactTargetsMatch(sourceScan.target, target) || !artifactTargetsMatch(parsedReceipt.source_scan.target, target)) return false;
+    verifyArtifactAuthentication(target, parsedReceipt as unknown as Record<string, unknown>, "Approval receipt");
     return parsedReceipt.status === "approved"
       && parsedReceipt.plan_id === plan.plan_id
       && parsedReceipt.finding_id === plan.finding.id

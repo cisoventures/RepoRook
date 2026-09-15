@@ -348,14 +348,14 @@ export class GitHubAppIntegration implements RemediationPublisher {
     this.flows.clear();
   }
 
-  async publish(publication: RemediationPublication): Promise<PublishedPullRequest> {
+  async publish(publication: RemediationPublication, repositoryTarget: string): Promise<PublishedPullRequest> {
     if (!this.credentials) throw new Error(`Connect the repository-only GitHub App to ${this.repository} before publishing`);
     return await new GitHubPublisher({
       repository: this.repository,
       tokenProvider: async () => await this.installationToken(),
       fetch: this.fetcher,
       apiBase: this.apiBase,
-    }).publish(publication);
+    }).publish(publication, repositoryTarget);
   }
 
   private pruneFlows(): void {

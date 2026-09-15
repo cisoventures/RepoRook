@@ -197,11 +197,11 @@
       },
       {
         "name": "scan_changes",
-        "input_schema_sha256": "sha256:82d20af9f4de05d5696488f53833d7e7b599a274115944aa4e93e9d2d56dfbd1"
+        "input_schema_sha256": "sha256:1e86e9adbdc405c06c2b4828a87d4460a7aa1c2a3bb9b0e702f25f711443e76d"
       },
       {
         "name": "scan_repository",
-        "input_schema_sha256": "sha256:41940c5851a576d9db0de8e1acdd32c0d610dbfcf8437eebf8da49e6dcc5e26b"
+        "input_schema_sha256": "sha256:cb0f7b0f8a6e0a31666ea5cc590c0ef5b18a9775b900085f165c10081b032fac"
       },
       {
         "name": "suppress_finding",
@@ -209,7 +209,7 @@
       },
       {
         "name": "verify_fix",
-        "input_schema_sha256": "sha256:3eb11c67a329a343a120aa7d8ba2a2de6a2f98147cd156ffe8609f50e88606b5"
+        "input_schema_sha256": "sha256:45723c41c7ea325abc69a1bd45df3bed89e8212b5ed4fe137091637847180ed4"
       }
     ]
   },
