@@ -5,16 +5,16 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const target = resolve(root, "test-fixtures/vulnerable-app");
+const configPath = resolve(target, "fixture-scanners.json");
 const baselinePath = resolve(target, ".reporook/findings.json");
 const scan = spawnSync(process.execPath, [
   resolve(root, "cli/dist/index.js"),
   "scan",
   target,
+  "--config",
+  configPath,
   "--no-cache",
-  // This fixture deliberately runs without the optional hash-locked Python
-  // scanners. The preceding CI step separately proves required coverage fails
-  // closed; this journey tests that an unchanged finding remains unresolved.
-  "--allow-no-coverage",
+  "--require-scanners",
   "--no-sarif",
   "--quiet",
 ], { encoding: "utf8" });
@@ -31,6 +31,9 @@ const result = spawnSync(process.execPath, [
   "verify",
   finding.id,
   target,
+  "--config",
+  configPath,
+  "--require-scanners",
   "--no-sarif",
   "--quiet",
 ], { encoding: "utf8" });
