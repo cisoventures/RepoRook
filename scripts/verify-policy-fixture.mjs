@@ -32,6 +32,7 @@ await writeFile(configPath, `${JSON.stringify({
 const scan = spawnSync(process.execPath, [
   cli, "scan", target,
   "--config", ".reporook/fixture-policy.json",
+  "--allow-repository-suppressions",
   "--require-scanners",
   "--output", ".reporook/policy-findings.json",
   "--no-sarif",
